@@ -113,6 +113,8 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **Client Side Rendering**: en impresoras compartidas el servidor suele recibir RAW (PCL/PS) ya renderizado; sin Ghostscript/GhostPCL no hay vista previa de esos trabajos (es esperado).
 - **PowerShell y `$null`**: al pasar `$null` a un `string` en P/Invoke llega `""`; usar `[NullString]::Value`.
 - **Pruebas de UI automatizadas**: no simular la tecla Alt sola (abre el menú de sistema y "se traga" las demás teclas). Si el usuario está usando el equipo, **no** inyectar teclado y **no** capturar la pantalla completa: capturar solo la ventana de la app (`PrintWindow`).
+- **`cola_testjob --raw`**: si se mata el proceso (taskkill) los trabajos RAW quedan en cola. Borrarlos con `SetJob(..., JOB_CONTROL_DELETE)` (funciona con trabajos propios); `Remove-PrintJob` exige administrador.
+- **Renderizadores**: `third_party/` no se versiona; regenerar con `scripts/get-renderers.ps1` (necesita 7-Zip).
 - **Macro `CHECK_EQ`**: copia sus argumentos; no cambiarla a referencias (en Release se leían temporales destruidos).
 
 ## 7. Cómo verificar en la app real

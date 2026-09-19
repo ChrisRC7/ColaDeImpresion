@@ -68,12 +68,20 @@ if ($Package -or $Installer) {
     Copy-Item (Join-Path $root "README.md") $dist
     Copy-Item (Join-Path $root "docs\MANUAL.md") $dist -ErrorAction SilentlyContinue
     New-Item -ItemType Directory (Join-Path $dist "renderers") | Out-Null
-    Set-Content -Path (Join-Path $dist "renderers\LEEME.txt") -Encoding utf8 -Value @"
+    $thirdParty = Join-Path $root "third_party\renderers"
+    if (Test-Path (Join-Path $thirdParty "gswin64c.exe")) {
+        # Preparados con scripts\get-renderers.ps1
+        Copy-Item (Join-Path $thirdParty "*") (Join-Path $dist "renderers")
+        Write-Host "Renderizadores (Ghostscript/GhostPCL/GhostXPS) incluidos."
+    } else {
+        Set-Content -Path (Join-Path $dist "renderers\LEEME.txt") -Encoding utf8 -Value @"
 Copie aquí (opcional) gswin64c.exe, gpcl6win64.exe o gxpswin64.exe y sus DLL
-para habilitar la vista previa de trabajos PostScript, PCL y XPS.
+para habilitar la vista previa de trabajos PostScript, PCL y XPS
+(o ejecute scripts\get-renderers.ps1 antes de build.ps1 -Package).
 También se detectan automáticamente si Ghostscript está instalado en
 C:\Program Files\gs\.
 "@
+    }
 
     # --- Extras para llevar en USB y probar en el LAIMI (el instalador los ignora) ---
     # Modo portable: config, historial y app.log quedan junto al .exe.
@@ -113,9 +121,14 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
    y traiga de vuelta esta carpeta: app.log, config.json e historial.json
    sirven para revisar cualquier problema.
 
+VISTA PREVIA
+- La carpeta "renderers" trae Ghostscript, GhostPCL y GhostXPS para ver los
+  trabajos PCL, PostScript, PDF y XPS (ver renderers\LEEME.txt). No la separe
+  del .exe. Si falta, esos trabajos se listan igual pero sin vista previa.
+- La vista previa necesita leer la carpeta de spool del servidor: la cuenta
+  debe ser administradora de vtec-laimiprint.
+
 OPCIONAL
-- Vista previa de trabajos PCL / PostScript / PDF / XPS: copie Ghostscript,
-  GhostPCL o GhostXPS en la carpeta "renderers" (ver renderers\LEEME.txt).
 - herramientas\cola_testjob.exe crea trabajos de prueba que quedan en cola
   sin imprimir (se abortan solos). Ejemplo, en una consola:
     herramientas\cola_testjob.exe "\\vtec-laimiprint\NOMBRE-IMPRESORA" --jobs 2 --pages 3 --seconds 120 --pause

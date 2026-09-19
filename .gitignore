@@ -10,3 +10,4 @@ dist/
 .vs/
 .vscode/
 CMakeUserPresets.json
+third_party/

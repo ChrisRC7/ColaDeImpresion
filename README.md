@@ -73,9 +73,12 @@ configuración se guarda en esa misma carpeta.
 
 ## Vista previa de PCL / PostScript / PDF / XPS (opcional)
 
-Instalar [Ghostscript](https://ghostscript.com/releases/) (PostScript/PDF) y/o
-GhostPCL / GhostXPS, o copiar `gswin64c.exe`, `gpcl6win64.exe`, `gxpswin64.exe`
-en la carpeta `renderers\` junto al ejecutable. Se detectan automáticamente; también
+`.\scripts\get-renderers.ps1` descarga Ghostscript, GhostPCL y GhostXPS
+(Artifex, verifica la firma) en `third_party\renderers`, y luego
+`.\scripts\build.ps1 -Package` los incluye en `dist\renderers\` junto con el
+runtime de Visual C++ que necesitan. También se puede instalar
+[Ghostscript](https://ghostscript.com/releases/) o copiar `gswin64c.exe`,
+`gpcl6win64.exe`, `gxpswin64.exe` (con sus DLL) en `renderers\` junto al ejecutable. Se detectan automáticamente; también
 se pueden indicar en `config.json` → `"renderers"`.
 
 ## Estructura
