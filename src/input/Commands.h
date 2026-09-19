@@ -40,6 +40,7 @@ enum class Command {
     SelectAll,
     Menu,
     TogglePane,
+    ToggleAutoHold,
     Count_
 };
 

@@ -79,6 +79,7 @@ struct JobInfo {
     std::uint64_t sizeBytes = 0;
     SYSTEMTIME submitted{};  // UTC
     JobState state = JobState::Unknown;
+    bool heldByApp = false;  // pausado automáticamente por la retención de la app
 
     // Clave única estable dentro de un servidor (impresora + id).
     std::wstring Key() const;
@@ -93,6 +94,9 @@ struct QueueSnapshot {
     std::wstring error;         // error global (p. ej. servidor inaccesible)
     std::uint64_t sequence = 0;
     bool notificationsActive = false;  // true si FindFirstPrinterChangeNotification funciona
+    bool autoHold = false;             // retención automática activa
+    std::uint32_t holdFailures = 0;    // trabajos nuevos que no se pudieron pausar (acumulado)
+    unsigned long holdError = 0;       // último error Win32 al intentar retener
 
     const PrinterInfo* FindPrinter(const std::wstring& name) const;
 };

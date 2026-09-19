@@ -32,6 +32,21 @@ copian los datos exactos; si no, se convierten (EMF directamente; PCL/PS/PDF con
 Ghostscript). Si no hay forma de convertir, la app pregunta si enviar los datos
 tal cual (solo funciona si ambas impresoras entienden el mismo lenguaje).
 
+## 2.1 Retención automática (trabajos nuevos en pausa)
+
+Está **activada por defecto**. Cada trabajo que llega a la cola se pausa en el
+mismo instante en que el spooler avisa y queda con la etiqueta violeta
+**Retenido** hasta que un operador lo libere con **Reanudar** (`Ctrl+R`,
+clic derecho, o `Ctrl+A` + `Ctrl+R` para liberar todos). Un trabajo liberado no
+se vuelve a retener. Llega una notificación por cada trabajo retenido, salvo que
+las notificaciones estén en *ninguna*.
+
+- Activar/desactivar: menú `⋯` → *Retener (pausar) todos los trabajos nuevos* o `Ctrl+Shift+H`. La barra inferior muestra "Retención activa".
+- Los trabajos que ya estaban en la cola al abrir la app no se tocan; solo los que llegan después.
+- **La app tiene que estar abierta** (puede estar en la bandeja) para retener: conviene activar *Iniciar con Windows* en el equipo del operador.
+- Para retener trabajos de otros usuarios hace falta el permiso "Administrar documentos"; si falla, la barra muestra "No se pudieron retener N trabajos".
+- Es muy rápido (se salta la espera de notificaciones agrupadas), pero un trabajo diminuto podría empezar a imprimirse antes: en ese caso igual se pausa. Para que eso no pase nunca, configure las impresoras del servidor con *Iniciar la impresión después de que la última página se haya enviado a la cola*.
+
 ## 3. Impresoras
 
 Menú `⋯`: *Pausar impresora* (`Ctrl+Shift+P`), *Reanudar impresora*
@@ -81,8 +96,9 @@ que se viera imprimir). La barra de estado muestra páginas impresas hoy y en lo
 
 ## 8. Atajos de teclado
 
-`F1` (o `?`) abre la lista. Para cambiar uno: elegirlo con `↑`/`↓`, `Enter`,
-presionar la nueva combinación. `Supr` lo deja sin asignar, `R` restaura todos
+`F1` (o `?`) abre la lista. Para cambiar uno: elegirlo con `↑`/`↓` o con un
+**clic**; luego `Enter`, **otro clic**, **doble clic** o clic sobre la tecla de la
+derecha, y presionar la nueva combinación. `Supr` lo deja sin asignar, `R` restaura todos
 los predeterminados, `Esc` cierra. Si la combinación ya era de otro comando, se
 le quita a ese y se avisa.
 

@@ -22,6 +22,8 @@ constexpr int kPrinterReloadEvery = 10;
 struct QueueMonitor::Watched {
     PrinterInfo info;
     PrinterHandle handle;
+    PrinterHandle adminHandle;  // para pausar trabajos ajenos (retención); se abre al necesitarlo
+    bool adminTried = false;
     HANDLE change = INVALID_HANDLE_VALUE;
     std::vector<JobInfo> jobs;
     bool dirty = true;
@@ -108,6 +110,7 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     spooler::QueryPrinter(w.handle.get(), server_, w.info);
     DWORD err = ERROR_SUCCESS;
     w.jobs = spooler::EnumerateJobs(w.handle.get(), w.info.name, w.info.problems, &err);
+    if (err == ERROR_SUCCESS) ApplyAutoHold(w);
     if (err != ERROR_SUCCESS) {
         util::LogError(L"EnumJobs(%ls) falló: %lu", w.info.name.c_str(), err);
         w.info.problems |= ProblemNotAvailable;
@@ -119,6 +122,31 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     }
 }
 
+void QueueMonitor::ApplyAutoHold(Watched& w) {
+    const std::vector<std::uint32_t> toHold = hold_.Process(w.info.name, w.jobs, autoHold_);
+    for (std::uint32_t id : toHold) {
+        if (!w.adminTried) {
+            w.adminTried = true;
+            w.adminHandle.OpenBest(w.info.name);
+        }
+        HANDLE h = w.adminHandle ? w.adminHandle.get() : w.handle.get();
+        auto job = std::find_if(w.jobs.begin(), w.jobs.end(), [id](const JobInfo& j) { return j.id == id; });
+        if (SetJobW(h, id, 0, nullptr, JOB_CONTROL_PAUSE)) {
+            if (job != w.jobs.end()) {
+                hold_.MarkHeld(job->Key());
+                job->state = JobState::Paused;  // el próximo refresco lo confirma
+                util::LogInfo(L"Retenido: %ls#%u '%ls' de %ls", w.info.name.c_str(), id, job->document.c_str(),
+                              job->user.c_str());
+            }
+        } else {
+            ++holdFailures_;
+            holdError_ = GetLastError();
+            util::LogError(L"No se pudo retener %ls#%u: %lu", w.info.name.c_str(), id, holdError_);
+        }
+    }
+    hold_.Annotate(w.jobs);
+}
+
 void QueueMonitor::Publish(const std::vector<std::unique_ptr<Watched>>& watched, const std::wstring& error,
                            bool notifying) {
     auto snapshot = std::make_shared<QueueSnapshot>();
@@ -126,6 +154,9 @@ void QueueMonitor::Publish(const std::vector<std::unique_ptr<Watched>>& watched,
     snapshot->error = error;
     snapshot->sequence = ++sequence_;
     snapshot->notificationsActive = notifying;
+    snapshot->autoHold = autoHold_;
+    snapshot->holdFailures = holdFailures_;
+    snapshot->holdError = holdError_;
     for (const auto& w : watched) {
         snapshot->printers.push_back(w->info);
         snapshot->jobs.insert(snapshot->jobs.end(), w->jobs.begin(), w->jobs.end());
@@ -138,6 +169,9 @@ void QueueMonitor::Run() {
     std::vector<std::unique_ptr<Watched>> watched;
     std::wstring error;
     int pollsSinceReload = 0;
+    hold_.Reset();
+    holdFailures_ = 0;
+    holdError_ = 0;
 
     // Notificación a nivel de servidor para altas/bajas de impresoras.
     PrinterHandle serverHandle;
@@ -179,12 +213,14 @@ void QueueMonitor::Run() {
                                           static_cast<DWORD>(pollMs_.load()));
         if (rc == WAIT_OBJECT_0) break;  // stop
 
+        bool newJob = false;
         auto rearm = [&](DWORD index) {
             DWORD change = 0;
             bool ok = FindNextPrinterChangeNotification(handles[index], &change, nullptr, nullptr) != FALSE;
             if (index >= firstPrinter) {
                 Watched* w = owners[index];
                 w->dirty = true;
+                if (change & PRINTER_CHANGE_ADD_JOB) newJob = true;
                 if (!ok && w->change != INVALID_HANDLE_VALUE) {
                     // La notificación se rompió (p. ej. se perdió la conexión): pasa a sondeo.
                     FindClosePrinterChangeNotification(w->change);
@@ -211,8 +247,9 @@ void QueueMonitor::Run() {
             reload = true;
         } else if (rc > WAIT_OBJECT_0 + 1 && rc < WAIT_OBJECT_0 + handles.size()) {
             rearm(rc - WAIT_OBJECT_0);
-            // Agrupa las notificaciones que lleguen en ráfaga.
-            for (int burst = 0; burst < 64; ++burst) {
+            // Agrupa las notificaciones que lleguen en ráfaga, salvo si hay que
+            // retener un trabajo nuevo: ahí cada milisegundo cuenta.
+            for (int burst = 0; burst < 64 && !(newJob && autoHold_); ++burst) {
                 DWORD more = WaitForMultipleObjects(static_cast<DWORD>(handles.size() - 2), handles.data() + 2,
                                                     FALSE, kDebounceMs);
                 if (more == WAIT_TIMEOUT || more == WAIT_FAILED) break;

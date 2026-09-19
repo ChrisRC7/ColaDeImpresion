@@ -43,6 +43,7 @@ struct Settings {
 
     int pollIntervalMs = 3000;   // respaldo si las notificaciones del spooler fallan
     bool confirmCancel = true;   // pedir confirmación antes de cancelar trabajos
+    bool autoHoldNewJobs = true; // pausar (retener) cada trabajo nuevo hasta que un operador lo libere
     bool minimizeToTray = true;  // cerrar la ventana la oculta en la bandeja
     bool startWithWindows = false;
     NotifyMode notifications = NotifyMode::ErrorsOnly;

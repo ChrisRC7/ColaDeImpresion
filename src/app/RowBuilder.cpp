@@ -28,6 +28,10 @@ std::wstring StateText(JobState state) {
     }
 }
 
+std::wstring JobStatusText(const core::JobInfo& job) {
+    return job.heldByApp ? std::wstring(Tr(S::StateHeld)) : StateText(job.state);
+}
+
 std::wstring OutcomeText(config::JobOutcome outcome) {
     switch (outcome) {
         case config::JobOutcome::Printed: return Tr(S::OutcomePrinted);
@@ -105,7 +109,7 @@ wchar_t GlyphForState(JobState state) {
 bool JobMatchesFilter(const core::JobInfo& job, const std::wstring& filter) {
     if (util::Trim(filter).empty()) return true;
     std::wstring haystack = job.document + L" " + job.user + L" " + job.machine + L" " +
-                            PrinterShortName(job.printer) + L" " + StateText(job.state) + L" " + job.statusText;
+                            PrinterShortName(job.printer) + L" " + JobStatusText(job) + L" " + job.statusText;
     return AllWordsMatch(haystack, filter);
 }
 
@@ -150,8 +154,8 @@ ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter) {
     for (const auto& p : parts) row.subtitle += (row.subtitle.empty() ? L"" : L" · ") + p;
     row.pages = PagesText(job);
     row.size = util::FormatBytes(job.sizeBytes);
-    row.status = StateText(job.state);
-    row.tone = ui::ToneForState(job.state);
+    row.status = JobStatusText(job);
+    row.tone = job.heldByApp ? ui::Tone::Special : ui::ToneForState(job.state);
     row.glyph = GlyphForState(job.state);
     return row;
 }
@@ -185,7 +189,8 @@ QueueSummary Summarize(const std::vector<const core::JobInfo*>& jobs) {
     for (const auto* job : jobs) {
         ++s.total;
         if (job->state == JobState::Printing) ++s.printing;
-        if (job->state == JobState::Paused) ++s.paused;
+        if (job->heldByApp) ++s.held;
+        else if (job->state == JobState::Paused) ++s.paused;
         if (job->state == JobState::Error || job->state == JobState::Offline) ++s.errors;
     }
     return s;
@@ -195,6 +200,7 @@ std::wstring SummaryText(const QueueSummary& s) {
     if (s.total == 0) return Tr(S::StatusNoJobs);
     std::wstring text = s.total == 1 ? std::wstring(Tr(S::StatusOneJob)) : util::Format(Tr(S::StatusJobs), s.total);
     if (s.printing) text += L" · " + util::Format(Tr(S::StatusPrinting), s.printing);
+    if (s.held) text += L" · " + util::Format(Tr(S::StatusHeldCount), s.held);
     if (s.paused) text += L" · " + util::Format(Tr(S::StatusPaused), s.paused);
     if (s.errors) text += L" · " + util::Format(Tr(S::StatusErrors), s.errors);
     return text;

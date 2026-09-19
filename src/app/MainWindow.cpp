@@ -62,6 +62,7 @@ enum MenuId : UINT {
     ID_CLEAR_HISTORY,
     ID_RUN_AS_ADMIN,
     ID_EXIT,
+    ID_AUTO_HOLD,
     ID_CTX_PAUSE = 2101,
     ID_CTX_RESUME,
     ID_CTX_RESTART,
@@ -315,6 +316,7 @@ void MainWindow::ConnectTo(const std::wstring& serverIn) {
             settings_.activePrinter.rfind(server, 0) != 0)
             settings_.activePrinter = kAllPrinters;
     }
+    monitor_->SetAutoHold(settings_.autoHoldNewJobs);
     monitor_->Start(server, settings_.pollIntervalMs);
     SaveSettings();
     RebuildRows();
@@ -395,7 +397,11 @@ void MainWindow::ProcessEvents(const std::vector<core::JobEvent>& events) {
     for (const auto& e : events) {
         switch (e.kind) {
             case core::JobEvent::Kind::Added:
-                if (settings_.notifications == config::NotifyMode::All)
+                // Un trabajo retenido requiere acción del operador: se avisa salvo con "ninguna".
+                if (e.job.heldByApp && settings_.notifications != config::NotifyMode::None)
+                    Notify(PrinterDisplay(e.job.printer),
+                           util::Format(Tr(S::NotifyHeldJob), e.job.user.c_str(), e.job.document.c_str()), false);
+                else if (settings_.notifications == config::NotifyMode::All)
                     Notify(Tr(S::AppTitle), util::Format(Tr(S::NotifyNewJob), e.job.user.c_str(), e.job.document.c_str()),
                            false);
                 break;
@@ -571,6 +577,12 @@ void MainWindow::UpdateStatus() {
         for (const auto& [printer, admin] : adminRights_)
             if (!admin && (settings_.activePrinter == kAllPrinters || printer == settings_.activePrinter)) noAdmin = true;
         if (noAdmin) items.push_back({ui::glyph::Shield, Tr(S::StatusNoAdmin), ui::Tone::Warning});
+        if (snapshot_->holdFailures > 0)
+            items.push_back({ui::glyph::Warning,
+                             util::Format(Tr(S::StatusAutoHoldFailed), snapshot_->holdFailures,
+                                          util::Win32ErrorMessage(snapshot_->holdError).c_str()),
+                             ui::Tone::Danger});
+        if (settings_.autoHoldNewJobs) items.push_back({ui::glyph::Pause, Tr(S::StatusAutoHold), ui::Tone::Info});
         items.push_back({snapshot_->notificationsActive ? ui::glyph::Live : ui::glyph::Refresh,
                          snapshot_->notificationsActive ? Tr(S::StatusLive) : Tr(S::StatusPolling), ui::Tone::Neutral});
     }
@@ -615,7 +627,7 @@ std::vector<std::wstring> MainWindow::JobDetails(const core::JobInfo& job, const
     lines.push_back(PagesText(copy) + L" · " + util::FormatBytes(job.sizeBytes) + L" · " +
                     util::Format(Tr(S::DetailSubmitted), util::FormatTimeShort(job.submitted).c_str()));
 
-    std::wstring state = StateText(job.state);
+    std::wstring state = JobStatusText(job);
     if (!job.statusText.empty()) state += L" — " + job.statusText;
     lines.push_back(state + L" · " + PrinterDisplay(job.printer));
     lines.push_back(util::Format(Tr(S::DetailPosition), job.position, job.priority));
@@ -728,6 +740,12 @@ void MainWindow::Execute(Command command) {
             SaveSettings();
             Layout();
             UpdatePreview();
+            break;
+        case Command::ToggleAutoHold:
+            settings_.autoHoldNewJobs = !settings_.autoHoldNewJobs;
+            monitor_->SetAutoHold(settings_.autoHoldNewJobs);
+            SaveSettings();
+            UpdateStatus();
             break;
         default: break;
     }
@@ -948,6 +966,8 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(menu, MF_STRING, ID_LANGUAGE, Tr(S::MenuLanguage));
     AppendMenuW(menu, MF_STRING | check(settings_.showPreviewPane), ID_PREVIEW_PANE,
                 keyed(S::MenuPreviewPane, Command::TogglePane).c_str());
+    AppendMenuW(menu, MF_STRING | check(settings_.autoHoldNewJobs), ID_AUTO_HOLD,
+                keyed(S::MenuAutoHold, Command::ToggleAutoHold).c_str());
     AppendMenuW(menu, MF_STRING | check(settings_.confirmCancel), ID_CONFIRM_CANCEL, Tr(S::MenuConfirmCancel));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING | check(settings_.notifications == config::NotifyMode::None), ID_NOTIFY_NONE,
@@ -1065,6 +1085,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
             ApplyLanguage();
             break;
         case ID_PREVIEW_PANE: Execute(Command::TogglePane); break;
+        case ID_AUTO_HOLD: Execute(Command::ToggleAutoHold); break;
         case ID_CONFIRM_CANCEL:
             settings_.confirmCancel = !settings_.confirmCancel;
             SaveSettings();

@@ -114,6 +114,10 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
    - "Sin permisos de administración": se ven los trabajos, pero no se pueden
      cancelar/reordenar los de otros usuarios con esta cuenta.
 
+   - "Retención activa": todo trabajo nuevo queda en pausa ("Retenido") hasta
+     que alguien lo libere con Ctrl+R. Se activa/desactiva con Ctrl+Shift+H
+     o desde el menú. Solo funciona mientras la app esté abierta.
+
 4. Pruebe lo que indica PRUEBAS.md (sección 3) y anote los resultados.
    F1 muestra todos los atajos de teclado.
 

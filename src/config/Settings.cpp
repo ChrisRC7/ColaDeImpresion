@@ -57,6 +57,7 @@ JsonValue Settings::ToJson() const {
 
     json[L"pollIntervalMs"] = pollIntervalMs;
     json[L"confirmCancel"] = confirmCancel;
+    json[L"autoHoldNewJobs"] = autoHoldNewJobs;
     json[L"minimizeToTray"] = minimizeToTray;
     json[L"startWithWindows"] = startWithWindows;
     json[L"notifications"] = NotifyModeToString(notifications);
@@ -101,6 +102,7 @@ Settings Settings::FromJson(const JsonValue& json) {
 
     s.pollIntervalMs = std::clamp(json[L"pollIntervalMs"].AsInt(s.pollIntervalMs), 500, 60000);
     s.confirmCancel = json[L"confirmCancel"].AsBool(s.confirmCancel);
+    s.autoHoldNewJobs = json[L"autoHoldNewJobs"].AsBool(s.autoHoldNewJobs);
     s.minimizeToTray = json[L"minimizeToTray"].AsBool(s.minimizeToTray);
     s.startWithWindows = json[L"startWithWindows"].AsBool(s.startWithWindows);
     s.notifications = NotifyModeFromString(json[L"notifications"].AsString(L"errors"));

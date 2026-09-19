@@ -89,10 +89,7 @@ bool HelpOverlay::HandleKey(UINT vk) {
         case VK_NEXT: selected_ = std::min(kCommandCount - 1, selected_ + visibleRows_); break;
         case VK_HOME: selected_ = 0; break;
         case VK_END: selected_ = kCommandCount - 1; break;
-        case VK_RETURN:
-            capturing_ = true;
-            message_ = util::Format(Tr(S::ShortcutPrompt), Tr(input::GetCommandInfo(static_cast<Command>(selected_)).label));
-            break;
+        case VK_RETURN: StartCapture(); break;
         case VK_DELETE:
             if (callbacks_.clear) callbacks_.clear(static_cast<Command>(selected_));
             message_.clear();
@@ -106,6 +103,20 @@ bool HelpOverlay::HandleKey(UINT vk) {
     EnsureVisible();
     Invalidate();
     return true;
+}
+
+void HelpOverlay::StartCapture() {
+    capturing_ = true;
+    message_ = util::Format(Tr(S::ShortcutPrompt), Tr(input::GetCommandInfo(static_cast<Command>(selected_)).label));
+    SetFocus(hwnd_);
+    Invalidate();
+}
+
+int HelpOverlay::RowAt(POINT pt) const {
+    if (!gfx::Contains(listArea_, pt)) return -1;
+    int index = scroll_ + (pt.y - listArea_.top) / RowHeight();
+    if (index >= kCommandCount || index >= scroll_ + visibleRows_) return -1;
+    return index;
 }
 
 void HelpOverlay::Paint(HDC dc, const RECT& client) {
@@ -129,6 +140,7 @@ void HelpOverlay::Paint(HDC dc, const RECT& client) {
 
     RECT listArea{card.left + style.Px(10), title.bottom + style.Px(10), card.right - style.Px(10), footer.top - style.Px(8)};
     visibleRows_ = std::max(1, gfx::Height(listArea) / RowHeight());
+    listArea_ = listArea;
     EnsureVisible();
 
     for (int i = scroll_; i < kCommandCount && i < scroll_ + visibleRows_; ++i) {
@@ -136,6 +148,7 @@ void HelpOverlay::Paint(HDC dc, const RECT& client) {
         RECT row{listArea.left, top, listArea.right, top + RowHeight()};
         const bool sel = i == selected_;
         if (sel) gfx::FillRounded(dc, row, style.Px(6), capturing_ ? Blend(pal.selection, pal.accent, 0.25) : pal.selection);
+        else if (i == hover_) gfx::FillRounded(dc, row, style.Px(6), pal.hover);
         const auto& info = input::GetCommandInfo(static_cast<Command>(i));
         RECT label{row.left + style.Px(12), row.top, row.right - style.Px(200), row.bottom};
         gfx::Text(dc, Tr(info.label), label, fonts.normal, sel ? pal.selectionText : pal.text);
@@ -176,14 +189,55 @@ LRESULT HelpOverlay::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             scroll_ = std::clamp(scroll_, 0, std::max(0, kCommandCount - visibleRows_));
             Invalidate();
             return 0;
-        case WM_LBUTTONDOWN: {
+        case WM_MOUSEMOVE: {
+            if (!trackingMouse_) {
+                TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
+                TrackMouseEvent(&tme);
+                trackingMouse_ = true;
+            }
+            int row = RowAt({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+            if (row != hover_) {
+                hover_ = row;
+                SetCursor(LoadCursorW(nullptr, row >= 0 ? IDC_HAND : IDC_ARROW));
+                Invalidate();
+            }
+            return 0;
+        }
+        case WM_MOUSELEAVE:
+            trackingMouse_ = false;
+            hover_ = -1;
+            Invalidate();
+            return 0;
+        case WM_SETCURSOR:
+            if (LOWORD(lParam) == HTCLIENT && hover_ >= 0) {
+                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                return TRUE;
+            }
+            break;
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDBLCLK: {
             RECT client;
             GetClientRect(hwnd_, &client);
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            SetFocus(hwnd_);
             if (!gfx::Contains(CardRect(client), pt)) {
                 if (callbacks_.close) callbacks_.close();
+                return 0;
             }
-            SetFocus(hwnd_);
+            int row = RowAt(pt);
+            if (row < 0) return 0;
+            // Clic sobre la zona de la tecla (a la derecha) o sobre la fila ya elegida,
+            // o doble clic: empieza a reasignar. Si no, solo la selecciona.
+            const bool onKeys = pt.x >= listArea_.right - Style::Get().Px(200);
+            const bool again = row == selected_ && !capturing_;
+            selected_ = row;
+            if (msg == WM_LBUTTONDBLCLK || onKeys || again) {
+                StartCapture();
+            } else {
+                capturing_ = false;
+                message_.clear();
+                Invalidate();
+            }
             return 0;
         }
     }

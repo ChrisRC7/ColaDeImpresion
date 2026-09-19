@@ -40,6 +40,7 @@ X(StateOffline, L"Sin conexión", L"Offline")
 X(StateDeleting, L"Cancelando", L"Cancelling")
 X(StatePrinted, L"Impreso", L"Printed")
 X(StateRestarting, L"Reiniciando", L"Restarting")
+X(StateHeld, L"Retenido", L"Held")
 
 // --- Problemas de impresora ---
 X(ProblemOffline, L"Impresora fuera de línea", L"Printer offline")
@@ -76,6 +77,9 @@ X(StatusFiltered, L"Filtro: \"%ls\" (%u de %u)", L"Filter: \"%ls\" (%u of %u)")
 X(StatusNoAdmin, L"Sin permisos de administración: solo puede gestionar sus propios trabajos",
   L"No admin rights: you can only manage your own jobs")
 X(StatusConnecting, L"Conectando…", L"Connecting…")
+X(StatusAutoHold, L"Retención activa", L"Holding new jobs")
+X(StatusAutoHoldFailed, L"No se pudieron retener %u trabajos: %ls", L"%u jobs could not be held: %ls")
+X(StatusHeldCount, L"%u retenidos", L"%u held")
 X(StatusHistory, L"Historial · Hoy: %llu págs. (%llu trabajos) · 7 días: %llu págs.",
   L"History · Today: %llu pages (%llu jobs) · 7 days: %llu pages")
 
@@ -138,6 +142,7 @@ X(NotifyJobDone, L"Impreso: %ls", L"Printed: %ls")
 X(NotifyJobError, L"Error al imprimir: %ls", L"Print error: %ls")
 X(NotifyPrinterProblem, L"%ls: %ls", L"%ls: %ls")
 X(NotifyNewJob, L"Nuevo trabajo de %ls: %ls", L"New job from %ls: %ls")
+X(NotifyHeldJob, L"Trabajo retenido de %ls: %ls (Ctrl+R para liberarlo)", L"Job held from %ls: %ls (Ctrl+R to release)")
 
 // --- Menú principal ---
 X(MenuConnect, L"Conectar a servidor…\tCtrl+O", L"Connect to server…\tCtrl+O")
@@ -153,6 +158,7 @@ X(MenuThemeLight, L"Tema: claro", L"Theme: light")
 X(MenuThemeDark, L"Tema: oscuro", L"Theme: dark")
 X(MenuLanguage, L"Language: English", L"Idioma: Español")
 X(MenuConfirmCancel, L"Confirmar antes de cancelar", L"Confirm before cancelling")
+X(MenuAutoHold, L"Retener (pausar) todos los trabajos nuevos", L"Hold (pause) all new jobs")
 X(MenuPreviewPane, L"Mostrar panel de vista previa", L"Show preview pane")
 X(MenuNotifyNone, L"Notificaciones: ninguna", L"Notifications: none")
 X(MenuNotifyErrors, L"Notificaciones: solo errores", L"Notifications: errors only")
@@ -209,11 +215,12 @@ X(CmdResumePrinter, L"Reanudar impresora", L"Resume printer")
 X(CmdSelectAll, L"Seleccionar todo", L"Select all")
 X(CmdMenu, L"Menú principal", L"Main menu")
 X(CmdTogglePane, L"Mostrar/ocultar vista previa", L"Show/hide preview pane")
+X(CmdToggleAutoHold, L"Activar/desactivar retención de trabajos nuevos", L"Toggle holding of new jobs")
 
 // --- Panel de ayuda ---
 X(HelpTitle, L"Atajos de teclado", L"Keyboard shortcuts")
-X(HelpFooter, L"↑↓ elegir · Enter reasignar · Supr quitar · R restaurar predeterminados · Esc cerrar",
-  L"↑↓ select · Enter reassign · Del clear · R restore defaults · Esc close")
+X(HelpFooter, L"↑↓ o clic: elegir · Enter, doble clic o clic en la tecla: reasignar · Supr quitar · R restaurar · Esc cerrar",
+  L"↑↓ or click: select · Enter, double click or click the key: reassign · Del clear · R restore · Esc close")
 X(HelpUnassigned, L"(sin asignar)", L"(unassigned)")
 X(HelpFixedKeys, L"Fijos: Esc cierra / limpia · clic derecho: menú del trabajo · Ctrl+rueda: zoom",
   L"Fixed: Esc closes / clears · right click: job menu · Ctrl+wheel: zoom")

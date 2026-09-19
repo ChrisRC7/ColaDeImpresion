@@ -29,6 +29,10 @@ PDF", trabajos generados con `cola_testjob` y spool EMF simulado.
 | Historial: cancelado vs. retirado | OK |
 | Servidor inexistente: mensaje, UI responsiva, reintentos | OK |
 | Ejecutable Release autónomo (1,4 MB, ~21 MB RAM) | OK |
+| Retención automática: 3 trabajos nuevos quedan "Paused, Spooling" sin imprimirse | OK |
+| Liberar un retenido: se imprime y no se vuelve a pausar | OK |
+| Panel de atajos: clic selecciona, segundo clic reasigna | OK |
+| Vista previa PCL / PostScript / XPS con los renderizadores incluidos | OK |
 
 ## 3. Pruebas pendientes en el LAIMI (sección 7 del TODO)
 
@@ -40,6 +44,13 @@ Anotar resultado, fecha y versión en la tabla final.
 - [ ] Ejecutar la app en el propio servidor (servidor local).
 - [ ] Barra de estado "En vivo" (si dice "sondeo", revisar firewall: "Compartir archivos e impresoras").
 - [ ] Usuario sin permisos: aviso en la barra; puede ver pero no cancelar trabajos ajenos (mensaje claro).
+
+### 3.1b Retención automática
+- [ ] Con la retención activa ("Retención activa" en la barra), un estudiante imprime: el trabajo aparece como **Retenido** y la impresora no saca nada.
+- [ ] `Ctrl+R` sobre el trabajo: se imprime; no vuelve a quedar retenido.
+- [ ] Varios estudiantes imprimen a la vez: todos quedan retenidos.
+- [ ] Documento de 1 página muy pequeño: ¿alcanza a salir algo antes de pausarse? (si pasa, configurar la impresora en el servidor para iniciar tras la última página).
+- [ ] `Ctrl+Shift+H` desactiva la retención: los trabajos nuevos se imprimen normalmente.
 
 ### 3.2 Múltiples impresoras simultáneas
 - [ ] Estudiantes imprimen a 3+ impresoras a la vez; la vista "Todas" las muestra ordenadas por impresora y posición.

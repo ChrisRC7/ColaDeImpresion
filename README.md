@@ -12,6 +12,7 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 
 - **Servidores remotos** (`\\SERVIDOR`) o impresoras del propio equipo; vista de todas las impresoras o de una sola.
 - **Tiempo real**: notificaciones del spooler + sondeo de respaldo.
+- **Retención automática**: cada trabajo nuevo queda en pausa ("Retenido") hasta que un operador lo libera.
 - **Trabajos**: documento, usuario, equipo, páginas, tamaño, estado, posición, hora. Pausar, reanudar, reiniciar, cancelar (uno, varios o todos los de un usuario), subir/bajar en la cola, **reenviar a otra impresora**.
 - **Impresoras**: pausar/reanudar/vaciar cola; avisos de sin papel, atasco, sin tóner, fuera de línea...
 - **Vista previa** del archivo de spool: EMF nativo; PostScript, PDF, PCL y XPS con Ghostscript/GhostPCL/GhostXPS (opcionales, autodetectados). Zoom, arrastre y paso de páginas. Caché de vistas previas.
@@ -34,8 +35,9 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 | `Ctrl+O` | Conectar a un servidor |
 | `Ctrl+F` | Buscar / filtrar |
 | `Ctrl+H` | Historial |
+| `Ctrl+Shift+H` | Activar / desactivar la retención de trabajos nuevos |
 | `Ctrl+D` | Modo claro / oscuro |
-| `F1` o `?` | Todos los atajos (y reasignarlos) |
+| `F1` o `?` | Todos los atajos (y reasignarlos con teclado o clic) |
 
 Manual completo: [docs/MANUAL.md](docs/MANUAL.md).
 

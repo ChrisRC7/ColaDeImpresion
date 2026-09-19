@@ -42,6 +42,9 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Detectar en tiempo real cuando entra un nuevo trabajo (notificaciones del spooler + sondeo de respaldo)
 - [x] Manejar errores comunes (impresora offline, papel atascado, sin papel, sin tinta/tóner, puerta abierta, servidor inaccesible, acceso denegado)
 - [x] Acciones sobre la impresora: pausar, reanudar, vaciar cola
+- [x] **Retención automática**: todo trabajo nuevo queda en pausa ("Retenido") hasta que un operador lo libere (`Ctrl+Shift+H` para activar/desactivar; activada por defecto)
+- [ ] (LAIMI) Verificar la retención con trabajos de estudiantes en `vtec-laimiprint` (requiere "Administrar documentos")
+- [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
 - [ ] (LAIMI) Verificar reordenamiento y reenvío con impresoras físicas del laboratorio
 
 ---
@@ -80,6 +83,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
   - [x] Extras: `Ctrl+T` reenviar, `Ctrl+E`/`Ctrl+Tab` impresora, `Ctrl+O` servidor, `Ctrl+H` historial, `AvPág/RePág` páginas, `Ctrl±/0` zoom, `Ctrl+Shift+P/R` impresora, `Ctrl+A`, `F5`, `F10`, `Ctrl+B`, `Ctrl+I`
 - [x] Sistema de atajos configurable (reasignación desde el panel F1, guardado en config.json)
 - [x] Mostrar los atajos disponibles en un panel de ayuda (`?` o `F1`)
+- [x] Elegir y reasignar atajos también con el mouse (clic para elegir; segundo clic, doble clic o clic en la tecla para reasignar)
 
 ---
 
@@ -116,7 +120,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 34 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 36 pruebas)
 - [x] Herramienta para generar trabajos de prueba (`tools/testjob.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

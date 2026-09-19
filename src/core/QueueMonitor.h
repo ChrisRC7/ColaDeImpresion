@@ -18,6 +18,7 @@
 #include <thread>
 #include <vector>
 
+#include "core/AutoHold.h"
 #include "core/PrintTypes.h"
 
 namespace cola::core {
@@ -42,6 +43,9 @@ public:
     void RequestRefresh();
     void SetPollInterval(int ms) { pollMs_ = ms; }
 
+    // Retención automática: pausa cada trabajo nuevo apenas llega (ver AutoHold.h).
+    void SetAutoHold(bool enabled) { autoHold_ = enabled; }
+
     const std::wstring& server() const { return server_; }
 
 private:
@@ -50,11 +54,16 @@ private:
     void Run();
     bool ReloadPrinters(std::vector<std::unique_ptr<Watched>>& watched, std::wstring& error);
     void RefreshPrinter(Watched& w);
+    void ApplyAutoHold(Watched& w);
     void Publish(const std::vector<std::unique_ptr<Watched>>& watched, const std::wstring& error, bool notifying);
 
     SnapshotCallback callback_;
     std::wstring server_;
     std::atomic<int> pollMs_{3000};
+    std::atomic<bool> autoHold_{false};
+    AutoHoldTracker hold_;           // solo se usa en el hilo del monitor
+    std::uint32_t holdFailures_ = 0;
+    unsigned long holdError_ = 0;
     std::thread thread_;
     HANDLE stopEvent_ = nullptr;
     HANDLE refreshEvent_ = nullptr;

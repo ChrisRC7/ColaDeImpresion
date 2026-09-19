@@ -15,6 +15,8 @@ namespace cola::app {
 inline constexpr wchar_t kAllPrinters[] = L"*";
 
 std::wstring StateText(core::JobState state);
+// Estado de un trabajo concreto ("Retenido" si lo pausó la retención automática).
+std::wstring JobStatusText(const core::JobInfo& job);
 std::wstring OutcomeText(config::JobOutcome outcome);
 std::wstring ProblemText(core::PrinterProblem problem);
 std::wstring PagesText(const core::JobInfo& job);
@@ -38,6 +40,7 @@ struct QueueSummary {
     unsigned total = 0;
     unsigned printing = 0;
     unsigned paused = 0;
+    unsigned held = 0;  // retenidos automáticamente (no cuentan como "en pausa")
     unsigned errors = 0;
 };
 QueueSummary Summarize(const std::vector<const core::JobInfo*>& jobs);

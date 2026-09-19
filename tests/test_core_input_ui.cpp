@@ -6,6 +6,7 @@
 
 #include "TestFramework.h"
 #include "app/RowBuilder.h"
+#include "core/AutoHold.h"
 #include "core/JobStatus.h"
 #include "core/JobTracker.h"
 #include "core/Spooler.h"
@@ -218,4 +219,47 @@ TEST(RowFilter) {
     auto summary = app::Summarize(visible);
     CHECK_EQ(summary.total, 2u);
     CHECK_EQ(summary.printing, 1u);
+}
+
+TEST(AutoHoldOnlyNewJobsOnce) {
+    core::AutoHoldTracker hold;
+    const std::wstring printer = L"\\\\S\\P1";
+    // Primera vez: los trabajos existentes solo se registran.
+    CHECK(hold.Process(printer, {MakeJob(1, core::JobState::Queued)}, true).empty());
+
+    // Llegan dos nuevos: uno en cola y otro que ya empezó a imprimirse; ambos se retienen.
+    auto ids = hold.Process(printer,
+                            {MakeJob(1, core::JobState::Queued), MakeJob(2, core::JobState::Spooling),
+                             MakeJob(3, core::JobState::Printing)},
+                            true);
+    CHECK_EQ(ids.size(), size_t(2));
+    hold.MarkHeld(MakeJob(2, core::JobState::Paused).Key());
+    hold.MarkHeld(MakeJob(3, core::JobState::Paused).Key());
+
+    std::vector<core::JobInfo> jobs = {MakeJob(2, core::JobState::Paused), MakeJob(3, core::JobState::Paused)};
+    hold.Annotate(jobs);
+    CHECK(jobs[0].heldByApp && jobs[1].heldByApp);
+
+    // Un operador libera el 2: deja de estar retenido y no se vuelve a pausar.
+    ids = hold.Process(printer, {MakeJob(2, core::JobState::Printing), MakeJob(3, core::JobState::Paused)}, true);
+    CHECK(ids.empty());
+    CHECK(!hold.IsHeld(MakeJob(2, core::JobState::Printing).Key()));
+    CHECK(hold.IsHeld(MakeJob(3, core::JobState::Paused).Key()));
+
+    // Pausados manualmente o cancelándose no se tocan; con la retención apagada tampoco.
+    CHECK(hold.Process(printer, {MakeJob(4, core::JobState::Paused), MakeJob(5, core::JobState::Deleting)}, true).empty());
+    CHECK(hold.Process(printer, {MakeJob(6, core::JobState::Queued)}, false).empty());
+    // ...y un trabajo ya evaluado con la retención apagada no se pausa al encenderla.
+    CHECK(hold.Process(printer, {MakeJob(6, core::JobState::Queued)}, true).empty());
+}
+
+TEST(HeldJobsShownAsHeld) {
+    core::JobInfo job = MakeJob(7, core::JobState::Paused);
+    job.heldByApp = true;
+    auto row = app::MakeJobRow(job, false);
+    CHECK(app::JobMatchesFilter(job, L"retenido"));
+    auto summary = app::Summarize({&job});
+    CHECK_EQ(summary.held, 1u);
+    CHECK_EQ(summary.paused, 0u);
+    CHECK(row.tone == ui::Tone::Special);
 }
