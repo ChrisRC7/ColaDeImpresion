@@ -86,10 +86,16 @@ private:
     // --- Comandos ---
     void Execute(input::Command command);
     void RunOnSelection(JobAction action);
+    // Pausa o reanuda los trabajos seleccionados (y opcionalmente la impresora).
+    void TogglePauseSelection(bool alsoPrinter);
     void CancelSelection(const std::vector<core::JobInfo>& jobs);
     void MoveFocused(int direction);
     void StartRedirect(POINT screen);
     void RunPrinterAction(JobAction action);
+    // Impresoras afectadas por pausar/reanudar: la elegida, o todas en la vista "Todas".
+    std::vector<std::wstring> TargetPrinters() const;
+    void TogglePrinterPause();
+    void SetPrintersPaused(bool pause);
     void OnActionResult(const ActionResult& result);
     void ToggleQuickLook();
     void ToggleHistory();
@@ -139,6 +145,8 @@ private:
     bool quickLook_ = false;
     bool reallyQuit_ = false;
     bool connecting_ = true;
+    bool startPausePending_ = false;  // pausar impresoras al recibir la primera instantánea
+    bool startPauseInFlight_ = false; // su resultado se informa sin diálogos
     std::wstring currentPreviewKey_;
     std::map<std::wstring, bool> adminRights_;           // impresora -> puede administrar
     std::map<std::wstring, std::uint32_t> lastProblems_;  // para notificar problemas nuevos

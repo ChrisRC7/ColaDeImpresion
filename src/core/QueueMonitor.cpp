@@ -123,7 +123,7 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
 }
 
 void QueueMonitor::ApplyAutoHold(Watched& w) {
-    const std::vector<std::uint32_t> toHold = hold_.Process(w.info.name, w.jobs, autoHold_);
+    const std::vector<std::uint32_t> toHold = hold_.Process(w.info.name, w.jobs, autoHold_, holdExisting_);
     for (std::uint32_t id : toHold) {
         if (!w.adminTried) {
             w.adminTried = true;

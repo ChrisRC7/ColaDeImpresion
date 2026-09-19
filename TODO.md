@@ -43,6 +43,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Manejar errores comunes (impresora offline, papel atascado, sin papel, sin tinta/tóner, puerta abierta, servidor inaccesible, acceso denegado)
 - [x] Acciones sobre la impresora: pausar, reanudar, vaciar cola
 - [x] **Retención automática**: todo trabajo nuevo queda en pausa ("Retenido") hasta que un operador lo libere (`Ctrl+Shift+H` para activar/desactivar; activada por defecto)
+- [x] Al iniciar / conectar: pausar las impresoras y retener los trabajos que ya estaban en cola (opción del menú, activada por defecto)
+- [x] Atajos: `Ctrl+P` alterna pausa del trabajo, `Ctrl+Shift+P` alterna la impresora, `Ctrl+Alt+P` ambos a la vez
 - [ ] (LAIMI) Verificar la retención con trabajos de estudiantes en `vtec-laimiprint` (requiere "Administrar documentos")
 - [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
 - [ ] (LAIMI) Verificar reordenamiento y reenvío con impresoras físicas del laboratorio
@@ -84,6 +86,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Sistema de atajos configurable (reasignación desde el panel F1, guardado en config.json)
 - [x] Mostrar los atajos disponibles en un panel de ayuda (`?` o `F1`)
 - [x] Elegir y reasignar atajos también con el mouse (clic para elegir; segundo clic, doble clic o clic en la tecla para reasignar)
+- [x] Selección múltiple arrastrando con el botón izquierdo (rectángulo como en el Explorador) y poder quedarse sin selección (`Esc`, `Ctrl+Shift+A` o clic en el vacío)
 
 ---
 

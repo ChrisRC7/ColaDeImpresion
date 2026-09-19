@@ -41,6 +41,8 @@ enum class Command {
     Menu,
     TogglePane,
     ToggleAutoHold,
+    TogglePauseBoth,
+    ClearSelection,
     Count_
 };
 

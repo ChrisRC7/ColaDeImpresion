@@ -12,7 +12,7 @@ bool ShouldHold(const JobInfo& job) {
 }
 
 std::vector<std::uint32_t> AutoHoldTracker::Process(const std::wstring& printer, const std::vector<JobInfo>& jobs,
-                                                    bool enabled) {
+                                                    bool enabled, bool holdExisting) {
     std::vector<std::uint32_t> toHold;
     auto found = seen_.find(printer);
     const bool firstTime = found == seen_.end();
@@ -23,7 +23,11 @@ std::vector<std::uint32_t> AutoHoldTracker::Process(const std::wstring& printer,
         const std::wstring key = job.Key();
         // Un retenido que ya no está en pausa fue liberado por un operador.
         if (held_.count(key) && job.state != JobState::Paused) held_.erase(key);
-        if (firstTime || found->second.count(job.id)) continue;
+        if (firstTime) {
+            if (holdExisting && ShouldHold(job)) toHold.push_back(job.id);
+            continue;
+        }
+        if (found->second.count(job.id)) continue;
         if (enabled && ShouldHold(job)) toHold.push_back(job.id);
     }
 

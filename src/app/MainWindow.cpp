@@ -63,7 +63,10 @@ enum MenuId : UINT {
     ID_RUN_AS_ADMIN,
     ID_EXIT,
     ID_AUTO_HOLD,
+    ID_PAUSE_ON_START,
+    ID_PAUSE_BOTH,
     ID_CTX_PAUSE = 2101,
+    ID_CTX_PAUSE_BOTH,
     ID_CTX_RESUME,
     ID_CTX_RESTART,
     ID_CTX_CANCEL,
@@ -312,11 +315,13 @@ void MainWindow::ConnectTo(const std::wstring& serverIn) {
         adminRights_.clear();
         lastProblems_.clear();
         connecting_ = true;
+        startPausePending_ = settings_.pauseAllOnStart;
         if (!settings_.activePrinter.empty() && settings_.activePrinter != kAllPrinters &&
             settings_.activePrinter.rfind(server, 0) != 0)
             settings_.activePrinter = kAllPrinters;
     }
     monitor_->SetAutoHold(settings_.autoHoldNewJobs);
+    monitor_->SetHoldExistingOnStart(settings_.pauseAllOnStart);
     monitor_->Start(server, settings_.pollIntervalMs);
     SaveSettings();
     RebuildRows();
@@ -366,6 +371,19 @@ void MainWindow::OnSnapshot(core::SnapshotPtr snapshot) {
 
     ProcessEvents(tracker_.Update(*snapshot_));
     CheckPrinterProblems();
+
+    // "Al iniciar, pausar todo": pausa las impresoras apenas se conoce la lista.
+    // (Los trabajos en cola los retiene el monitor en su primer refresco.)
+    if (startPausePending_ && snapshot_->error.empty() && !snapshot_->printers.empty()) {
+        startPausePending_ = false;
+        std::vector<std::wstring> running;
+        for (const auto& p : snapshot_->printers)
+            if (!(p.problems & core::ProblemPaused)) running.push_back(p.name);
+        if (!running.empty()) {
+            startPauseInFlight_ = true;
+            actions_->RunOnPrinters(JobAction::PausePrinter, std::move(running));
+        }
+    }
 
     // Verifica permisos de administración de impresoras nuevas.
     std::vector<std::wstring> unknown;
@@ -464,7 +482,9 @@ const core::JobInfo* MainWindow::FindJob(const std::wstring& key) const {
 }
 
 const core::JobInfo* MainWindow::FocusedJob() const {
-    return historyView_ ? nullptr : FindJob(list_.FocusedKey());
+    // Sin selección no hay trabajo "actual" (se puede dejar la lista sin selección).
+    if (historyView_ || !list_.HasSelection()) return nullptr;
+    return FindJob(list_.FocusedKey());
 }
 
 std::vector<core::JobInfo> MainWindow::SelectedJobs() const {
@@ -472,8 +492,6 @@ std::vector<core::JobInfo> MainWindow::SelectedJobs() const {
     if (historyView_) return jobs;
     for (const auto& key : list_.SelectedKeys())
         if (const auto* job = FindJob(key)) jobs.push_back(*job);
-    if (jobs.empty())
-        if (const auto* job = FocusedJob()) jobs.push_back(*job);
     return jobs;
 }
 
@@ -686,7 +704,9 @@ void MainWindow::UpdatePreview() {
 
 void MainWindow::Execute(Command command) {
     switch (command) {
-        case Command::Pause: RunOnSelection(JobAction::Pause); break;
+        case Command::Pause: TogglePauseSelection(false); break;
+        case Command::TogglePauseBoth: TogglePauseSelection(true); break;
+        case Command::ClearSelection: list_.ClearSelection(); break;
         case Command::Resume: RunOnSelection(JobAction::Resume); break;
         case Command::Cancel: CancelSelection(SelectedJobs()); break;
         case Command::Restart: RunOnSelection(JobAction::Restart); break;
@@ -727,8 +747,8 @@ void MainWindow::Execute(Command command) {
         case Command::ZoomIn: preview_.ZoomIn(); break;
         case Command::ZoomOut: preview_.ZoomOut(); break;
         case Command::ZoomReset: preview_.ZoomReset(); break;
-        case Command::PausePrinter: RunPrinterAction(JobAction::PausePrinter); break;
-        case Command::ResumePrinter: RunPrinterAction(JobAction::ResumePrinter); break;
+        case Command::PausePrinter: TogglePrinterPause(); break;
+        case Command::ResumePrinter: SetPrintersPaused(false); break;
         case Command::SelectAll: list_.SelectAll(); break;
         case Command::Menu: {
             RECT r = header_.ButtonScreenRect(ui::HeaderButton::Menu);
@@ -749,6 +769,21 @@ void MainWindow::Execute(Command command) {
             break;
         default: break;
     }
+}
+
+void MainWindow::TogglePauseSelection(bool alsoPrinter) {
+    auto jobs = SelectedJobs();
+    if (jobs.empty()) {
+        // Sin trabajos seleccionados, el comando combinado igual actúa sobre la impresora.
+        if (alsoPrinter) TogglePrinterPause();
+        else ShowTransient(Tr(S::NoJobSelected), ui::Tone::Warning);
+        return;
+    }
+    // Si alguno está corriendo se pausa todo; si todos están en pausa, se reanuda.
+    const bool anyRunning =
+        std::any_of(jobs.begin(), jobs.end(), [](const core::JobInfo& j) { return j.state != core::JobState::Paused; });
+    actions_->Run(anyRunning ? JobAction::Pause : JobAction::Resume, jobs);
+    if (alsoPrinter) SetPrintersPaused(anyRunning);
 }
 
 void MainWindow::RunOnSelection(JobAction action) {
@@ -796,7 +831,42 @@ void MainWindow::RunPrinterAction(JobAction action) {
             for (const auto& job : snapshot_->jobs)
                 if (job.printer == printer) tracker_.MarkCancelledByUser(job.Key());
     }
-    actions_->RunOnPrinter(action, printer);
+    actions_->RunOnPrinters(action, {printer});
+}
+
+std::vector<std::wstring> MainWindow::TargetPrinters() const {
+    std::vector<std::wstring> printers;
+    if (!snapshot_) return printers;
+    for (const auto& p : snapshot_->printers)
+        if (settings_.activePrinter == kAllPrinters || p.name == settings_.activePrinter) printers.push_back(p.name);
+    return printers;
+}
+
+void MainWindow::TogglePrinterPause() {
+    // Si alguna de las impresoras afectadas está funcionando, se pausan; si todas
+    // están en pausa, se reanudan.
+    bool anyRunning = false;
+    for (const auto& name : TargetPrinters())
+        if (const auto* p = snapshot_->FindPrinter(name); p && !(p->problems & core::ProblemPaused)) anyRunning = true;
+    SetPrintersPaused(anyRunning);
+}
+
+void MainWindow::SetPrintersPaused(bool pause) {
+    std::vector<std::wstring> targets;
+    for (const auto& name : TargetPrinters()) {
+        const auto* p = snapshot_->FindPrinter(name);
+        const bool paused = p && (p->problems & core::ProblemPaused);
+        if (paused != pause) targets.push_back(name);
+    }
+    if (TargetPrinters().empty()) {
+        ShowTransient(Tr(S::NoPrinters), ui::Tone::Warning);
+        return;
+    }
+    if (targets.empty()) {  // ya estaban como se pidió
+        ShowTransient(util::Format(Tr(pause ? S::PrintersPaused : S::PrintersResumed), 0u), ui::Tone::Neutral);
+        return;
+    }
+    actions_->RunOnPrinters(pause ? JobAction::PausePrinter : JobAction::ResumePrinter, std::move(targets));
 }
 
 void MainWindow::StartRedirect(POINT screen) {
@@ -853,9 +923,11 @@ void MainWindow::OnActionResult(const ActionResult& result) {
         }
         return;
     }
+    const bool quiet = startPauseInFlight_ && result.action == JobAction::PausePrinter;
+    if (quiet) startPauseInFlight_ = false;
     if (!result.ok()) {
         ShowTransient(result.message, ui::Tone::Danger);
-        if (result.firstError == ERROR_ACCESS_DENIED)
+        if (result.firstError == ERROR_ACCESS_DENIED && !quiet)
             MessageBoxW(hwnd_, result.message.c_str(), Tr(S::AppTitle), MB_OK | MB_ICONWARNING);
     } else if (!result.message.empty()) {
         ShowTransient(result.message, ui::Tone::Success);
@@ -953,6 +1025,7 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(menu, MF_STRING, ID_HISTORY,
                 keyed(historyView_ ? S::MenuQueue : S::MenuHistory, Command::History).c_str());
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_PAUSE_BOTH, keyed(S::MenuPauseBoth, Command::TogglePauseBoth).c_str());
     AppendMenuW(menu, MF_STRING, ID_PAUSE_PRINTER, keyed(S::MenuPausePrinter, Command::PausePrinter).c_str());
     AppendMenuW(menu, MF_STRING, ID_RESUME_PRINTER, keyed(S::MenuResumePrinter, Command::ResumePrinter).c_str());
     AppendMenuW(menu, MF_STRING, ID_PURGE, Tr(S::MenuPurge));
@@ -968,6 +1041,7 @@ void MainWindow::ShowMainMenu(POINT screen) {
                 keyed(S::MenuPreviewPane, Command::TogglePane).c_str());
     AppendMenuW(menu, MF_STRING | check(settings_.autoHoldNewJobs), ID_AUTO_HOLD,
                 keyed(S::MenuAutoHold, Command::ToggleAutoHold).c_str());
+    AppendMenuW(menu, MF_STRING | check(settings_.pauseAllOnStart), ID_PAUSE_ON_START, Tr(S::MenuPauseOnStart));
     AppendMenuW(menu, MF_STRING | check(settings_.confirmCancel), ID_CONFIRM_CANCEL, Tr(S::MenuConfirmCancel));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING | check(settings_.notifications == config::NotifyMode::None), ID_NOTIFY_NONE,
@@ -1004,6 +1078,7 @@ void MainWindow::ShowJobContextMenu(POINT screen) {
         return label;
     };
     AppendMenuW(menu, MF_STRING, ID_CTX_PAUSE, keyed(S::CtxPause, Command::Pause).c_str());
+    AppendMenuW(menu, MF_STRING, ID_CTX_PAUSE_BOTH, keyed(S::CtxPauseBoth, Command::TogglePauseBoth).c_str());
     AppendMenuW(menu, MF_STRING, ID_CTX_RESUME, keyed(S::CtxResume, Command::Resume).c_str());
     AppendMenuW(menu, MF_STRING, ID_CTX_RESTART, keyed(S::CtxRestart, Command::Restart).c_str());
     AppendMenuW(menu, MF_STRING, ID_CTX_CANCEL, keyed(S::CtxCancel, Command::Cancel).c_str());
@@ -1022,6 +1097,7 @@ void MainWindow::ShowJobContextMenu(POINT screen) {
     DestroyMenu(menu);
     switch (id) {
         case ID_CTX_PAUSE: Execute(Command::Pause); break;
+        case ID_CTX_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;
         case ID_CTX_RESUME: Execute(Command::Resume); break;
         case ID_CTX_RESTART: Execute(Command::Restart); break;
         case ID_CTX_CANCEL: Execute(Command::Cancel); break;
@@ -1066,8 +1142,14 @@ void MainWindow::HandleMenuCommand(UINT id) {
         case ID_CONNECT: Execute(Command::Connect); break;
         case ID_REFRESH: Execute(Command::Refresh); break;
         case ID_HISTORY: ToggleHistory(); break;
-        case ID_PAUSE_PRINTER: RunPrinterAction(JobAction::PausePrinter); break;
-        case ID_RESUME_PRINTER: RunPrinterAction(JobAction::ResumePrinter); break;
+        case ID_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;
+        case ID_PAUSE_PRINTER: TogglePrinterPause(); break;
+        case ID_RESUME_PRINTER: SetPrintersPaused(false); break;
+        case ID_PAUSE_ON_START:
+            settings_.pauseAllOnStart = !settings_.pauseAllOnStart;
+            monitor_->SetHoldExistingOnStart(settings_.pauseAllOnStart);
+            SaveSettings();
+            break;
         case ID_PURGE: RunPrinterAction(JobAction::PurgePrinter); break;
         case ID_THEME_SYSTEM:
         case ID_THEME_LIGHT:
@@ -1233,6 +1315,7 @@ bool MainWindow::PreTranslate(MSG& msg) {
     if (vk == VK_ESCAPE && !chord.ctrl && !chord.alt) {
         if (quickLook_) ToggleQuickLook();
         else if (!filter_.empty()) header_.ClearSearch();
+        else if (list_.HasSelection()) list_.ClearSelection();
         else if (historyView_) ToggleHistory();
         return true;
     }

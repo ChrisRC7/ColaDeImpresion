@@ -99,6 +99,32 @@ void JobListView::SelectAll() {
     NotifySelection();
 }
 
+void JobListView::ClearSelection() {
+    if (selected_.empty()) return;
+    selected_.clear();
+    Invalidate();
+    NotifySelection();
+}
+
+RECT JobListView::BandRectClient() const {
+    RECT r{std::min(bandStart_.x, bandEnd_.x), std::min(bandStart_.y, bandEnd_.y) - scrollY_,
+           std::max(bandStart_.x, bandEnd_.x), std::max(bandStart_.y, bandEnd_.y) - scrollY_};
+    return r;
+}
+
+void JobListView::UpdateBandSelection() {
+    const int top = std::min(bandStart_.y, bandEnd_.y);
+    const int bottom = std::max(bandStart_.y, bandEnd_.y);
+    selected_ = bandBase_;
+    const int height = RowHeight();
+    for (int i = 0; i < RowCount(); ++i) {
+        const int rowTop = i * height;
+        if (rowTop + height > top && rowTop < bottom) selected_.insert(rows_[static_cast<size_t>(i)].key);
+    }
+    Invalidate();
+    NotifySelection();
+}
+
 void JobListView::MoveFocus(int delta, bool extend) {
     if (rows_.empty()) return;
     int target;
@@ -183,6 +209,12 @@ void JobListView::Paint(HDC dc, const RECT& client) {
         if (top > client.bottom) break;
         RECT r{client.left, top, client.right, top + RowHeight()};
         PaintRow(dc, i, r);
+    }
+    if (bandActive_) {
+        RECT band = BandRectClient();
+        const int radius = Style::Get().Px(3);
+        gfx::FillRoundedAlpha(dc, band, radius, pal.accent, pal.dark ? 60 : 45);
+        gfx::StrokeRounded(dc, band, radius, pal.accent);
     }
 }
 
@@ -305,6 +337,26 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_MOUSEMOVE: {
+            if (bandPressed_) {
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                if (!bandActive_) {
+                    const int threshold = Style::Get().Px(5);
+                    if (std::abs(pt.x - bandStart_.x) > threshold ||
+                        std::abs(pt.y + scrollY_ - bandStart_.y) > threshold)
+                        bandActive_ = true;
+                }
+                if (bandActive_) {
+                    RECT client;
+                    GetClientRect(hwnd_, &client);
+                    // Desplaza la lista si se arrastra más allá del borde.
+                    if (pt.y < 0) ScrollTo(scrollY_ - RowHeight());
+                    else if (pt.y > client.bottom) ScrollTo(scrollY_ + RowHeight());
+                    bandEnd_.x = pt.x;
+                    bandEnd_.y = std::clamp<LONG>(pt.y, client.top, client.bottom) + scrollY_;
+                    UpdateBandSelection();
+                }
+                return 0;
+            }
             if (!trackingMouse_) {
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
                 TrackMouseEvent(&tme);
@@ -327,10 +379,10 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN: {
             SetFocus(hwnd_);
+            const bool ctrl = (wParam & MK_CONTROL) != 0;
+            const bool shift = (wParam & MK_SHIFT) != 0;
             int row = RowAt(GET_Y_LPARAM(lParam));
             if (row >= 0) {
-                bool ctrl = (wParam & MK_CONTROL) != 0;
-                bool shift = (wParam & MK_SHIFT) != 0;
                 // Clic derecho sobre una fila ya seleccionada conserva la selección múltiple.
                 if (msg == WM_RBUTTONDOWN && selected_.count(rows_[static_cast<size_t>(row)].key)) {
                     focus_ = row;
@@ -338,9 +390,32 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 } else {
                     SetFocusRow(row, shift, ctrl);
                 }
+            } else if (msg == WM_LBUTTONDOWN) {
+                ClearSelection();  // clic en el vacío: sin nada seleccionado
+            }
+            if (msg == WM_LBUTTONDOWN) {
+                // Prepara el arrastre de selección (se activa al mover el mouse).
+                bandPressed_ = true;
+                bandStart_ = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) + scrollY_};
+                bandEnd_ = bandStart_;
+                bandBase_ = ctrl ? selected_ : std::set<std::wstring>{};
+                SetCapture(hwnd_);
             }
             return 0;
         }
+        case WM_LBUTTONUP:
+            if (bandPressed_) {
+                bandPressed_ = false;
+                bandActive_ = false;
+                bandBase_.clear();
+                ReleaseCapture();
+                Invalidate();
+            }
+            return 0;
+        case WM_CAPTURECHANGED:
+            bandPressed_ = bandActive_ = false;
+            Invalidate();
+            return 0;
         case WM_LBUTTONDBLCLK:
             if (RowAt(GET_Y_LPARAM(lParam)) >= 0 && callbacks_.activate) callbacks_.activate();
             return 0;

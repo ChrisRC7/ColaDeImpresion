@@ -2,8 +2,8 @@
 // Lista de trabajos (control propio). Muestra filas de dos líneas:
 //   ● Documento                                    3 págs   1.2 MB  [Imprimiendo]
 //     usuario · equipo · 14:05 · impresora
-// Soporta selección múltiple (Ctrl/Shift + clic, Shift + flechas), scroll con
-// rueda y estado vacío. No conoce el spooler: recibe filas ya preparadas
+// Soporta selección múltiple (Ctrl/Shift + clic, Shift + flechas, arrastre con
+// el botón izquierdo como en el Explorador), scroll con rueda y estado vacío. No conoce el spooler: recibe filas ya preparadas
 // (ver app/RowBuilder), por eso sirve igual para la cola y para el historial.
 
 #include <functional>
@@ -44,6 +44,8 @@ public:
     // delta: +1/-1 para mover; INT_MIN / INT_MAX para ir al primero / último.
     void MoveFocus(int delta, bool extendSelection);
     void SelectAll();
+    void ClearSelection();
+    bool HasSelection() const { return !selected_.empty(); }
     void SelectKey(const std::wstring& key);
     std::vector<std::wstring> SelectedKeys() const;  // en el orden de la lista
     std::wstring FocusedKey() const;
@@ -67,6 +69,8 @@ private:
     void EnsureVisible(int row);
     void SetFocusRow(int row, bool extend, bool toggle);
     void NotifySelection();
+    void UpdateBandSelection();
+    RECT BandRectClient() const;
 
     Callbacks callbacks_;
     std::vector<ListRow> rows_;
@@ -76,6 +80,12 @@ private:
     int hover_ = -1;
     int scrollY_ = 0;
     bool trackingMouse_ = false;
+    // Selección por arrastre (rectángulo, como en el Explorador de archivos).
+    bool bandPressed_ = false;   // botón abajo, aún sin superar el umbral
+    bool bandActive_ = false;    // arrastrando el rectángulo
+    POINT bandStart_{};          // en coordenadas del contenido (con el scroll sumado)
+    POINT bandEnd_{};
+    std::set<std::wstring> bandBase_;  // selección previa (se conserva con Ctrl)
     std::wstring emptyTitle_;
     std::wstring emptyHint_;
     wchar_t emptyGlyph_ = 0;

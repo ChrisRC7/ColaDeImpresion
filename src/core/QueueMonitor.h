@@ -45,6 +45,8 @@ public:
 
     // Retención automática: pausa cada trabajo nuevo apenas llega (ver AutoHold.h).
     void SetAutoHold(bool enabled) { autoHold_ = enabled; }
+    // Al (re)conectar, retener también los trabajos que ya estaban en la cola.
+    void SetHoldExistingOnStart(bool enabled) { holdExisting_ = enabled; }
 
     const std::wstring& server() const { return server_; }
 
@@ -61,6 +63,7 @@ private:
     std::wstring server_;
     std::atomic<int> pollMs_{3000};
     std::atomic<bool> autoHold_{false};
+    std::atomic<bool> holdExisting_{false};
     AutoHoldTracker hold_;           // solo se usa en el hilo del monitor
     std::uint32_t holdFailures_ = 0;
     unsigned long holdError_ = 0;

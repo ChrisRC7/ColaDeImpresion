@@ -12,7 +12,8 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 
 - **Servidores remotos** (`\\SERVIDOR`) o impresoras del propio equipo; vista de todas las impresoras o de una sola.
 - **Tiempo real**: notificaciones del spooler + sondeo de respaldo.
-- **Retención automática**: cada trabajo nuevo queda en pausa ("Retenido") hasta que un operador lo libera.
+- **Retención automática**: cada trabajo nuevo queda en pausa ("Retenido") hasta que un operador lo libera; al iniciar también se pausan las impresoras y los trabajos ya encolados.
+- **Selección como en el Explorador**: clic, `Ctrl`/`Shift`+clic, arrastre con rectángulo, y clic en el vacío para no seleccionar nada.
 - **Trabajos**: documento, usuario, equipo, páginas, tamaño, estado, posición, hora. Pausar, reanudar, reiniciar, cancelar (uno, varios o todos los de un usuario), subir/bajar en la cola, **reenviar a otra impresora**.
 - **Impresoras**: pausar/reanudar/vaciar cola; avisos de sin papel, atasco, sin tóner, fuera de línea...
 - **Vista previa** del archivo de spool: EMF nativo; PostScript, PDF, PCL y XPS con Ghostscript/GhostPCL/GhostXPS (opcionales, autodetectados). Zoom, arrastre y paso de páginas. Caché de vistas previas.
@@ -25,7 +26,9 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 | Tecla | Acción |
 |---|---|
 | `↑` / `↓` | Navegar trabajos (`Shift` para seleccionar varios) |
-| `Ctrl+P` / `Ctrl+R` | Pausar / reanudar |
+| `Ctrl+P` / `Ctrl+R` | Pausar (alterna) / reanudar el trabajo |
+| `Ctrl+Shift+P` | Pausar / reanudar la impresora |
+| `Ctrl+Alt+P` | Pausar / reanudar el trabajo **y** la impresora |
 | `Supr` | Cancelar |
 | `Ctrl+↑` / `Ctrl+↓` | Subir / bajar en la cola |
 | `Espacio` o `Enter` | Vista previa rápida |

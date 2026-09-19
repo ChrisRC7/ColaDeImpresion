@@ -78,6 +78,17 @@ void FillRounded(HDC dc, const RECT& rect, int radius, COLORREF color) {
     g.FillPath(&brush, &path);
 }
 
+void FillRoundedAlpha(HDC dc, const RECT& rect, int radius, COLORREF color, int alpha) {
+    Gdiplus::Graphics g(dc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    Gdiplus::GraphicsPath path;
+    AddRoundedRect(path, rect, radius);
+    Gdiplus::SolidBrush brush(Gdiplus::Color(static_cast<BYTE>(std::clamp(alpha, 0, 255)), GetRValue(color),
+                                             GetGValue(color), GetBValue(color)));
+    g.FillPath(&brush, &path);
+}
+
 void StrokeRounded(HDC dc, const RECT& rect, int radius, COLORREF color, float width) {
     Gdiplus::Graphics g(dc);
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);

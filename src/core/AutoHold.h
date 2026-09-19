@@ -4,8 +4,9 @@
 // QueueMonitor en su hilo y se prueba en tests/.
 //
 // Reglas:
-//  - Solo se retienen trabajos NUEVOS: la primera vez que se ve una impresora
-//    (al iniciar o al conectar) sus trabajos existentes se registran sin tocarlos.
+//  - Se retienen los trabajos NUEVOS. La primera vez que se ve una impresora
+//    (al iniciar o al conectar) sus trabajos existentes se retienen solo si se
+//    pide "holdExisting" (opción "al iniciar, pausar todo"); si no, solo se registran.
 //  - Cada trabajo se evalúa una sola vez: si un operador lo reanuda, no se
 //    vuelve a pausar.
 //  - Se retienen aunque ya hayan empezado a imprimirse (se ganó la carrera por
@@ -23,9 +24,12 @@ namespace cola::core {
 
 class AutoHoldTracker {
 public:
-    // Registra los trabajos de una impresora y devuelve los ids a pausar
-    // (vacío si la retención está desactivada o es la primera vez que se ve).
-    std::vector<std::uint32_t> Process(const std::wstring& printer, const std::vector<JobInfo>& jobs, bool enabled);
+    // Registra los trabajos de una impresora y devuelve los ids a pausar.
+    //  enabled:       retener los trabajos que llegan después de la primera vez.
+    //  holdExisting:  la primera vez que se ve la impresora (al iniciar/conectar),
+    //                 retener también los trabajos que ya estaban en la cola.
+    std::vector<std::uint32_t> Process(const std::wstring& printer, const std::vector<JobInfo>& jobs, bool enabled,
+                                       bool holdExisting = false);
 
     void MarkHeld(const std::wstring& jobKey) { held_.insert(jobKey); }
     bool IsHeld(const std::wstring& jobKey) const { return held_.count(jobKey) > 0; }

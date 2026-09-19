@@ -41,6 +41,8 @@ const CommandInfo kCommandTable[] = {
     {Command::Menu, L"menu", S::CmdMenu, L"F10"},
     {Command::TogglePane, L"togglePane", S::CmdTogglePane, L"Ctrl+B"},
     {Command::ToggleAutoHold, L"toggleAutoHold", S::CmdToggleAutoHold, L"Ctrl+Shift+H"},
+    {Command::TogglePauseBoth, L"togglePauseBoth", S::CmdTogglePauseBoth, L"Ctrl+Alt+P"},
+    {Command::ClearSelection, L"clearSelection", S::CmdClearSelection, L"Ctrl+Shift+A"},
 };
 static_assert(sizeof(kCommandTable) / sizeof(kCommandTable[0]) == kCommandCount,
               "kCommandTable debe tener una entrada por Command");

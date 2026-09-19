@@ -55,23 +55,33 @@ void JobActionRunner::Run(JobAction action, std::vector<core::JobInfo> jobs) {
     });
 }
 
-void JobActionRunner::RunOnPrinter(JobAction action, std::wstring printer) {
-    worker_.Post([this, action, printer = std::move(printer)] {
+void JobActionRunner::RunOnPrinters(JobAction action, std::vector<std::wstring> printers) {
+    worker_.Post([this, action, printers = std::move(printers)] {
         ActionResult result;
         result.action = action;
-        core::OpResult op;
-        switch (action) {
-            case JobAction::PausePrinter: op = spooler::PausePrinter(printer); break;
-            case JobAction::ResumePrinter: op = spooler::ResumePrinter(printer); break;
-            case JobAction::PurgePrinter: op = spooler::PurgePrinter(printer); break;
-            default: return;
+        for (const auto& printer : printers) {
+            core::OpResult op;
+            switch (action) {
+                case JobAction::PausePrinter: op = spooler::PausePrinter(printer); break;
+                case JobAction::ResumePrinter: op = spooler::ResumePrinter(printer); break;
+                case JobAction::PurgePrinter: op = spooler::PurgePrinter(printer); break;
+                default: return;
+            }
+            if (op.ok) {
+                ++result.succeeded;
+            } else {
+                ++result.failed;
+                if (result.firstError == ERROR_SUCCESS) result.firstError = op.error;
+                util::LogError(L"Acción %d sobre la impresora %ls falló: %lu", static_cast<int>(action), printer.c_str(),
+                               op.error);
+            }
         }
-        if (op.ok) {
-            result.succeeded = 1;
-        } else {
-            result.failed = 1;
-            result.firstError = op.error;
-            result.message = ActionErrorText(op.error);
+        if (result.failed) {
+            result.message = ActionErrorText(result.firstError);
+        } else if (action == JobAction::PausePrinter) {
+            result.message = util::Format(Tr(S::PrintersPaused), result.succeeded);
+        } else if (action == JobAction::ResumePrinter) {
+            result.message = util::Format(Tr(S::PrintersResumed), result.succeeded);
         }
         done_(std::move(result));
     });

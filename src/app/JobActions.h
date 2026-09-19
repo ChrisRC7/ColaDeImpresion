@@ -65,7 +65,8 @@ public:
     explicit JobActionRunner(DoneCallback done);
 
     void Run(JobAction action, std::vector<core::JobInfo> jobs);
-    void RunOnPrinter(JobAction action, std::wstring printer);
+    // Pausar / reanudar / vaciar una o varias impresoras.
+    void RunOnPrinters(JobAction action, std::vector<std::wstring> printers);
     void Redirect(RedirectRequest request);
     void CheckAdmin(std::vector<std::wstring> printers);
 

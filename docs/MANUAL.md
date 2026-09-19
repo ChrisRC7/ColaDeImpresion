@@ -18,8 +18,10 @@ equipo, hora, impresora, páginas y tamaño.
 | Acción | Teclado | Mouse |
 |---|---|---|
 | Seleccionar | `↑` `↓` `Inicio` `Fin` | clic |
-| Selección múltiple | `Shift+↑/↓`, `Ctrl+A` | `Ctrl`+clic, `Shift`+clic |
-| Pausar / reanudar | `Ctrl+P` / `Ctrl+R` | clic derecho |
+| Selección múltiple | `Shift+↑/↓`, `Ctrl+A` | `Ctrl`+clic, `Shift`+clic, o **arrastrar** con el botón izquierdo (rectángulo, como en el Explorador) |
+| Quitar la selección | `Esc` o `Ctrl+Shift+A` | clic en una zona vacía de la lista |
+| Pausar / reanudar | `Ctrl+P` (alterna) o `Ctrl+R` | clic derecho |
+| Pausar / reanudar **el trabajo y la impresora** | `Ctrl+Alt+P` | clic derecho |
 | Reiniciar | `Ctrl+I` | clic derecho |
 | Cancelar | `Supr` (pide confirmación) | clic derecho |
 | Cancelar todos los de un usuario | — | clic derecho → *Cancelar todos los trabajos de…* |
@@ -49,9 +51,23 @@ las notificaciones estén en *ninguna*.
 
 ## 3. Impresoras
 
-Menú `⋯`: *Pausar impresora* (`Ctrl+Shift+P`), *Reanudar impresora*
-(`Ctrl+Shift+R`), *Vaciar cola de la impresora…*. Actúan sobre la impresora
-elegida o, en la vista de todas, sobre la del trabajo seleccionado.
+Menú `⋯`: *Pausar / reanudar impresora* (`Ctrl+Shift+P`, alterna), *Reanudar
+impresora* (`Ctrl+Shift+R`), *Vaciar cola de la impresora…*. Actúan sobre la
+impresora elegida; en la vista **Todas las impresoras**, sobre todas las del
+servidor (si alguna está funcionando se pausan todas; si todas están en pausa,
+se reanudan).
+
+`Ctrl+Alt+P` hace las dos cosas a la vez: pausa (o reanuda) **los trabajos
+seleccionados y la impresora**. Sin ningún trabajo seleccionado actúa solo
+sobre la impresora.
+
+**Al iniciar**, la app pausa las impresoras y retiene los trabajos que ya
+estaban en cola, de modo que nada se imprime hasta que un operador lo permita.
+Se desactiva en el menú (*Al iniciar: pausar impresoras y retener trabajos en
+cola*). Ojo: con la impresora en pausa, liberar un trabajo con `Ctrl+R` no
+alcanza; también hay que reanudar la impresora (`Ctrl+Shift+P` o `Ctrl+Alt+P`).
+Pausar una impresora requiere el permiso "Administrar esta impresora"; si no se
+tiene, la barra de estado lo avisa y la retención de trabajos sigue funcionando.
 
 Los problemas (sin papel, atasco, puerta abierta, sin tóner, fuera de línea…)
 aparecen en el botón de impresora, en la barra de estado y como notificación.

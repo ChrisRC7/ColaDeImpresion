@@ -36,6 +36,8 @@ void StopGdiPlus();
 
 void Fill(HDC dc, const RECT& rect, COLORREF color);
 void FillRounded(HDC dc, const RECT& rect, int radius, COLORREF color);
+// Igual, pero translúcido (alpha 0..255): p. ej. el rectángulo de selección.
+void FillRoundedAlpha(HDC dc, const RECT& rect, int radius, COLORREF color, int alpha);
 void StrokeRounded(HDC dc, const RECT& rect, int radius, COLORREF color, float width = 1.0f);
 void FillCircle(HDC dc, int cx, int cy, int radius, COLORREF color);
 void HLine(HDC dc, int x1, int x2, int y, COLORREF color);

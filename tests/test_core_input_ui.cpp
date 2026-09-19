@@ -6,6 +6,7 @@
 
 #include "TestFramework.h"
 #include "app/RowBuilder.h"
+#include "config/Settings.h"
 #include "core/AutoHold.h"
 #include "core/JobStatus.h"
 #include "core/JobTracker.h"
@@ -262,4 +263,27 @@ TEST(HeldJobsShownAsHeld) {
     CHECK_EQ(summary.held, 1u);
     CHECK_EQ(summary.paused, 0u);
     CHECK(row.tone == ui::Tone::Special);
+}
+
+TEST(AutoHoldExistingJobsOnStart) {
+    core::AutoHoldTracker hold;
+    const std::wstring printer = L"\\\\S\\P1";
+    // "Al iniciar, pausar todo": los trabajos que ya estaban también se retienen...
+    auto ids = hold.Process(printer,
+                            {MakeJob(1, core::JobState::Queued), MakeJob(2, core::JobState::Paused),
+                             MakeJob(3, core::JobState::Printing)},
+                            true, true);
+    CHECK_EQ(ids.size(), size_t(2));  // 1 y 3 (el 2 ya estaba en pausa)
+    // ...pero solo la primera vez: después rige la regla de trabajos nuevos.
+    ids = hold.Process(printer, {MakeJob(1, core::JobState::Queued), MakeJob(4, core::JobState::Queued)}, true, true);
+    CHECK_EQ(ids.size(), size_t(1));
+    CHECK_EQ(ids[0], 4u);
+}
+
+TEST(SettingsHoldDefaults) {
+    config::Settings s;
+    CHECK(s.autoHoldNewJobs);
+    CHECK(s.pauseAllOnStart);
+    s.pauseAllOnStart = false;
+    CHECK(!config::Settings::FromJson(s.ToJson()).pauseAllOnStart);
 }
