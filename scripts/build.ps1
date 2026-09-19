@@ -74,6 +74,53 @@ para habilitar la vista previa de trabajos PostScript, PCL y XPS.
 También se detectan automáticamente si Ghostscript está instalado en
 C:\Program Files\gs\.
 "@
+
+    # --- Extras para llevar en USB y probar en el LAIMI (el instalador los ignora) ---
+    # Modo portable: config, historial y app.log quedan junto al .exe.
+    Set-Content -Path (Join-Path $dist "portable.txt") -Encoding utf8 -Value `
+        "Si este archivo existe, la configuración, el historial y app.log se guardan en esta carpeta."
+    # Lanzador que conecta directo al servidor del laboratorio.
+    Set-Content -Path (Join-Path $dist "Abrir vtec-laimiprint.bat") -Encoding ascii -Value @"
+@echo off
+start "" "%~dp0ColaDeImpresion.exe" --server vtec-laimiprint
+"@
+    Copy-Item (Join-Path $root "docs\PRUEBAS.md") $dist -ErrorAction SilentlyContinue
+    $testjob = Get-ChildItem -Path $buildDir -Recurse -Filter cola_testjob.exe | Select-Object -First 1
+    if ($testjob) {
+        New-Item -ItemType Directory (Join-Path $dist "herramientas") | Out-Null
+        Copy-Item $testjob.FullName (Join-Path $dist "herramientas")
+    }
+    Set-Content -Path (Join-Path $dist "LEEME - PRUEBA EN EL LAIMI.txt") -Encoding utf8 -Value @"
+COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
+======================================
+
+1. Copie esta carpeta completa al USB (o al Escritorio de la PC del laboratorio
+   si no se permite ejecutar programas desde USB).
+
+2. Doble clic en "Abrir vtec-laimiprint.bat"
+   (o abra ColaDeImpresion.exe y presione Ctrl+O, escriba vtec-laimiprint y Enter).
+   Si Windows muestra "Windows protegió su PC": Más información > Ejecutar de todas formas.
+
+3. Revise la barra inferior:
+   - "En vivo" o "Actualización por sondeo" (ambos funcionan).
+   - "Sin permisos de administración": se ven los trabajos, pero no se pueden
+     cancelar/reordenar los de otros usuarios con esta cuenta.
+
+4. Pruebe lo que indica PRUEBAS.md (sección 3) y anote los resultados.
+   F1 muestra todos los atajos de teclado.
+
+5. Al terminar, cierre la app desde el ícono de la bandeja (clic derecho > Salir)
+   y traiga de vuelta esta carpeta: app.log, config.json e historial.json
+   sirven para revisar cualquier problema.
+
+OPCIONAL
+- Vista previa de trabajos PCL / PostScript / PDF / XPS: copie Ghostscript,
+  GhostPCL o GhostXPS en la carpeta "renderers" (ver renderers\LEEME.txt).
+- herramientas\cola_testjob.exe crea trabajos de prueba que quedan en cola
+  sin imprimir (se abortan solos). Ejemplo, en una consola:
+    herramientas\cola_testjob.exe "\\vtec-laimiprint\NOMBRE-IMPRESORA" --jobs 2 --pages 3 --seconds 120 --pause
+  ¡Sin --pause y con --finish SÍ se imprimen de verdad!
+"@
     Write-Host "Distribución lista en $dist"
 }
 

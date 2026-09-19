@@ -132,6 +132,7 @@ Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 - [x] Crear instalador para Windows → script Inno Setup `installer/ColaDeImpresion.iss` (`scripts\build.ps1 -Installer`)
 - [ ] Compilar el instalador y probarlo (requiere Inno Setup 6 instalado)
+- [x] Paquete portable para probar en el LAIMI desde USB (`scripts\build.ps1 -Package` → `dist\`)
 - [x] Configurar la app para iniciar con Windows (opcional, desde el menú o el instalador)
 - [x] Definir si reemplaza el ícono de la bandeja del sistema del spooler original → **no** (Windows no lo permite); la app tiene su propio ícono (D14)
 - [x] Documentación básica de uso (README + docs/MANUAL.md)
