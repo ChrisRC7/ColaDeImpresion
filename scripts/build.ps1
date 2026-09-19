@@ -1,0 +1,86 @@
+﻿<#
+.SYNOPSIS
+    Compila Cola de Impresión, ejecuta las pruebas y (opcional) prepara la carpeta dist.
+
+.DESCRIPTION
+    Busca una toolchain en este orden:
+      1. cmake + compilador ya disponibles en el PATH
+      2. WinLibs portable en D:\Programacion\Herramientas\winlibs\mingw64 (o $env:COLA_MINGW)
+    Con Visual Studio también funciona: abrir "Developer PowerShell" y ejecutar este script.
+
+.EXAMPLE
+    .\scripts\build.ps1                 # Release + pruebas
+    .\scripts\build.ps1 -Config Debug   # Debug
+    .\scripts\build.ps1 -Package        # además copia el .exe y la documentación a dist\
+    .\scripts\build.ps1 -Installer      # además compila el instalador (requiere Inno Setup 6)
+#>
+param(
+    [ValidateSet("Release", "Debug")] [string]$Config = "Release",
+    [switch]$Package,
+    [switch]$Installer,
+    [switch]$SkipTests
+)
+
+$ErrorActionPreference = "Stop"
+$root = Split-Path -Parent $PSScriptRoot
+$buildDir = Join-Path $root ("build-" + $Config.ToLower())
+
+# --- Toolchain ---------------------------------------------------------------
+if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+    $candidates = @($env:COLA_MINGW, "D:\Programacion\Herramientas\winlibs\mingw64", "C:\mingw64", "C:\msys64\ucrt64")
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path (Join-Path $c "bin\cmake.exe"))) {
+            $env:PATH = (Join-Path $c "bin") + ";" + $env:PATH
+            Write-Host "Usando toolchain: $c"
+            break
+        }
+    }
+}
+if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+    throw "No se encontró cmake. Instale WinLibs (https://winlibs.com) o Visual Studio y vuelva a intentar."
+}
+
+$generator = @()
+if (Get-Command ninja -ErrorAction SilentlyContinue) { $generator = @("-G", "Ninja") }
+
+# --- Compilación -------------------------------------------------------------
+cmake -S $root -B $buildDir @generator "-DCMAKE_BUILD_TYPE=$Config" -DCOLA_BUILD_TESTS=ON
+if ($LASTEXITCODE -ne 0) { throw "Falló la configuración de CMake" }
+cmake --build $buildDir --config $Config
+if ($LASTEXITCODE -ne 0) { throw "Falló la compilación" }
+
+# --- Pruebas -----------------------------------------------------------------
+if (-not $SkipTests) {
+    $tests = Get-ChildItem -Path $buildDir -Recurse -Filter cola_tests.exe | Select-Object -First 1
+    & $tests.FullName
+    if ($LASTEXITCODE -ne 0) { throw "Hay pruebas fallidas" }
+}
+
+$exe = Get-ChildItem -Path $buildDir -Recurse -Filter ColaDeImpresion.exe | Select-Object -First 1
+Write-Host "`nEjecutable: $($exe.FullName)"
+
+# --- Carpeta de distribución -------------------------------------------------
+if ($Package -or $Installer) {
+    $dist = Join-Path $root "dist"
+    if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
+    New-Item -ItemType Directory $dist | Out-Null
+    Copy-Item $exe.FullName $dist
+    Copy-Item (Join-Path $root "README.md") $dist
+    Copy-Item (Join-Path $root "docs\MANUAL.md") $dist -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory (Join-Path $dist "renderers") | Out-Null
+    Set-Content -Path (Join-Path $dist "renderers\LEEME.txt") -Encoding utf8 -Value @"
+Copie aquí (opcional) gswin64c.exe, gpcl6win64.exe o gxpswin64.exe y sus DLL
+para habilitar la vista previa de trabajos PostScript, PCL y XPS.
+También se detectan automáticamente si Ghostscript está instalado en
+C:\Program Files\gs\.
+"@
+    Write-Host "Distribución lista en $dist"
+}
+
+if ($Installer) {
+    $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
+        Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $iscc) { throw "No se encontró Inno Setup 6 (ISCC.exe). Descárguelo de https://jrsoftware.org/isinfo.php" }
+    & $iscc (Join-Path $root "installer\ColaDeImpresion.iss")
+    if ($LASTEXITCODE -ne 0) { throw "Falló el instalador" }
+}

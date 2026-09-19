@@ -45,7 +45,8 @@ if(MSVC)
 else()
     target_compile_options(cola_core PUBLIC -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-cast-function-type)
     # Enlazado estático del runtime para que el .exe no dependa de DLLs de MinGW.
-    target_link_options(cola_core PUBLIC -static -static-libgcc -static-libstdc++ -municode)
+    target_link_options(cola_core PUBLIC -static -static-libgcc -static-libstdc++ -municode
+                        $<$<CONFIG:Release>:-s>)
 endif()
 
 # ---------------------------------------------------------------------------

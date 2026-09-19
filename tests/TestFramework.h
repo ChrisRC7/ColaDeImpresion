@@ -64,8 +64,9 @@ std::string ToText(const T& value) {
 
 #define CHECK_EQ(a, b)                                                                                     \
     do {                                                                                                   \
-        auto&& va_ = (a);                                                                                  \
-        auto&& vb_ = (b);                                                                                  \
+        /* copias: (a) puede ser miembro de un temporal que muere al terminar la expresión */            \
+        const auto va_ = (a);                                                                              \
+        const auto vb_ = (b);                                                                              \
         if (!(va_ == vb_))                                                                                 \
             testing::ReportFailure(__FILE__, __LINE__,                                                     \
                                    std::string(#a " == " #b "  (") + testing::ToText(va_) + " vs " +       \
