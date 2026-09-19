@@ -42,6 +42,8 @@ private:
     void EnsureVisible();
     int RowAt(POINT pt) const;  // índice de comando bajo el punto, o -1
     void StartCapture();
+    RECT ScrollThumbRect() const;  // vacío si no hace falta desplazarse
+    void ScrollTo(int firstRow);
 
     const input::ShortcutMap* shortcuts_ = nullptr;
     Callbacks callbacks_;
@@ -52,6 +54,8 @@ private:
     int hover_ = -1;
     bool trackingMouse_ = false;
     RECT listArea_{};  // área de la lista (se calcula al pintar; se usa para el clic)
+    bool draggingThumb_ = false;
+    int thumbGrabOffset_ = 0;
     std::wstring message_;
 };
 

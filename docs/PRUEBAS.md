@@ -37,6 +37,7 @@ PDF", trabajos generados con `cola_testjob` y spool EMF simulado.
 | Selección por arrastre (rectángulo) y clic en el vacío para no seleccionar nada | OK |
 | `F9`: alterna pausa/reanudación de la impresora (4 ciclos seguidos) | OK |
 | `F8`: reanuda el trabajo retenido seleccionado y su impresora | OK |
+| Panel F1: reasignar "Pausar / reanudar impresora" con clic y restaurar con R | OK |
 | Vista previa PCL / PostScript / XPS con los renderizadores incluidos | OK |
 
 ## 3. Pruebas pendientes en el LAIMI (sección 7 del TODO)

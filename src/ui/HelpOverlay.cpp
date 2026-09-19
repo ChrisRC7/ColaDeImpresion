@@ -112,6 +112,24 @@ void HelpOverlay::StartCapture() {
     Invalidate();
 }
 
+RECT HelpOverlay::ScrollThumbRect() const {
+    if (kCommandCount <= visibleRows_ || gfx::Height(listArea_) <= 0) return RECT{};
+    const auto& style = Style::Get();
+    const int width = style.Px(6);
+    const int trackTop = listArea_.top + style.Px(2);
+    const int trackHeight = gfx::Height(listArea_) - style.Px(4);
+    const int thumbHeight = std::max(style.Px(28), trackHeight * visibleRows_ / kCommandCount);
+    const int maxScroll = kCommandCount - visibleRows_;
+    const int top = trackTop + (maxScroll > 0 ? (trackHeight - thumbHeight) * scroll_ / maxScroll : 0);
+    const int right = listArea_.right - style.Px(4);
+    return RECT{right - width, top, right, top + thumbHeight};
+}
+
+void HelpOverlay::ScrollTo(int firstRow) {
+    scroll_ = std::clamp(firstRow, 0, std::max(0, kCommandCount - visibleRows_));
+    Invalidate();
+}
+
 int HelpOverlay::RowAt(POINT pt) const {
     if (!gfx::Contains(listArea_, pt)) return -1;
     int index = scroll_ + (pt.y - listArea_.top) / RowHeight();
@@ -156,7 +174,7 @@ void HelpOverlay::Paint(HDC dc, const RECT& client) {
         std::wstring keys = input::FormatChordList(shortcuts_->Get(static_cast<Command>(i)));
         bool none = keys.empty();
         if (none) keys = Tr(S::HelpUnassigned);
-        RECT keyRect{row.right - style.Px(196), row.top, row.right - style.Px(12), row.bottom};
+        RECT keyRect{row.right - style.Px(196), row.top, row.right - style.Px(20), row.bottom};
         SIZE sz = gfx::MeasureText(dc, keys, fonts.small);
         if (!none) {
             RECT chip{keyRect.right - sz.cx - style.Px(14), row.top + style.Px(4), keyRect.right, row.bottom - style.Px(4)};
@@ -167,6 +185,15 @@ void HelpOverlay::Paint(HDC dc, const RECT& client) {
         } else {
             gfx::Text(dc, keys, keyRect, fonts.small, pal.textMuted, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         }
+    }
+
+    // Barra de desplazamiento (indica que la lista sigue más abajo).
+    RECT thumb = ScrollThumbRect();
+    if (thumb.bottom > thumb.top) {
+        const int width = gfx::Width(thumb);
+        RECT track{thumb.left, listArea.top + style.Px(2), thumb.right, listArea.bottom - style.Px(2)};
+        gfx::FillRounded(dc, track, width / 2, Blend(pal.overlayScrim, pal.border, 0.6));
+        gfx::FillRounded(dc, thumb, width / 2, draggingThumb_ ? pal.accent : pal.textMuted);
     }
 }
 
@@ -185,11 +212,26 @@ LRESULT HelpOverlay::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             HandleKey(static_cast<UINT>(wParam));
             return 0;
         case WM_MOUSEWHEEL:
-            scroll_ -= GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA * 3;
-            scroll_ = std::clamp(scroll_, 0, std::max(0, kCommandCount - visibleRows_));
-            Invalidate();
+            ScrollTo(scroll_ - GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA * 3);
+            return 0;
+        case WM_LBUTTONUP:
+            if (draggingThumb_) {
+                draggingThumb_ = false;
+                ReleaseCapture();
+                Invalidate();
+            }
             return 0;
         case WM_MOUSEMOVE: {
+            if (draggingThumb_) {
+                const auto& style = Style::Get();
+                const int trackTop = listArea_.top + style.Px(2);
+                const int trackHeight = gfx::Height(listArea_) - style.Px(4);
+                const int thumbHeight = gfx::Height(ScrollThumbRect());
+                const int span = std::max(1, trackHeight - thumbHeight);
+                const int y = GET_Y_LPARAM(lParam) - thumbGrabOffset_ - trackTop;
+                ScrollTo((kCommandCount - visibleRows_) * std::clamp(y, 0, span) / span);
+                return 0;
+            }
             if (!trackingMouse_) {
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
                 TrackMouseEvent(&tme);
@@ -222,6 +264,19 @@ LRESULT HelpOverlay::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             SetFocus(hwnd_);
             if (!gfx::Contains(CardRect(client), pt)) {
                 if (callbacks_.close) callbacks_.close();
+                return 0;
+            }
+            // Barra de desplazamiento: arrastrar el pulgar o saltar en la pista.
+            RECT thumb = ScrollThumbRect();
+            if (thumb.bottom > thumb.top && pt.x >= thumb.left - Style::Get().Px(4) && pt.x <= thumb.right) {
+                if (gfx::Contains(thumb, pt)) {
+                    draggingThumb_ = true;
+                    thumbGrabOffset_ = pt.y - thumb.top;
+                    SetCapture(hwnd_);
+                } else if (pt.y >= listArea_.top && pt.y <= listArea_.bottom) {
+                    ScrollTo(scroll_ + (pt.y < thumb.top ? -visibleRows_ : visibleRows_));
+                }
+                Invalidate();
                 return 0;
             }
             int row = RowAt(pt);

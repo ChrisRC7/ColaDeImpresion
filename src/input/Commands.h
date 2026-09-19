@@ -8,41 +8,49 @@
 
 namespace cola::input {
 
+// El orden define cómo se listan en el panel de atajos (F1): agrupados por
+// tema, empezando por lo que más se usa.
 enum class Command {
+    // Trabajos
     Pause,
     Resume,
+    TogglePauseBoth,
     Cancel,
     Restart,
+    MoveUp,
+    MoveDown,
+    Redirect,
+    // Impresora
+    PausePrinter,
+    ResumePrinter,
+    ToggleAutoHold,
+    // Selección y navegación
     NavUp,
     NavDown,
     NavFirst,
     NavLast,
-    MoveUp,
-    MoveDown,
+    SelectAll,
+    ClearSelection,
+    // Vista previa
     QuickLook,
-    ToggleTheme,
-    Find,
-    Help,
-    Refresh,
-    Redirect,
-    NextPrinter,
-    PrevPrinter,
-    ChoosePrinter,
-    Connect,
-    History,
     NextPage,
     PrevPage,
     ZoomIn,
     ZoomOut,
     ZoomReset,
-    PausePrinter,
-    ResumePrinter,
-    SelectAll,
-    Menu,
     TogglePane,
-    ToggleAutoHold,
-    TogglePauseBoth,
-    ClearSelection,
+    // Buscar, impresoras y servidor
+    Find,
+    History,
+    ChoosePrinter,
+    NextPrinter,
+    PrevPrinter,
+    Connect,
+    Refresh,
+    // General
+    ToggleTheme,
+    Menu,
+    Help,
     Count_
 };
 

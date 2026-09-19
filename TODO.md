@@ -86,6 +86,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Sistema de atajos configurable (reasignación desde el panel F1, guardado en config.json)
 - [x] Mostrar los atajos disponibles en un panel de ayuda (`?` o `F1`)
 - [x] Elegir y reasignar atajos también con el mouse (clic para elegir; segundo clic, doble clic o clic en la tecla para reasignar)
+- [x] Panel de atajos agrupado por temas y con barra de desplazamiento (todos los comandos, incluidos los de pausa de impresora, se pueden reasignar ahí)
 - [x] Selección múltiple arrastrando con el botón izquierdo (rectángulo como en el Explorador) y poder quedarse sin selección (`Esc`, `Ctrl+Shift+A` o clic en el vacío)
 
 ---

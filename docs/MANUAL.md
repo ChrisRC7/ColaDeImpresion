@@ -114,9 +114,16 @@ que se viera imprimir). La barra de estado muestra páginas impresas hoy y en lo
 
 ## 8. Atajos de teclado
 
-`F1` (o `?`) abre la lista. Para cambiar uno: elegirlo con `↑`/`↓` o con un
-**clic**; luego `Enter`, **otro clic**, **doble clic** o clic sobre la tecla de la
-derecha, y presionar la nueva combinación. `Supr` lo deja sin asignar, `R` restaura todos
+`F1` (o `?`) abre la lista con **todos** los comandos, agrupados: primero los de
+trabajos (pausar, reanudar, pausar trabajo e impresora, cancelar, reordenar,
+reenviar), después los de impresora y retención, luego selección, vista previa,
+búsqueda y servidor. La barra de la derecha indica que hay más abajo: se puede
+arrastrar, usar la rueda del mouse o `AvPág` / `RePág`.
+
+Para cambiar un atajo: elegirlo con `↑`/`↓` o con un **clic**; luego `Enter`,
+**otro clic**, **doble clic** o clic sobre la tecla de la derecha, y presionar la
+nueva combinación. Si el comando tenía dos teclas (por ejemplo `Ctrl+Shift+P` y
+`F9`), la nueva combinación reemplaza a ambas. `Supr` lo deja sin asignar, `R` restaura todos
 los predeterminados, `Esc` cierra. Si la combinación ya era de otro comando, se
 le quita a ese y se avisa.
 
