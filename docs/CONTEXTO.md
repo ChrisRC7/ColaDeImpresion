@@ -102,7 +102,8 @@ impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 
 ## 6. Preguntas abiertas para el LAIMI
 
-- Nombre del servidor de impresión y si los operadores son administradores de ese equipo (para leer el spool).
+- ~~Nombre del servidor de impresión~~ → **`\\vtec-laimiprint`** (es el que se usa en el Explorador para agregar las impresoras compartidas).
+- ¿Los operadores son administradores de `vtec-laimiprint`? (para leer el spool y gestionar trabajos ajenos).
 - ¿Se prefiere ejecutar la app en el servidor o en la PC del operador?
 - ¿Se desea instalar Ghostscript/GhostPCL en el equipo del operador? (licencia AGPL, uso como programa externo).
 - ¿Hace falta autenticación o registro de qué operador canceló cada trabajo?
@@ -115,3 +116,4 @@ impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 | 2026-09-19 | El usuario aclara que la app es para el LAIMI (TEC) y controla colas de un **servidor de impresión** → soporte de servidores remotos, permisos y vista previa desde el spool del servidor. |
 | 2026-09-19 | Descubierto *spool file pooling* (`FPnnnnn.SPL`): búsqueda por `.SHD`. Herramienta `cola_testjob` con spool EMF simulado. |
 | 2026-09-19 | Script de build, instalador Inno Setup, documentación (README, MANUAL, PRUEBAS, GUIA_IA, CONTEXTO). |
+| 2026-09-19 | Confirmado el servidor de impresión del LAIMI: `\\vtec-laimiprint`. |
