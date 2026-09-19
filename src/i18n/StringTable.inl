@@ -121,8 +121,8 @@ X(ConfirmRedirectRaw,
   L"El trabajo contiene datos %ls generados para el driver \"%ls\". Enviarlos tal cual a \"%ls\" solo funciona si ambas impresoras usan el mismo lenguaje. ¿Continuar?",
   L"The job contains %ls data generated for driver \"%ls\". Sending it as-is to \"%ls\" only works if both printers use the same language. Continue?")
 X(ActionFailed, L"No se pudo completar la acción: %ls", L"The action could not be completed: %ls")
-X(ActionDenied, L"Acceso denegado. Para gestionar trabajos de otros usuarios necesita el permiso \"Administrar documentos\" en la impresora (o ejecutar como administrador).",
-  L"Access denied. Managing other users' jobs requires the \"Manage documents\" permission on the printer (or running as administrator).")
+X(ActionDenied, L"Acceso denegado. Gestionar trabajos de otros usuarios o reordenar la cola requiere el permiso \"Administrar documentos\" en la impresora (o ejecutar como administrador).",
+  L"Access denied. Managing other users' jobs or reordering the queue requires the \"Manage documents\" permission on the printer (or running as administrator).")
 X(RedirectDone, L"Trabajo reenviado a %ls (%u páginas).", L"Job redirected to %ls (%u pages).")
 X(RedirectNoData, L"No se pudieron leer los datos del trabajo para reenviarlo.", L"The job data could not be read for redirection.")
 X(RedirectUnsupported, L"No se puede reenviar este formato (%ls) a una impresora con otro driver sin Ghostscript/GhostPCL.",

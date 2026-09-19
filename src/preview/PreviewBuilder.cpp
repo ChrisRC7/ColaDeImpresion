@@ -89,7 +89,7 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
     const auto& opt = request.options;
     doc->totalPages = request.job.totalPages;
 
-    SpoolData spool = ReadSpoolFile(request.server, request.job.id, opt.spoolOverrideDir, opt.maxSpoolBytes);
+    SpoolData spool = ReadSpoolFile(request.server, request.job.id, request.job.document, opt.spoolOverrideDir, opt.maxSpoolBytes);
     if (spool.error == 0) {
         doc->format = spool.format;
         doc->dataBytes = spool.fileSize;

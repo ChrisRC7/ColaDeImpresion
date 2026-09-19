@@ -541,7 +541,13 @@ void MainWindow::UpdateStatus() {
     status_.SetSummary(summary);
 
     std::vector<ui::StatusItem> items;
-    if (!transientText_.empty()) items.push_back({ui::glyph::Completed, transientText_, transientTone_});
+    if (!transientText_.empty()) {
+        wchar_t glyph = transientTone_ == ui::Tone::Danger    ? ui::glyph::Error
+                        : transientTone_ == ui::Tone::Warning ? ui::glyph::Warning
+                        : transientTone_ == ui::Tone::Success ? ui::glyph::Completed
+                                                              : ui::glyph::Refresh;
+        items.push_back({glyph, transientText_, transientTone_});
+    }
     if (snapshot_) {
         // Problema de la impresora elegida (o el más grave de todas).
         core::PrinterProblem worst = core::ProblemNone;

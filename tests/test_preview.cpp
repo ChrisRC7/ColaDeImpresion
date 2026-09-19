@@ -201,6 +201,24 @@ TEST(AdminShareConversion) {
     CHECK_EQ(candidates.front(), std::wstring(L"D:\\spool\\00042.SPL"));
 }
 
+TEST(ShadowFileMatching) {
+    // .SHD simulado: firma, tamaño, estado, id del trabajo y el nombre del documento en UTF-16.
+    std::vector<std::uint8_t> shd;
+    AppendU32(shd, 0x00005123);
+    AppendU32(shd, 0x000000E8);
+    AppendU32(shd, 0x00000000);
+    AppendU32(shd, 0x00000000);
+    AppendU32(shd, 42);  // id del trabajo
+    shd.resize(128, 0);
+    std::wstring doc = L"Informe final.docx";
+    auto* raw = reinterpret_cast<const std::uint8_t*>(doc.c_str());
+    shd.insert(shd.end(), raw, raw + doc.size() * sizeof(wchar_t));
+    CHECK(ShadowMatchesJob(shd.data(), shd.size(), 42, doc));
+    CHECK(ShadowMatchesJob(shd.data(), shd.size(), 42, L""));
+    CHECK(!ShadowMatchesJob(shd.data(), shd.size(), 43, doc));
+    CHECK(!ShadowMatchesJob(shd.data(), shd.size(), 42, L"Otro documento"));
+}
+
 TEST(FitPageKeepsAspect) {
     RECT r = FitPage({21590, 27940}, RECT{0, 0, 1000, 1000});
     int w = r.right - r.left, h = r.bottom - r.top;

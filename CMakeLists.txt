@@ -71,3 +71,16 @@ if(COLA_BUILD_TESTS)
     target_link_libraries(cola_tests PRIVATE cola_core)
     add_test(NAME cola_tests COMMAND cola_tests)
 endif()
+
+# ---------------------------------------------------------------------------
+# Herramienta de desarrollo: genera trabajos de impresión de prueba
+# ---------------------------------------------------------------------------
+option(COLA_BUILD_TOOLS "Compilar herramientas de desarrollo" ON)
+if(COLA_BUILD_TOOLS)
+    add_executable(cola_testjob tools/testjob.cpp)
+    target_compile_definitions(cola_testjob PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(cola_testjob PRIVATE winspool gdi32 user32)
+    if(NOT MSVC)
+        target_link_options(cola_testjob PRIVATE -municode -static)
+    endif()
+endif()
