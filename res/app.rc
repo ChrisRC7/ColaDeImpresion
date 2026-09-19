@@ -1,0 +1,31 @@
+// Recursos de la aplicación: ícono, manifiesto e información de versión.
+#include <windows.h>
+
+1 ICON "app.ico"
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "0C0A04B0"
+        BEGIN
+            VALUE "CompanyName", "LAIMI - Instituto Tecnologico de Costa Rica"
+            VALUE "FileDescription", "Cola de Impresion"
+            VALUE "FileVersion", "0.1.0"
+            VALUE "InternalName", "ColaDeImpresion"
+            VALUE "OriginalFilename", "ColaDeImpresion.exe"
+            VALUE "ProductName", "Cola de Impresion"
+            VALUE "ProductVersion", "0.1.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0C0A, 1200
+    END
+END

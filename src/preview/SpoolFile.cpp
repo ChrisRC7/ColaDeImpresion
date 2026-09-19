@@ -1,0 +1,199 @@
+#include "preview/SpoolFile.h"
+
+#include <windows.h>
+
+#include <algorithm>
+#include <cstring>
+#include <map>
+#include <mutex>
+
+#include "core/Spooler.h"
+#include "util/Strings.h"
+
+namespace cola::preview {
+
+namespace {
+
+// Caché de la carpeta de spool por servidor (consultarla es una llamada RPC).
+std::mutex g_spoolDirMutex;
+std::map<std::wstring, std::wstring> g_spoolDirs;
+
+std::wstring SpoolDirectoryFor(const std::wstring& server) {
+    {
+        std::lock_guard lock(g_spoolDirMutex);
+        auto it = g_spoolDirs.find(server);
+        if (it != g_spoolDirs.end()) return it->second;
+    }
+    std::wstring dir = core::spooler::GetSpoolDirectory(server);
+    if (dir.empty()) {
+        wchar_t windir[MAX_PATH] = L"C:\\Windows";
+        GetWindowsDirectoryW(windir, MAX_PATH);
+        dir = std::wstring(windir) + L"\\System32\\spool\\PRINTERS";
+    }
+    std::lock_guard lock(g_spoolDirMutex);
+    g_spoolDirs[server] = dir;
+    return dir;
+}
+
+bool StartsWith(const std::uint8_t* data, size_t size, const char* prefix) {
+    size_t len = std::strlen(prefix);
+    return size >= len && std::memcmp(data, prefix, len) == 0;
+}
+
+std::uint32_t ReadU32(const std::uint8_t* p) {
+    std::uint32_t v;
+    std::memcpy(&v, p, 4);
+    return v;
+}
+
+}  // namespace
+
+std::wstring ToAdminShare(const std::wstring& server, const std::wstring& localPath) {
+    if (server.empty()) return localPath;
+    if (localPath.rfind(L"\\\\", 0) == 0) return localPath;  // ya es UNC
+    if (localPath.size() >= 2 && localPath[1] == L':')
+        return server + L"\\" + localPath.substr(0, 1) + L"$" + localPath.substr(2);
+    return localPath;
+}
+
+std::vector<std::wstring> SpoolFileCandidates(const std::wstring& serverIn, std::uint32_t jobId,
+                                              const std::wstring& overrideDir) {
+    const std::wstring server = core::spooler::NormalizeServerName(serverIn);
+    const std::wstring file = util::Format(L"%05u.SPL", jobId);
+    std::vector<std::wstring> candidates;
+    if (!overrideDir.empty()) {
+        std::wstring dir = overrideDir;
+        if (dir.back() != L'\\') dir += L'\\';
+        candidates.push_back(dir + file);
+    }
+    std::wstring dir = SpoolDirectoryFor(server);
+    candidates.push_back(ToAdminShare(server, dir) + L"\\" + file);
+    if (!server.empty()) {
+        // Alternativa por ADMIN$ (apunta a %windir% del servidor).
+        std::wstring lower = util::ToLower(dir);
+        size_t pos = lower.find(L"\\system32\\spool");
+        if (pos != std::wstring::npos) candidates.push_back(server + L"\\ADMIN$" + dir.substr(pos) + L"\\" + file);
+    }
+    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+    return candidates;
+}
+
+bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vector<std::uint8_t>& out,
+                    std::uint64_t* fileSize, unsigned long* error) {
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        if (error) *error = GetLastError();
+        return false;
+    }
+    LARGE_INTEGER size{};
+    GetFileSizeEx(file, &size);
+    if (fileSize) *fileSize = static_cast<std::uint64_t>(size.QuadPart);
+    std::uint64_t toRead = std::min<std::uint64_t>(static_cast<std::uint64_t>(size.QuadPart), maxBytes);
+    out.resize(static_cast<size_t>(toRead));
+    size_t offset = 0;
+    while (offset < out.size()) {
+        DWORD chunk = static_cast<DWORD>(std::min<size_t>(out.size() - offset, 16 * 1024 * 1024));
+        DWORD read = 0;
+        if (!ReadFile(file, out.data() + offset, chunk, &read, nullptr) || read == 0) break;
+        offset += read;
+    }
+    out.resize(offset);
+    CloseHandle(file);
+    if (error) *error = ERROR_SUCCESS;
+    return true;
+}
+
+SpoolData ReadSpoolFile(const std::wstring& server, std::uint32_t jobId, const std::wstring& overrideDir,
+                        std::uint64_t maxBytes) {
+    SpoolData data;
+    data.error = ERROR_FILE_NOT_FOUND;
+    for (const auto& candidate : SpoolFileCandidates(server, jobId, overrideDir)) {
+        unsigned long err = 0;
+        if (ReadFileShared(candidate, maxBytes, data.bytes, &data.fileSize, &err)) {
+            data.path = candidate;
+            data.error = 0;
+            data.truncated = data.bytes.size() < data.fileSize;
+            data.format = DetectFormat(data.bytes.data(), data.bytes.size());
+            return data;
+        }
+        // Conserva el error más informativo (acceso denegado > no encontrado).
+        if (err == ERROR_ACCESS_DENIED || data.error == ERROR_FILE_NOT_FOUND || data.error == ERROR_PATH_NOT_FOUND)
+            data.error = err;
+    }
+    return data;
+}
+
+size_t SkipPjlHeader(const std::uint8_t* data, size_t size) {
+    // UEL = ESC%-12345X ; seguido de líneas "@PJL ..." terminadas en LF.
+    size_t pos = 0;
+    const char* uel = "\x1b%-12345X";
+    const size_t uelLen = 9;
+    bool changed = true;
+    while (changed && pos < size) {
+        changed = false;
+        if (size - pos >= uelLen && std::memcmp(data + pos, uel, uelLen) == 0) {
+            pos += uelLen;
+            changed = true;
+        }
+        if (size - pos >= 4 && std::memcmp(data + pos, "@PJL", 4) == 0) {
+            const void* nl = std::memchr(data + pos, '\n', size - pos);
+            if (!nl) return size;
+            pos = static_cast<size_t>(static_cast<const std::uint8_t*>(nl) - data) + 1;
+            changed = true;
+        }
+        while (pos < size && (data[pos] == '\r' || data[pos] == '\n')) {
+            ++pos;
+            changed = true;
+        }
+    }
+    return pos;
+}
+
+DataFormat DetectFormat(const std::uint8_t* data, size_t size) {
+    if (size < 4) return DataFormat::Unknown;
+
+    // EMF spool: encabezado EMFSPOOL con versión 0x00010000.
+    if (ReadU32(data) == 0x00010000u) return DataFormat::EmfSpool;
+    // EMF suelto (EMR_HEADER con firma " EMF").
+    if (size >= 44 && ReadU32(data) == 1 && ReadU32(data + 40) == 0x464D4520u) return DataFormat::EmfSpool;
+    if (StartsWith(data, size, "PK\x03\x04")) return DataFormat::Xps;
+
+    // Busca "ENTER LANGUAGE=" dentro del encabezado PJL para saber qué sigue.
+    size_t start = SkipPjlHeader(data, size);
+    std::string header(reinterpret_cast<const char*>(data), std::min<size_t>(start, 4096));
+    for (auto& c : header) c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+    size_t lang = header.find("ENTER LANGUAGE");
+    if (lang != std::string::npos) {
+        std::string rest = header.substr(lang, 40);
+        if (rest.find("POSTSCRIPT") != std::string::npos) return DataFormat::PostScript;
+        if (rest.find("PCLXL") != std::string::npos) return DataFormat::PclXl;
+        if (rest.find("PDF") != std::string::npos) return DataFormat::Pdf;
+        if (rest.find("PCL") != std::string::npos) return DataFormat::Pcl;
+        if (rest.find("XPS") != std::string::npos) return DataFormat::Xps;
+    }
+
+    const std::uint8_t* body = data + start;
+    size_t bodySize = size - start;
+    if (StartsWith(body, bodySize, "%PDF")) return DataFormat::Pdf;
+    if (StartsWith(body, bodySize, "%!") || StartsWith(body, bodySize, "\x04%!")) return DataFormat::PostScript;
+    if (StartsWith(body, bodySize, "PK\x03\x04")) return DataFormat::Xps;
+    // PCL XL: ") HP-PCL XL;" en el encabezado de flujo.
+    if (StartsWith(body, bodySize, ") HP-PCL XL")) return DataFormat::PclXl;
+    if (bodySize > 0 && body[0] == 0x1b) return DataFormat::Pcl;
+    if (StartsWith(body, bodySize, "\x89PNG") || StartsWith(body, bodySize, "\xff\xd8\xff")) return DataFormat::Image;
+
+    // Texto plano: casi todo imprimible.
+    size_t sample = std::min<size_t>(bodySize, 2048);
+    if (sample > 0) {
+        size_t printable = 0;
+        for (size_t i = 0; i < sample; ++i) {
+            std::uint8_t c = body[i];
+            if (c == '\n' || c == '\r' || c == '\t' || c == '\f' || (c >= 0x20 && c < 0x7f) || c >= 0xa0) ++printable;
+        }
+        if (printable * 100 / sample >= 97) return DataFormat::Text;
+    }
+    return DataFormat::Unknown;
+}
+
+}  // namespace cola::preview
