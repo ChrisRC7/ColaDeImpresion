@@ -184,6 +184,21 @@ ui::ListRow MakeHistoryRow(const config::HistoryEntry& e, size_t index) {
     return row;
 }
 
+bool ShouldPauseJobs(const std::vector<core::JobInfo>& jobs) {
+    // Si alguno no está en pausa se pausan todos; si todos están en pausa
+    // (o retenidos), el comando los reanuda.
+    return std::any_of(jobs.begin(), jobs.end(),
+                       [](const core::JobInfo& j) { return j.state != JobState::Paused; });
+}
+
+std::vector<std::wstring> PrintersOf(const std::vector<core::JobInfo>& jobs) {
+    std::vector<std::wstring> printers;
+    for (const auto& job : jobs)
+        if (std::find(printers.begin(), printers.end(), job.printer) == printers.end())
+            printers.push_back(job.printer);
+    return printers;
+}
+
 QueueSummary Summarize(const std::vector<const core::JobInfo*>& jobs) {
     QueueSummary s;
     for (const auto* job : jobs) {

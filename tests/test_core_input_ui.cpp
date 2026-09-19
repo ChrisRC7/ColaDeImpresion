@@ -287,3 +287,31 @@ TEST(SettingsHoldDefaults) {
     s.pauseAllOnStart = false;
     CHECK(!config::Settings::FromJson(s.ToJson()).pauseAllOnStart);
 }
+
+TEST(PauseToggleDecision) {
+    // Todo en pausa (o retenido) -> el comando reanuda; si algo corre -> pausa.
+    core::JobInfo held = MakeJob(1, core::JobState::Paused);
+    held.heldByApp = true;
+    CHECK(!app::ShouldPauseJobs({held}));
+    CHECK(!app::ShouldPauseJobs({MakeJob(1, core::JobState::Paused), MakeJob(2, core::JobState::Paused)}));
+    CHECK(app::ShouldPauseJobs({MakeJob(1, core::JobState::Paused), MakeJob(2, core::JobState::Printing)}));
+    CHECK(app::ShouldPauseJobs({MakeJob(1, core::JobState::Queued)}));
+    CHECK(!app::ShouldPauseJobs({}));  // sin trabajos no hay nada que pausar
+
+    // El comando combinado usa las impresoras de los trabajos elegidos.
+    core::JobInfo other = MakeJob(3, core::JobState::Queued);
+    other.printer = L"\\\\S\\P2";
+    auto printers = app::PrintersOf({MakeJob(1, core::JobState::Queued), MakeJob(2, core::JobState::Queued), other});
+    CHECK_EQ(printers.size(), size_t(2));
+    CHECK_EQ(printers[1], std::wstring(L"\\\\S\\P2"));
+}
+
+TEST(PrinterShortcutsExist) {
+    input::ShortcutMap map;
+    auto find = [&](const wchar_t* text) { return map.Find(*input::KeyChord::Parse(text)); };
+    CHECK(find(L"Ctrl+P") == input::Command::Pause);              // trabajo (alterna)
+    CHECK(find(L"Ctrl+Shift+P") == input::Command::PausePrinter);  // impresora (alterna)
+    CHECK(find(L"F9") == input::Command::PausePrinter);
+    CHECK(find(L"Ctrl+Alt+P") == input::Command::TogglePauseBoth);  // ambos
+    CHECK(find(L"F8") == input::Command::TogglePauseBoth);
+}

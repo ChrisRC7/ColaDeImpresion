@@ -35,6 +35,13 @@ ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter);
 ui::ListRow MakeHistoryRow(const config::HistoryEntry& entry, size_t index);
 std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index);
 
+// Estado al que debe llevarse un conjunto de trabajos al alternar la pausa:
+// true = pausar (hay alguno corriendo), false = reanudar (todos están en pausa).
+bool ShouldPauseJobs(const std::vector<core::JobInfo>& jobs);
+
+// Impresoras distintas a las que pertenecen esos trabajos.
+std::vector<std::wstring> PrintersOf(const std::vector<core::JobInfo>& jobs);
+
 // Resumen para la barra de estado.
 struct QueueSummary {
     unsigned total = 0;

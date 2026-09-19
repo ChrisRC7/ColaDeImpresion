@@ -21,7 +21,7 @@ equipo, hora, impresora, páginas y tamaño.
 | Selección múltiple | `Shift+↑/↓`, `Ctrl+A` | `Ctrl`+clic, `Shift`+clic, o **arrastrar** con el botón izquierdo (rectángulo, como en el Explorador) |
 | Quitar la selección | `Esc` o `Ctrl+Shift+A` | clic en una zona vacía de la lista |
 | Pausar / reanudar | `Ctrl+P` (alterna) o `Ctrl+R` | clic derecho |
-| Pausar / reanudar **el trabajo y la impresora** | `Ctrl+Alt+P` | clic derecho |
+| Pausar / reanudar **el trabajo y su impresora** | `Ctrl+Alt+P` o **`F8`** | clic derecho |
 | Reiniciar | `Ctrl+I` | clic derecho |
 | Cancelar | `Supr` (pide confirmación) | clic derecho |
 | Cancelar todos los de un usuario | — | clic derecho → *Cancelar todos los trabajos de…* |
@@ -51,21 +51,23 @@ las notificaciones estén en *ninguna*.
 
 ## 3. Impresoras
 
-Menú `⋯`: *Pausar / reanudar impresora* (`Ctrl+Shift+P`, alterna), *Reanudar
-impresora* (`Ctrl+Shift+R`), *Vaciar cola de la impresora…*. Actúan sobre la
-impresora elegida; en la vista **Todas las impresoras**, sobre todas las del
-servidor (si alguna está funcionando se pausan todas; si todas están en pausa,
-se reanudan).
+**`Ctrl+Shift+P` o `F9`** alterna la pausa de la impresora: si hay alguna en
+pausa las reanuda, y si ninguna lo está las pausa. Actúa sobre la impresora
+elegida o, en la vista **Todas las impresoras**, sobre todas las del servidor.
+En el menú `⋯` están también *Reanudar impresora* (`Ctrl+Shift+R`) y *Vaciar
+cola de la impresora…*.
 
-`Ctrl+Alt+P` hace las dos cosas a la vez: pausa (o reanuda) **los trabajos
-seleccionados y la impresora**. Sin ningún trabajo seleccionado actúa solo
-sobre la impresora.
+**`Ctrl+Alt+P` o `F8`** hace las dos cosas a la vez: pausa —o reanuda— **los
+trabajos seleccionados y la impresora de esos trabajos**. Si todo está en pausa
+los libera a ambos, que es lo habitual después de la pausa de inicio. Sin
+ningún trabajo seleccionado actúa solo sobre la impresora.
 
 **Al iniciar**, la app pausa las impresoras y retiene los trabajos que ya
 estaban en cola, de modo que nada se imprime hasta que un operador lo permita.
 Se desactiva en el menú (*Al iniciar: pausar impresoras y retener trabajos en
 cola*). Ojo: con la impresora en pausa, liberar un trabajo con `Ctrl+R` no
-alcanza; también hay que reanudar la impresora (`Ctrl+Shift+P` o `Ctrl+Alt+P`).
+alcanza; también hay que reanudar la impresora (`F9`), o usar `F8`, que libera
+el trabajo y la impresora de una vez.
 Pausar una impresora requiere el permiso "Administrar esta impresora"; si no se
 tiene, la barra de estado lo avisa y la retención de trabajos sigue funcionando.
 

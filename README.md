@@ -27,8 +27,8 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 |---|---|
 | `↑` / `↓` | Navegar trabajos (`Shift` para seleccionar varios) |
 | `Ctrl+P` / `Ctrl+R` | Pausar (alterna) / reanudar el trabajo |
-| `Ctrl+Shift+P` | Pausar / reanudar la impresora |
-| `Ctrl+Alt+P` | Pausar / reanudar el trabajo **y** la impresora |
+| `Ctrl+Shift+P` o `F9` | Pausar / reanudar la impresora |
+| `Ctrl+Alt+P` o `F8` | Pausar / reanudar el trabajo **y** su impresora |
 | `Supr` | Cancelar |
 | `Ctrl+↑` / `Ctrl+↓` | Subir / bajar en la cola |
 | `Espacio` o `Enter` | Vista previa rápida |

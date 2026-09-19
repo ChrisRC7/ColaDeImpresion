@@ -95,7 +95,8 @@ private:
     // Impresoras afectadas por pausar/reanudar: la elegida, o todas en la vista "Todas".
     std::vector<std::wstring> TargetPrinters() const;
     void TogglePrinterPause();
-    void SetPrintersPaused(bool pause);
+    // printers vacío = las impresoras de TargetPrinters().
+    void SetPrintersPaused(bool pause, std::vector<std::wstring> printers = {});
     void OnActionResult(const ActionResult& result);
     void ToggleQuickLook();
     void ToggleHistory();

@@ -780,10 +780,10 @@ void MainWindow::TogglePauseSelection(bool alsoPrinter) {
         return;
     }
     // Si alguno está corriendo se pausa todo; si todos están en pausa, se reanuda.
-    const bool anyRunning =
-        std::any_of(jobs.begin(), jobs.end(), [](const core::JobInfo& j) { return j.state != core::JobState::Paused; });
-    actions_->Run(anyRunning ? JobAction::Pause : JobAction::Resume, jobs);
-    if (alsoPrinter) SetPrintersPaused(anyRunning);
+    const bool pause = ShouldPauseJobs(jobs);
+    actions_->Run(pause ? JobAction::Pause : JobAction::Resume, jobs);
+    // El combinado deja la(s) impresora(s) de esos trabajos en el mismo estado.
+    if (alsoPrinter) SetPrintersPaused(pause, PrintersOf(jobs));
 }
 
 void MainWindow::RunOnSelection(JobAction action) {
@@ -843,22 +843,24 @@ std::vector<std::wstring> MainWindow::TargetPrinters() const {
 }
 
 void MainWindow::TogglePrinterPause() {
-    // Si alguna de las impresoras afectadas está funcionando, se pausan; si todas
-    // están en pausa, se reanudan.
-    bool anyRunning = false;
+    // Si hay alguna impresora en pausa se reanudan todas (es lo que más se
+    // necesita tras la pausa de inicio); si ninguna lo está, se pausan.
+    // Así el atajo sigue sirviendo aunque alguna impresora no se pueda controlar.
+    bool anyPaused = false;
     for (const auto& name : TargetPrinters())
-        if (const auto* p = snapshot_->FindPrinter(name); p && !(p->problems & core::ProblemPaused)) anyRunning = true;
-    SetPrintersPaused(anyRunning);
+        if (const auto* p = snapshot_->FindPrinter(name); p && (p->problems & core::ProblemPaused)) anyPaused = true;
+    SetPrintersPaused(!anyPaused);
 }
 
-void MainWindow::SetPrintersPaused(bool pause) {
+void MainWindow::SetPrintersPaused(bool pause, std::vector<std::wstring> printers) {
+    if (printers.empty()) printers = TargetPrinters();
     std::vector<std::wstring> targets;
-    for (const auto& name : TargetPrinters()) {
+    for (const auto& name : printers) {
         const auto* p = snapshot_->FindPrinter(name);
         const bool paused = p && (p->problems & core::ProblemPaused);
         if (paused != pause) targets.push_back(name);
     }
-    if (TargetPrinters().empty()) {
+    if (printers.empty()) {
         ShowTransient(Tr(S::NoPrinters), ui::Tone::Warning);
         return;
     }
@@ -923,8 +925,12 @@ void MainWindow::OnActionResult(const ActionResult& result) {
         }
         return;
     }
-    const bool quiet = startPauseInFlight_ && result.action == JobAction::PausePrinter;
-    if (quiet) startPauseInFlight_ = false;
+    // Las acciones sobre impresoras informan solo en la barra de estado: un
+    // diálogo modal bloquearía la ventana y es habitual que falten permisos.
+    const bool printerAction = result.action == JobAction::PausePrinter ||
+                               result.action == JobAction::ResumePrinter || result.action == JobAction::PurgePrinter;
+    if (printerAction) startPauseInFlight_ = false;
+    const bool quiet = printerAction;
     if (!result.ok()) {
         ShowTransient(result.message, ui::Tone::Danger);
         if (result.firstError == ERROR_ACCESS_DENIED && !quiet)
