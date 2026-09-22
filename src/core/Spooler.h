@@ -62,7 +62,15 @@ namespace spooler {
 // Normaliza el nombre del servidor: "srv" -> "\\\\srv", "" -> "" (local).
 std::wstring NormalizeServerName(const std::wstring& server);
 
+// true si el nombre apunta a este mismo equipo ("" , "localhost", el nombre
+// NetBIOS o el DNS del equipo). Se usa para no pasar por \\\\SRV\\C$ cuando la
+// app corre en el propio servidor de impresión.
+bool IsLocalServer(const std::wstring& server);
+
 // Impresoras del servidor (vacío = locales + conexiones del equipo).
+// Con un servidor remoto se combinan tres fuentes para no perder colas:
+// las compartidas del servidor, las conexiones de este equipo a ese servidor y,
+// si el servidor es este mismo equipo, también sus colas locales no compartidas.
 std::vector<PrinterInfo> EnumeratePrinters(const std::wstring& server, DWORD* error = nullptr);
 
 // Datos actualizados de una impresora a partir de un handle abierto.
@@ -90,6 +98,10 @@ bool CanAdminister(const std::wstring& printer);
 
 // Carpeta de spool configurada en el servidor (p. ej. "C:\\Windows\\System32\\spool\\PRINTERS").
 std::wstring GetSpoolDirectory(const std::wstring& server);
+
+// Carpeta de spool propia de una cola de impresión (valor "SpoolDirectory" de
+// la impresora). Devuelve "" si la cola usa la carpeta general del servidor.
+std::wstring GetPrinterSpoolDirectory(const std::wstring& printer);
 
 std::wstring GetDefaultPrinterName();
 

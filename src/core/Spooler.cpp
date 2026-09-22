@@ -1,6 +1,8 @@
 #include "core/Spooler.h"
 
 #include <algorithm>
+#include <cwchar>
+#include <iterator>
 
 #include "core/JobStatus.h"
 #include "util/Log.h"
@@ -121,32 +123,72 @@ std::wstring NormalizeServerName(const std::wstring& server) {
     return L"\\\\" + s;
 }
 
+bool IsLocalServer(const std::wstring& serverIn) {
+    const std::wstring server = NormalizeServerName(serverIn);
+    if (server.empty()) return true;
+    const std::wstring host = server.substr(2);  // sin "\\\\"
+    const COMPUTER_NAME_FORMAT formats[] = {ComputerNameNetBIOS, ComputerNameDnsHostname,
+                                            ComputerNameDnsFullyQualified, ComputerNamePhysicalNetBIOS};
+    for (auto format : formats) {
+        wchar_t name[256] = {};
+        DWORD size = static_cast<DWORD>(std::size(name));
+        if (!GetComputerNameExW(format, name, &size)) continue;
+        if (_wcsicmp(host.c_str(), name) == 0) return true;
+        // "SRV" contra "srv.dominio.local" (y al revés).
+        const wchar_t* dot = wcschr(name, L'.');
+        if (dot && static_cast<size_t>(dot - name) == host.size() && _wcsnicmp(host.c_str(), name, host.size()) == 0)
+            return true;
+    }
+    return false;
+}
+
 std::vector<PrinterInfo> EnumeratePrinters(const std::wstring& serverIn, DWORD* error) {
     const std::wstring server = NormalizeServerName(serverIn);
-    std::vector<PrinterInfo> printers;
-    std::vector<BYTE> buffer;
-    DWORD count = 0;
-    DWORD flags = server.empty() ? (PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS) : PRINTER_ENUM_NAME;
-    LPWSTR name = server.empty() ? nullptr : const_cast<LPWSTR>(server.c_str());
-
-    bool ok = FillBuffer(buffer, [&](BYTE* data, DWORD size, DWORD* needed) {
-        return EnumPrintersW(flags, name, 2, data, size, needed, &count) != FALSE;
-    });
-    if (!ok) {
-        DWORD err = GetLastError();
-        if (error) *error = err;
-        util::LogError(L"EnumPrinters(%ls) falló: %lu", server.c_str(), err);
-        return printers;
-    }
-    if (error) *error = ERROR_SUCCESS;
-
     const std::wstring defaultName = server.empty() ? GetDefaultPrinterName() : L"";
-    auto* infos = reinterpret_cast<PRINTER_INFO_2W*>(buffer.data());
-    for (DWORD i = 0; i < count; ++i) {
-        PrinterInfo p;
-        FillPrinterInfo(infos[i], server, defaultName, p);
-        printers.push_back(std::move(p));
+    std::vector<PrinterInfo> printers;
+
+    // Agrega las impresoras de una enumeración, sin repetir las que ya están.
+    // 'prefix' != "" filtra las conexiones que no son de este servidor.
+    auto append = [&](DWORD flags, const std::wstring& target, const std::wstring& prefix, DWORD* errorOut) {
+        std::vector<BYTE> buffer;
+        DWORD count = 0;
+        LPWSTR name = target.empty() ? nullptr : const_cast<LPWSTR>(target.c_str());
+        bool ok = FillBuffer(buffer, [&](BYTE* data, DWORD size, DWORD* needed) {
+            return EnumPrintersW(flags, name, 2, data, size, needed, &count) != FALSE;
+        });
+        if (!ok) {
+            DWORD err = GetLastError();
+            if (errorOut) *errorOut = err;
+            util::LogError(L"EnumPrinters(flags=%lu, '%ls') falló: %lu", flags, target.c_str(), err);
+            return;
+        }
+        if (errorOut) *errorOut = ERROR_SUCCESS;
+        auto* infos = reinterpret_cast<PRINTER_INFO_2W*>(buffer.data());
+        for (DWORD i = 0; i < count; ++i) {
+            PrinterInfo p;
+            FillPrinterInfo(infos[i], server, defaultName, p);
+            if (!prefix.empty() && _wcsnicmp(p.name.c_str(), prefix.c_str(), prefix.size()) != 0) continue;
+            bool duplicate = std::any_of(printers.begin(), printers.end(), [&](const PrinterInfo& existing) {
+                return _wcsicmp(existing.name.c_str(), p.name.c_str()) == 0;
+            });
+            if (!duplicate) printers.push_back(std::move(p));
+        }
+    };
+
+    DWORD err = ERROR_SUCCESS;
+    if (server.empty()) {
+        append(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, L"", L"", &err);
+    } else {
+        // Compartidas del servidor (lo normal en un servidor de impresión).
+        append(PRINTER_ENUM_NAME, server, L"", &err);
+        // Colas locales del propio equipo cuando la app corre en el servidor:
+        // incluye las que no están compartidas (sus trabajos no salían en la lista).
+        if (IsLocalServer(server)) append(PRINTER_ENUM_LOCAL, L"", L"", nullptr);
+        // Conexiones de este equipo a ese servidor (por si alguna no se enumera por nombre).
+        append(PRINTER_ENUM_CONNECTIONS, L"", server + L"\\", nullptr);
     }
+    if (error) *error = printers.empty() ? err : ERROR_SUCCESS;
+
     std::sort(printers.begin(), printers.end(), [](const PrinterInfo& a, const PrinterInfo& b) {
         return _wcsicmp(a.DisplayName().c_str(), b.DisplayName().c_str()) < 0;
     });
@@ -254,6 +296,21 @@ std::wstring GetSpoolDirectory(const std::wstring& serverIn) {
         util::LogError(L"No se pudo leer la carpeta de spool de %ls: %lu", server.c_str(), rc);
         return L"";
     }
+    return buffer;
+}
+
+std::wstring GetPrinterSpoolDirectory(const std::wstring& printer) {
+    if (printer.empty()) return L"";
+    PrinterHandle h;
+    if (!h.Open(printer, false)) return L"";
+    DWORD type = 0;
+    DWORD needed = 0;
+    wchar_t buffer[MAX_PATH * 2] = {};
+    // Cada cola puede tener su propia carpeta ("SpoolDirectory" en el registro
+    // de la impresora); si no está definida, el spooler usa la del servidor.
+    DWORD rc = GetPrinterDataW(h.get(), const_cast<LPWSTR>(L"SpoolDirectory"), &type,
+                               reinterpret_cast<BYTE*>(buffer), sizeof(buffer) - sizeof(wchar_t), &needed);
+    if (rc != ERROR_SUCCESS || type != REG_SZ) return L"";
     return buffer;
 }
 

@@ -169,11 +169,24 @@ int PreviewPane::PaintHeader(HDC dc, const RECT& client) {
 void PreviewPane::PaintMessage(HDC dc, const RECT& area, wchar_t glyph, const std::wstring& text) {
     const auto& style = Style::Get();
     const auto& pal = style.palette();
-    int cy = (area.top + area.bottom) / 2;
-    RECT iconRect{area.left, cy - style.Px(64), area.right, cy - style.Px(12)};
-    gfx::Glyph(dc, glyph, iconRect, style.fonts().iconLarge, Blend(pal.textMuted, pal.previewBackdrop, 0.3));
-    RECT textRect{area.left + style.Px(28), cy, area.right - style.Px(28), area.bottom - style.Px(8)};
-    gfx::Text(dc, text, textRect, style.fonts().normal, pal.textMuted, DT_CENTER | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
+    const UINT flags = DT_CENTER | DT_TOP | DT_WORDBREAK | DT_NOPREFIX;
+    // Mide el texto para centrar el bloque: los mensajes de diagnóstico ocupan
+    // varias líneas y antes se salían del panel.
+    RECT measure{area.left + style.Px(28), 0, area.right - style.Px(28), 0};
+    HGDIOBJ old = SelectObject(dc, style.fonts().normal);
+    DrawTextW(dc, text.c_str(), -1, &measure, flags | DT_CALCRECT);
+    SelectObject(dc, old);
+    const int textHeight = std::min<int>(measure.bottom - measure.top, gfx::Height(area) - style.Px(24));
+    const int iconHeight = style.Px(52);
+    const bool showIcon = gfx::Height(area) > textHeight + iconHeight + style.Px(32);
+    int top = (area.top + area.bottom - textHeight - (showIcon ? iconHeight : 0)) / 2;
+    if (showIcon) {
+        RECT iconRect{area.left, top, area.right, top + iconHeight};
+        gfx::Glyph(dc, glyph, iconRect, style.fonts().iconLarge, Blend(pal.textMuted, pal.previewBackdrop, 0.3));
+        top += iconHeight + style.Px(8);
+    }
+    RECT textRect{area.left + style.Px(28), top, area.right - style.Px(28), area.bottom - style.Px(8)};
+    gfx::Text(dc, text, textRect, style.fonts().normal, pal.textMuted, flags);
 }
 
 void PreviewPane::PaintFooter(HDC dc, const RECT& footer) {

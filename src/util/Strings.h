@@ -19,6 +19,10 @@ bool EqualsInsensitive(std::wstring_view a, std::wstring_view b);
 
 std::vector<std::wstring> Split(std::wstring_view text, wchar_t separator);
 
+// Acorta un texto largo conservando el principio y el final ("C:\Wind...\PRINTERS").
+// Se usa para mostrar rutas de spool sin romper el ajuste de línea.
+std::wstring EllipsisMiddle(const std::wstring& text, size_t maxChars);
+
 // Formato estilo printf devolviendo std::wstring.
 std::wstring Format(const wchar_t* fmt, ...);
 

@@ -1,10 +1,10 @@
-; Instalador de Cola de Impresión (Inno Setup 6).
+﻿; Instalador de Cola de Impresión (Inno Setup 6).
 ; Compilar con:  .\scripts\build.ps1 -Installer
 ; (primero genera dist\ con el ejecutable y luego ejecuta ISCC sobre este archivo)
 
 #define AppName "Cola de Impresión"
-#define AppVersion "0.1.0"
-#define AppPublisher "LAIMI - Instituto Tecnológico de Costa Rica"
+#define AppVersion "0.2.0"
+#define AppPublisher "ChrisCorp"
 #define AppExe "ColaDeImpresion.exe"
 
 [Setup]
@@ -27,6 +27,16 @@ PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#AppExe}
 SetupIconFile=..\res\app.ico
 MinVersion=10.0
+; Metadatos del propio instalador (sin ellos SmartScreen lo ve como anónimo).
+VersionInfoCompany={#AppPublisher}
+VersionInfoProductName={#AppName}
+VersionInfoDescription=Instalador de {#AppName}
+VersionInfoVersion={#AppVersion}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoCopyright=Copyright (C) 2026 {#AppPublisher}
+AppPublisherURL=https://github.com/ChrisRC7/ColaDeImpresion
+AppSupportURL=https://github.com/ChrisRC7/ColaDeImpresion
+AppUpdatesURL=https://github.com/ChrisRC7/ColaDeImpresion
 
 [Languages]
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"

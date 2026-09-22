@@ -63,6 +63,15 @@ X(OutcomeCancelled, L"Cancelado", L"Cancelled")
 X(OutcomeFailed, L"Falló", L"Failed")
 X(OutcomeRemoved, L"Retirado", L"Removed")
 
+// --- Orden de la cola ---
+X(SortQueue, L"Orden de la cola", L"Queue order")
+X(SortMachine, L"Equipo", L"Computer")
+X(SortTime, L"Hora de envío", L"Time submitted")
+X(SortUser, L"Usuario", L"User")
+X(SortDocument, L"Documento", L"Document")
+X(SortStatus, L"Estado", L"Status")
+X(SortSize, L"Tamaño", L"Size")
+
 // --- Barra de estado ---
 X(StatusJobs, L"%u trabajos", L"%u jobs")
 X(StatusOneJob, L"1 trabajo", L"1 job")
@@ -80,6 +89,12 @@ X(StatusConnecting, L"Conectando…", L"Connecting…")
 X(StatusAutoHold, L"Retención activa", L"Holding new jobs")
 X(StatusAutoHoldFailed, L"No se pudieron retener %u trabajos: %ls", L"%u jobs could not be held: %ls")
 X(StatusHeldCount, L"%u retenidos", L"%u held")
+X(StatusOtherPrinters, L"%u en otras impresoras", L"%u on other printers")
+X(StatusMissingJobs, L"%u trabajos que el spooler cuenta no se pudieron leer (vea app.log)",
+  L"%u jobs counted by the spooler could not be read (see app.log)")
+X(StatusUnreachablePrinters, L"%u impresoras inaccesibles", L"%u printers unreachable")
+X(StatusSortedBy, L"Orden: %ls", L"Sorted by: %ls")
+X(StatusSortedByDesc, L"Orden: %ls (inverso)", L"Sorted by: %ls (reversed)")
 X(StatusHistory, L"Historial · Hoy: %llu págs. (%llu trabajos) · 7 días: %llu págs.",
   L"History · Today: %llu pages (%llu jobs) · 7 days: %llu pages")
 
@@ -107,8 +122,12 @@ X(PreviewSourceThumbnail, L"Miniatura de Windows (solo primera página)", L"Wind
 X(PreviewAccessDenied,
   L"No se pudo leer el archivo de spool: acceso denegado. Ejecute la aplicación como administrador del servidor o configure una carpeta de spool alternativa.",
   L"Could not read the spool file: access denied. Run the app as a server administrator or configure an alternate spool folder.")
-X(PreviewSpoolMissing, L"El archivo de spool ya no existe (el trabajo terminó o el servidor no lo conserva).",
-  L"The spool file no longer exists (the job finished or the server does not keep it).")
+X(PreviewSpoolMissing,
+  L"No se encontró el archivo de spool del trabajo %u. El servidor pudo no conservarlo, la cola puede usar otra carpeta o falta permiso para leerla.",
+  L"The spool file for job %u was not found. The server may not keep it, the queue may use another folder, or there is no permission to read it.")
+X(PreviewSpoolEmpty, L"El archivo de spool todavía está vacío: el trabajo sigue llegando al servidor.",
+  L"The spool file is still empty: the job is still arriving at the server.")
+X(PreviewSearchedIn, L"Se buscó en:", L"Searched in:")
 X(PreviewNeedsRenderer,
   L"Los datos están en %ls. Para verlos instale Ghostscript/GhostPCL en el equipo (se detectan automáticamente).",
   L"The data is %ls. Install Ghostscript/GhostPCL on this computer to view it (auto-detected).")
@@ -189,6 +208,16 @@ X(CtxRedirect, L"Reenviar a otra impresora…", L"Redirect to another printer…
 X(CtxPreview, L"Vista previa", L"Preview")
 X(CtxCancelUser, L"Cancelar todos los trabajos de %ls", L"Cancel all jobs from %ls")
 
+// --- Menú: orden y acceso rápido ---
+X(MenuSortBy, L"Ordenar la cola por", L"Sort the queue by")
+X(MenuSortDescending, L"Orden inverso", L"Reverse order")
+X(MenuQuickAccess, L"Acceso rápido a impresoras", L"Printer quick access")
+X(MenuQuickAccessHint, L"Elija las impresoras que aparecen arriba", L"Choose the printers shown at the top")
+X(MenuShowPrinterBar, L"Barra de acceso rápido", L"Quick access bar")
+X(MenuPinPrinter, L"Fijar en el acceso rápido", L"Pin to quick access")
+X(MenuUnpinPrinter, L"Quitar del acceso rápido", L"Unpin from quick access")
+X(QuickAccessEmpty, L"Ninguna impresora fijada todavía", L"No printers pinned yet")
+
 // --- Comandos (panel de ayuda) ---
 X(CmdPause, L"Pausar / reanudar trabajo", L"Pause / resume job")
 X(CmdResume, L"Reanudar trabajo", L"Resume job")
@@ -223,6 +252,9 @@ X(CmdResumePrinter, L"Reanudar impresora", L"Resume printer")
 X(CmdSelectAll, L"Seleccionar todo", L"Select all")
 X(CmdMenu, L"Menú principal", L"Main menu")
 X(CmdTogglePane, L"Mostrar/ocultar vista previa", L"Show/hide preview pane")
+X(CmdSortCycle, L"Cambiar el orden de la cola", L"Change the queue order")
+X(CmdSortReverse, L"Invertir el orden de la cola", L"Reverse the queue order")
+X(CmdPinPrinter, L"Fijar / quitar la impresora del acceso rápido", L"Pin / unpin the printer in quick access")
 X(CmdToggleAutoHold, L"Activar/desactivar retención de trabajos nuevos", L"Toggle holding of new jobs")
 
 // --- Panel de ayuda ---
@@ -230,12 +262,14 @@ X(HelpTitle, L"Atajos de teclado", L"Keyboard shortcuts")
 X(HelpFooter, L"↑↓ o clic: elegir · Enter, doble clic o clic en la tecla: reasignar · Supr quitar · R restaurar · Esc cerrar",
   L"↑↓ or click: select · Enter, double click or click the key: reassign · Del clear · R restore · Esc close")
 X(HelpUnassigned, L"(sin asignar)", L"(unassigned)")
-X(HelpFixedKeys, L"Fijos: Esc cierra / limpia · clic derecho: menú del trabajo · Ctrl+rueda: zoom",
-  L"Fixed: Esc closes / clears · right click: job menu · Ctrl+wheel: zoom")
+X(HelpFixedKeys,
+  L"Fijos: Esc cierra / limpia · Ctrl+1…9 impresora del acceso rápido · clic derecho: menú del trabajo · Ctrl+rueda: zoom",
+  L"Fixed: Esc closes / clears · Ctrl+1…9 quick access printer · right click: job menu · Ctrl+wheel: zoom")
 
 // --- Tooltips de la cabecera ---
 X(TipPrinter, L"Elegir impresora (Ctrl+E)", L"Choose printer (Ctrl+E)")
 X(TipTheme, L"Modo claro/oscuro (Ctrl+D)", L"Light/dark mode (Ctrl+D)")
 X(TipMenu, L"Menú (F10)", L"Menu (F10)")
 X(TipHistory, L"Historial (Ctrl+H)", L"History (Ctrl+H)")
+X(TipQuickAccess, L"Elegir las impresoras del acceso rápido", L"Choose the quick access printers")
 X(TipHelp, L"Atajos (F1)", L"Shortcuts (F1)")

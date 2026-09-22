@@ -24,6 +24,7 @@ enum class Command {
     PausePrinter,
     ResumePrinter,
     ToggleAutoHold,
+    PinPrinter,
     // Selección y navegación
     NavUp,
     NavDown,
@@ -45,6 +46,8 @@ enum class Command {
     ChoosePrinter,
     NextPrinter,
     PrevPrinter,
+    SortCycle,
+    SortReverse,
     Connect,
     Refresh,
     // General

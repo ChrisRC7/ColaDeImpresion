@@ -14,6 +14,13 @@
 
 namespace cola::preview {
 
+// Dónde buscar el spool de un trabajo.
+struct SpoolSearch {
+    std::wstring server;       // "" = este equipo
+    std::wstring printer;      // cola del trabajo (puede tener carpeta propia)
+    std::wstring overrideDir;  // carpeta alternativa configurada por el usuario
+};
+
 struct SpoolData {
     std::wstring path;               // archivo leído
     std::vector<std::uint8_t> bytes;
@@ -21,31 +28,40 @@ struct SpoolData {
     bool truncated = false;
     DataFormat format = DataFormat::Unknown;
     unsigned long error = 0;         // error Win32 si no se pudo leer
+    // Carpetas probadas y por qué falló cada una (para explicarlo en la UI y el log).
+    std::vector<std::wstring> searched;
+    std::wstring diagnostics;
 };
 
-// Carpetas donde buscar el spool, en orden de preferencia (alternativa
-// configurada, carpeta del servidor vía C$, vía ADMIN$).
-std::vector<std::wstring> SpoolDirectories(const std::wstring& server, const std::wstring& overrideDir);
+// Carpetas donde buscar el spool, en orden de preferencia: alternativa
+// configurada, carpeta propia de la cola, carpeta del servidor y su variante
+// por ADMIN$. Si el servidor es este mismo equipo se usan rutas locales (no
+// hace falta pasar por \\\\SRV\\C$).
+std::vector<std::wstring> SpoolDirectories(const SpoolSearch& search);
 
 // Rutas directas "NNNNN.SPL" (id del trabajo con 5 dígitos) en cada carpeta.
-std::vector<std::wstring> SpoolFileCandidates(const std::wstring& server, std::uint32_t jobId,
-                                              const std::wstring& overrideDir);
+std::vector<std::wstring> SpoolFileCandidates(const SpoolSearch& search, std::uint32_t jobId);
 
 // Convierte una ruta local del servidor ("C:\\X") a UNC ("\\\\SRV\\C$\\X").
 std::wstring ToAdminShare(const std::wstring& server, const std::wstring& localPath);
 
 // true si el contenido de un .SHD (archivo sombra) corresponde al trabajo.
-bool ShadowMatchesJob(const std::uint8_t* data, size_t size, std::uint32_t jobId, const std::wstring& document);
+// requireDocument = false acepta la coincidencia solo por id (segunda pasada:
+// algunos servidores guardan el nombre del documento de otra forma).
+bool ShadowMatchesJob(const std::uint8_t* data, size_t size, std::uint32_t jobId, const std::wstring& document,
+                      bool requireDocument = true);
 
 // Con "spool file pooling" los archivos se llaman FPnnnnn.SPL: busca el del
 // trabajo revisando los .SHD de la carpeta. Devuelve "" si no lo encuentra.
+// Primero exige que coincidan id y documento; si nada coincide, reintenta solo
+// con el id. 'error' recibe el motivo más informativo (acceso denegado, etc.).
 std::wstring FindPooledSpoolFile(const std::wstring& dir, std::uint32_t jobId, const std::wstring& document,
                                  unsigned long* error);
 
 // Lee el spool del trabajo (como máximo maxBytes) y detecta el formato.
 // Prueba primero NNNNN.SPL y luego los archivos FPnnnnn del pooling.
-SpoolData ReadSpoolFile(const std::wstring& server, std::uint32_t jobId, const std::wstring& document,
-                        const std::wstring& overrideDir, std::uint64_t maxBytes);
+SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const std::wstring& document,
+                        std::uint64_t maxBytes);
 
 // Lee un archivo cualquiera (hasta maxBytes) compartiendo lectura/escritura.
 bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vector<std::uint8_t>& out,

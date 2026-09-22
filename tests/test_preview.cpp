@@ -6,12 +6,14 @@
 #include <cstring>
 
 #include "TestFramework.h"
+#include "core/Spooler.h"
 #include "preview/EmfSpool.h"
 #include "preview/PreviewTypes.h"
 #include "preview/SpoolFile.h"
 #include "preview/ZipReader.h"
 
 using namespace cola::preview;
+namespace core = cola::core;
 
 namespace {
 
@@ -196,9 +198,18 @@ TEST(AdminShareConversion) {
     CHECK_EQ(ToAdminShare(L"\\\\SRV", L"C:\\Windows\\System32\\spool\\PRINTERS"),
              std::wstring(L"\\\\SRV\\C$\\Windows\\System32\\spool\\PRINTERS"));
     CHECK_EQ(ToAdminShare(L"", L"C:\\X"), std::wstring(L"C:\\X"));
-    auto candidates = SpoolFileCandidates(L"", 42, L"D:\\spool");
+    // La carpeta alternativa configurada se prueba primero.
+    auto candidates = SpoolFileCandidates(SpoolSearch{L"", L"", L"D:\\spool\\"}, 42);
     CHECK(!candidates.empty());
     CHECK_EQ(candidates.front(), std::wstring(L"D:\\spool\\00042.SPL"));
+    // En un servidor remoto las rutas pasan por los recursos administrativos.
+    auto remote = SpoolDirectories(SpoolSearch{L"\\\\SRV-QUE-NO-EXISTE", L"", L""});
+    CHECK(!remote.empty());
+    CHECK(remote.front().rfind(L"\\\\SRV-QUE-NO-EXISTE\\", 0) == 0);
+    // Este mismo equipo se alcanza con rutas locales (sin pasar por C$).
+    CHECK(core::spooler::IsLocalServer(L""));
+    CHECK(core::spooler::IsLocalServer(L"localhost"));
+    CHECK(!core::spooler::IsLocalServer(L"\\\\SRV-QUE-NO-EXISTE"));
 }
 
 TEST(ShadowFileMatching) {
@@ -217,6 +228,9 @@ TEST(ShadowFileMatching) {
     CHECK(ShadowMatchesJob(shd.data(), shd.size(), 42, L""));
     CHECK(!ShadowMatchesJob(shd.data(), shd.size(), 43, doc));
     CHECK(!ShadowMatchesJob(shd.data(), shd.size(), 42, L"Otro documento"));
+    // Segunda pasada: solo por id (servidores que guardan el documento de otra forma).
+    CHECK(ShadowMatchesJob(shd.data(), shd.size(), 42, L"Otro documento", false));
+    CHECK(!ShadowMatchesJob(shd.data(), shd.size(), 43, L"Otro documento", false));
 }
 
 TEST(FitPageKeepsAspect) {

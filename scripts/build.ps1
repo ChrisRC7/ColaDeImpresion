@@ -92,6 +92,15 @@ C:\Program Files\gs\.
 @echo off
 start "" "%~dp0ColaDeImpresion.exe" --server vtec-laimiprint
 "@
+    # Windows marca los archivos que vienen de un USB o de Internet (Mark of the
+    # Web) y eso dispara SmartScreen; este .bat quita la marca de toda la carpeta.
+    Set-Content -Path (Join-Path $dist "Desbloquear archivos.bat") -Encoding ascii -Value @"
+@echo off
+rem Quita la marca "archivo de otro equipo" (Mark of the Web) de esta carpeta.
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Get-ChildItem -LiteralPath '%~dp0' -Recurse -File | Unblock-File; Write-Host 'Listo: archivos desbloqueados.'"
+pause
+"@
     Copy-Item (Join-Path $root "docs\PRUEBAS.md") $dist -ErrorAction SilentlyContinue
     $testjob = Get-ChildItem -Path $buildDir -Recurse -Filter cola_testjob.exe | Select-Object -First 1
     if ($testjob) {
@@ -105,11 +114,18 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
 1. Copie esta carpeta completa al USB (o al Escritorio de la PC del laboratorio
    si no se permite ejecutar programas desde USB).
 
-2. Doble clic en "Abrir vtec-laimiprint.bat"
-   (o abra ColaDeImpresion.exe y presione Ctrl+O, escriba vtec-laimiprint y Enter).
-   Si Windows muestra "Windows protegió su PC": Más información > Ejecutar de todas formas.
+2. Si la copió desde un USB o la descargó, ejecute una vez
+   "Desbloquear archivos.bat": quita la marca que Windows pone a los archivos
+   de otro equipo y que hace aparecer la advertencia de SmartScreen.
 
-3. Revise la barra inferior:
+3. Doble clic en "Abrir vtec-laimiprint.bat"
+   (o abra ColaDeImpresion.exe y presione Ctrl+O, escriba vtec-laimiprint y Enter).
+   Si aun así Windows muestra "Windows protegió su PC": Más información >
+   Ejecutar de todas formas. El programa no está firmado digitalmente todavía;
+   sus datos (empresa ChrisCorp, versión, descripción) se ven en Propiedades >
+   Detalles del ejecutable.
+
+4. Revise la barra inferior:
    - "En vivo" o "Actualización por sondeo" (ambos funcionan).
    - "Sin permisos de administración": se ven los trabajos, pero no se pueden
      cancelar/reordenar los de otros usuarios con esta cuenta.
@@ -118,10 +134,23 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      que alguien lo libere con Ctrl+R. Se activa/desactiva con Ctrl+Shift+H
      o desde el menú. Solo funciona mientras la app esté abierta.
 
-4. Pruebe lo que indica PRUEBAS.md (sección 3) y anote los resultados.
+   - Si aparece "N trabajos que el spooler cuenta no se pudieron leer", la cola
+     de Windows tiene trabajos que la app no logró enumerar: anótelo y traiga
+     app.log.
+
+5. Novedades de esta versión que conviene probar:
+   - ACCESO RÁPIDO: la barra bajo la cabecera. Con el botón "+" elija qué
+     impresoras aparecen ahí; un clic filtra la cola por esa impresora y
+     Ctrl+1…Ctrl+9 hacen lo mismo con el teclado. Clic derecho sobre una:
+     pausar, reanudar, vaciar o quitarla de la barra.
+   - ORDEN DE LA COLA: F6 cambia el criterio (cola, equipo, hora, usuario,
+     documento, estado, tamaño) y Shift+F6 lo invierte. También en
+     Menú > Ordenar la cola por. El criterio activo se ve abajo a la derecha.
+
+6. Pruebe lo que indica PRUEBAS.md (sección 3) y anote los resultados.
    F1 muestra todos los atajos de teclado.
 
-5. Al terminar, cierre la app desde el ícono de la bandeja (clic derecho > Salir)
+7. Al terminar, cierre la app desde el ícono de la bandeja (clic derecho > Salir)
    y traiga de vuelta esta carpeta: app.log, config.json e historial.json
    sirven para revisar cualquier problema.
 
@@ -129,8 +158,16 @@ VISTA PREVIA
 - La carpeta "renderers" trae Ghostscript, GhostPCL y GhostXPS para ver los
   trabajos PCL, PostScript, PDF y XPS (ver renderers\LEEME.txt). No la separe
   del .exe. Si falta, esos trabajos se listan igual pero sin vista previa.
-- La vista previa necesita leer la carpeta de spool del servidor: la cuenta
-  debe ser administradora de vtec-laimiprint.
+- La vista previa lee el archivo de spool que guarda EL SERVIDOR; no depende de
+  la PC donde se imprimió. Para leerlo hace falta permiso sobre la carpeta de
+  spool: ejecutando la app EN el servidor basta con ser administrador local ahí
+  (Menú > Reiniciar como administrador); desde otra PC hay que ser
+  administrador de vtec-laimiprint (se usa \\vtec-laimiprint\C$).
+- Si no encuentra el archivo, el panel ahora dice exactamente en qué carpetas
+  buscó y por qué falló cada una. Si el motivo es "acceso denegado", es
+  permisos; si dice que no existe, anote el texto y tráigalo junto con app.log.
+- También se puede indicar una carpeta de spool alternativa en config.json
+  ("spoolDirOverrides").
 
 OPCIONAL
 - herramientas\cola_testjob.exe crea trabajos de prueba que quedan en cola

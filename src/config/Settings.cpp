@@ -46,6 +46,12 @@ JsonValue Settings::ToJson() const {
     json[L"servers"] = serverList;
     json[L"activeServer"] = activeServer;
     json[L"activePrinter"] = activePrinter;
+    JsonValue favorites = JsonValue::MakeArray();
+    for (const auto& p : favoritePrinters) favorites.Push(p);
+    json[L"favoritePrinters"] = favorites;
+    json[L"showPrinterBar"] = showPrinterBar;
+    json[L"sortBy"] = sortBy;
+    json[L"sortDescending"] = sortDescending;
 
     JsonValue keys = JsonValue::MakeObject();
     for (const auto& [command, chord] : shortcuts) keys[command] = chord;
@@ -95,6 +101,11 @@ Settings Settings::FromJson(const JsonValue& json) {
         if (v.IsString()) s.servers.push_back(v.AsString());
     s.activeServer = json[L"activeServer"].AsString();
     s.activePrinter = json[L"activePrinter"].AsString(s.activePrinter);
+    for (const auto& v : json[L"favoritePrinters"].AsArray())
+        if (v.IsString() && !v.AsString().empty()) s.favoritePrinters.push_back(v.AsString());
+    s.showPrinterBar = json[L"showPrinterBar"].AsBool(s.showPrinterBar);
+    s.sortBy = json[L"sortBy"].AsString(s.sortBy);
+    s.sortDescending = json[L"sortDescending"].AsBool(s.sortDescending);
 
     for (const auto& [command, chord] : json[L"shortcuts"].AsObject())
         if (chord.IsString()) s.shortcuts[command] = chord.AsString();

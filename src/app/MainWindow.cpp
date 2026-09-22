@@ -65,6 +65,13 @@ enum MenuId : UINT {
     ID_AUTO_HOLD,
     ID_PAUSE_ON_START,
     ID_PAUSE_BOTH,
+    ID_SORT_DESC,
+    ID_SHOW_PRINTER_BAR,
+    ID_PIN_CURRENT,
+    ID_CHIP_PIN,
+    ID_CHIP_PAUSE,
+    ID_CHIP_RESUME,
+    ID_CHIP_PURGE,
     ID_CTX_PAUSE = 2101,
     ID_CTX_PAUSE_BOTH,
     ID_CTX_RESUME,
@@ -79,6 +86,8 @@ enum MenuId : UINT {
     ID_TRAY_EXIT,
     ID_REDIRECT_BASE = 3000,  // 3000..3999
     ID_SERVER_BASE = 4000,    // 4000..4099
+    ID_SORT_BASE = 4100,      // 4100..4119 (criterios de orden)
+    ID_PIN_BASE = 4200,       // 4200..4999 (fijar impresoras en el acceso rápido)
 };
 
 template <typename T>
@@ -91,6 +100,9 @@ std::wstring PrinterDisplay(const std::wstring& name) {
     p.name = name;
     return p.DisplayName();
 }
+
+// Criterio de orden guardado en la configuración.
+SortBy CurrentSort(const config::Settings& settings) { return SortByFromId(settings.sortBy); }
 
 bool IsElevated() {
     HANDLE token = nullptr;
@@ -167,6 +179,9 @@ bool MainWindow::Create(const StartupOptions& options) {
                                }
                            },
                            [this](const std::wstring& text) { SetFilter(text); }});
+    printerBar_.Create(hwnd_, {[this](const std::wstring& printer) { SelectPrinter(printer); },
+                               [this](const std::wstring& printer, POINT pt) { ShowPrinterChipMenu(printer, pt); },
+                               [this](POINT pt) { ShowQuickAccessMenu(pt); }});
     list_.Create(hwnd_, {[this] { UpdatePreview(); }, [this](POINT pt) { ShowJobContextMenu(pt); },
                          [this] { ToggleQuickLook(); }});
     preview_.Create(hwnd_);
@@ -275,6 +290,7 @@ void MainWindow::ApplyLanguage() {
 
 void MainWindow::OnStyleChanged() {
     header_.OnStyleChanged();
+    printerBar_.OnStyleChanged();
     list_.OnStyleChanged();
     preview_.OnStyleChanged();
     status_.OnStyleChanged();
@@ -326,6 +342,7 @@ void MainWindow::ConnectTo(const std::wstring& serverIn) {
     SaveSettings();
     RebuildRows();
     UpdateHeader();
+    UpdatePrinterBar();
     UpdateStatus();
     UpdateTitle();
     UpdatePreview();
@@ -340,8 +357,95 @@ void MainWindow::SelectPrinter(const std::wstring& printer) {
     SaveSettings();
     RebuildRows();
     UpdateHeader();
+    UpdatePrinterBar();
     UpdateStatus();
     UpdatePreview();
+}
+
+// --- Acceso rápido a impresoras -------------------------------------------
+
+void MainWindow::UpdatePrinterBar() {
+    // La visibilidad la decide Layout(); aquí solo se actualiza el contenido.
+    if (!settings_.showPrinterBar || historyView_) return;
+    core::QueueSnapshot empty;
+    printerBar_.SetChips(BuildQuickAccess(snapshot_ ? *snapshot_ : empty, settings_.favoritePrinters),
+                         settings_.activePrinter);
+}
+
+void MainWindow::TogglePinnedPrinter(const std::wstring& printer) {
+    if (printer.empty() || printer == kAllPrinters) {
+        ShowTransient(Tr(S::NoPrinters), ui::Tone::Warning);
+        return;
+    }
+    const bool pinned = IsPinned(settings_.favoritePrinters, printer);
+    settings_.favoritePrinters = TogglePinned(settings_.favoritePrinters, printer);
+    if (!pinned && !settings_.showPrinterBar) settings_.showPrinterBar = true;
+    SaveSettings();
+    Layout();
+    UpdatePrinterBar();
+    ShowTransient(std::wstring(Tr(pinned ? S::MenuUnpinPrinter : S::MenuPinPrinter)) + L": " +
+                      PrinterDisplay(printer),
+                  ui::Tone::Neutral);
+}
+
+bool MainWindow::SelectQuickAccess(int index) {
+    // index 1..9 sobre las impresoras fijadas que existen en este servidor.
+    if (!snapshot_ || index < 1) return false;
+    auto chips = BuildQuickAccess(*snapshot_, settings_.favoritePrinters);
+    if (static_cast<size_t>(index) >= chips.size()) return false;
+    SelectPrinter(chips[static_cast<size_t>(index)].name);
+    return true;
+}
+
+void MainWindow::ShowQuickAccessMenu(POINT screen) {
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, Tr(S::MenuQuickAccessHint));
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    menuPrinters_.clear();
+    if (snapshot_) {
+        for (const auto& p : snapshot_->printers) {
+            const bool pinned = IsPinned(settings_.favoritePrinters, p.name);
+            std::wstring label = p.DisplayName();
+            // Muestra el atajo Ctrl+N que le toca a cada impresora fijada.
+            if (pinned) {
+                size_t position = 0;
+                for (const auto& fav : settings_.favoritePrinters) {
+                    if (!snapshot_->FindPrinter(fav)) continue;
+                    ++position;
+                    if (util::EqualsInsensitive(fav, p.name)) break;
+                }
+                if (position >= 1 && position <= 9) label += L"	Ctrl+" + std::to_wstring(position);
+            }
+            AppendMenuW(menu, MF_STRING | (pinned ? MF_CHECKED : 0), ID_PIN_BASE + menuPrinters_.size(),
+                        label.c_str());
+            menuPrinters_.push_back(p.name);
+            if (menuPrinters_.size() >= 799) break;
+        }
+    }
+    if (menuPrinters_.empty()) AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, Tr(S::NoPrinters));
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING | (settings_.showPrinterBar ? MF_CHECKED : 0), ID_SHOW_PRINTER_BAR,
+                Tr(S::MenuShowPrinterBar));
+    UINT id = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, screen.x, screen.y, 0, hwnd_, nullptr);
+    DestroyMenu(menu);
+    if (id) HandleMenuCommand(id);
+}
+
+void MainWindow::ShowPrinterChipMenu(const std::wstring& printer, POINT screen) {
+    chipPrinter_ = printer;
+    HMENU menu = CreatePopupMenu();
+    const bool all = printer == kAllPrinters;
+    if (!all) {
+        AppendMenuW(menu, MF_STRING, ID_CHIP_PIN,
+                    Tr(IsPinned(settings_.favoritePrinters, printer) ? S::MenuUnpinPrinter : S::MenuPinPrinter));
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    }
+    AppendMenuW(menu, MF_STRING, ID_CHIP_PAUSE, Tr(S::MenuPausePrinter));
+    AppendMenuW(menu, MF_STRING, ID_CHIP_RESUME, Tr(S::MenuResumePrinter));
+    if (!all) AppendMenuW(menu, MF_STRING, ID_CHIP_PURGE, Tr(S::MenuPurge));
+    UINT id = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, screen.x, screen.y, 0, hwnd_, nullptr);
+    DestroyMenu(menu);
+    if (id) HandleMenuCommand(id);
 }
 
 void MainWindow::CyclePrinter(int delta) {
@@ -402,6 +506,7 @@ void MainWindow::OnSnapshot(core::SnapshotPtr snapshot) {
 
     if (!historyView_) RebuildRows();
     UpdateHeader();
+    UpdatePrinterBar();
     UpdateStatus();
     UpdatePreview();
 
@@ -509,7 +614,8 @@ void MainWindow::RebuildRows() {
     } else {
         if (snapshot_) {
             const bool showPrinter = settings_.activePrinter == kAllPrinters;
-            for (const auto* job : VisibleJobs(*snapshot_, settings_.activePrinter, filter_))
+            for (const auto* job : VisibleJobs(*snapshot_, settings_.activePrinter, filter_,
+                                               CurrentSort(settings_), settings_.sortDescending))
                 rows.push_back(MakeJobRow(*job, showPrinter));
         }
         if (connecting_) list_.SetEmptyText(Tr(S::StatusConnecting), ServerDisplayName(), ui::glyph::Server);
@@ -560,6 +666,14 @@ void MainWindow::UpdateStatus() {
             summary = util::Format(Tr(S::StatusFiltered), filter_.c_str(), static_cast<unsigned>(visible.size()),
                                    static_cast<unsigned>(all.size()));
         }
+        // Trabajos que existen pero no se ven por tener una impresora elegida:
+        // así no parece que la app "perdió" lo que sí muestra la cola de Windows.
+        if (settings_.activePrinter != kAllPrinters) {
+            auto everywhere = VisibleJobs(*snapshot_, kAllPrinters, filter_);
+            if (everywhere.size() > visible.size())
+                summary += L"  ·  " + util::Format(Tr(S::StatusOtherPrinters),
+                                                   static_cast<unsigned>(everywhere.size() - visible.size()));
+        }
     }
     summary += L"  ·  " + util::Format(Tr(S::StatusServer), ServerDisplayName().c_str());
     status_.SetSummary(summary);
@@ -600,6 +714,19 @@ void MainWindow::UpdateStatus() {
                              util::Format(Tr(S::StatusAutoHoldFailed), snapshot_->holdFailures,
                                           util::Win32ErrorMessage(snapshot_->holdError).c_str()),
                              ui::Tone::Danger});
+        if (snapshot_->missingJobs > 0)
+            items.push_back({ui::glyph::Warning, util::Format(Tr(S::StatusMissingJobs), snapshot_->missingJobs),
+                             ui::Tone::Danger});
+        if (snapshot_->unreachablePrinters > 0)
+            items.push_back({ui::glyph::Warning,
+                             util::Format(Tr(S::StatusUnreachablePrinters), snapshot_->unreachablePrinters),
+                             ui::Tone::Warning});
+        if (!historyView_ && CurrentSort(settings_) != SortBy::Queue) {
+            items.push_back({ui::glyph::Document,
+                             util::Format(Tr(settings_.sortDescending ? S::StatusSortedByDesc : S::StatusSortedBy),
+                                          SortName(CurrentSort(settings_)).c_str()),
+                             ui::Tone::Info});
+        }
         if (settings_.autoHoldNewJobs) items.push_back({ui::glyph::Pause, Tr(S::StatusAutoHold), ui::Tone::Info});
         items.push_back({snapshot_->notificationsActive ? ui::glyph::Live : ui::glyph::Refresh,
                          snapshot_->notificationsActive ? Tr(S::StatusLive) : Tr(S::StatusPolling), ui::Tone::Neutral});
@@ -735,6 +862,9 @@ void MainWindow::Execute(Command command) {
         }
         case Command::NextPrinter: CyclePrinter(1); break;
         case Command::PrevPrinter: CyclePrinter(-1); break;
+        case Command::SortCycle: CycleSort(1); break;
+        case Command::SortReverse: SetSort(settings_.sortBy, !settings_.sortDescending); break;
+        case Command::PinPrinter: TogglePinnedPrinter(EffectivePrinter()); break;
         case Command::ChoosePrinter: {
             RECT r = header_.ButtonScreenRect(ui::HeaderButton::Printer);
             ShowPrinterMenu({r.left, r.bottom + Style::Get().Px(4)});
@@ -964,6 +1094,7 @@ void MainWindow::ToggleHistory() {
     }
     RebuildRows();
     UpdateHeader();
+    UpdatePrinterBar();
     UpdateStatus();
     Layout();
     UpdatePreview();
@@ -974,6 +1105,23 @@ void MainWindow::SetFilter(const std::wstring& filter) {
     filter_ = util::Trim(filter);
     RebuildRows();
     UpdateStatus();
+}
+
+void MainWindow::CycleSort(int delta) {
+    int index = static_cast<int>(CurrentSort(settings_));
+    index = ((index + delta) % kSortCount + kSortCount) % kSortCount;
+    SetSort(SortById(static_cast<SortBy>(index)), settings_.sortDescending);
+}
+
+void MainWindow::SetSort(const std::wstring& sortId, bool descending) {
+    settings_.sortBy = SortById(SortByFromId(sortId));  // normaliza valores desconocidos
+    settings_.sortDescending = descending;
+    SaveSettings();
+    RebuildRows();
+    UpdateStatus();
+    const SortBy sort = CurrentSort(settings_);
+    ShowTransient(util::Format(Tr(descending ? S::StatusSortedByDesc : S::StatusSortedBy), SortName(sort).c_str()),
+                  ui::Tone::Neutral);
 }
 
 // ---------------------------------------------------------------------------
@@ -1001,9 +1149,12 @@ void MainWindow::ShowPrinterMenu(POINT screen) {
             if (menuPrinters_.size() >= 998) break;
         }
     }
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_PIN_CURRENT, Tr(S::MenuQuickAccess));
     UINT id = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, screen.x, screen.y, 0, hwnd_, nullptr);
     DestroyMenu(menu);
     if (id == ID_PRINTER_ALL) SelectPrinter(kAllPrinters);
+    else if (id == ID_PIN_CURRENT) ShowQuickAccessMenu(screen);
     else if (id >= ID_PRINTER_BASE && id < ID_PRINTER_BASE + menuPrinters_.size())
         SelectPrinter(menuPrinters_[id - ID_PRINTER_BASE]);
 }
@@ -1030,6 +1181,39 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(menu, MF_STRING, ID_REFRESH, keyed(S::MenuRefresh, Command::Refresh).c_str());
     AppendMenuW(menu, MF_STRING, ID_HISTORY,
                 keyed(historyView_ ? S::MenuQueue : S::MenuHistory, Command::History).c_str());
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    // Orden de la cola (por equipo, por hora...).
+    HMENU sortMenu = CreatePopupMenu();
+    for (int i = 0; i < kSortCount; ++i) {
+        auto sort = static_cast<SortBy>(i);
+        std::wstring label = SortName(sort);
+        if (sort == SortBy::Queue) {
+            auto keys = shortcuts_.Get(Command::SortCycle);
+            if (!keys.empty()) label += L"	" + keys.front().ToString();
+        }
+        AppendMenuW(sortMenu, MF_STRING | check(sort == CurrentSort(settings_)), ID_SORT_BASE + i, label.c_str());
+    }
+    AppendMenuW(sortMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sortMenu, MF_STRING | check(settings_.sortDescending), ID_SORT_DESC,
+                keyed(S::MenuSortDescending, Command::SortReverse).c_str());
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(sortMenu), Tr(S::MenuSortBy));
+    // Acceso rápido: qué impresoras aparecen en la barra superior.
+    HMENU pinMenu = CreatePopupMenu();
+    menuPrinters_.clear();
+    if (snapshot_) {
+        for (const auto& p : snapshot_->printers) {
+            AppendMenuW(pinMenu, MF_STRING | check(IsPinned(settings_.favoritePrinters, p.name)),
+                        ID_PIN_BASE + menuPrinters_.size(), p.DisplayName().c_str());
+            menuPrinters_.push_back(p.name);
+            if (menuPrinters_.size() >= 799) break;
+        }
+    }
+    if (menuPrinters_.empty()) AppendMenuW(pinMenu, MF_STRING | MF_GRAYED, 0, Tr(S::NoPrinters));
+    AppendMenuW(pinMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(pinMenu, MF_STRING, ID_PIN_CURRENT, keyed(S::MenuPinPrinter, Command::PinPrinter).c_str());
+    AppendMenuW(pinMenu, MF_STRING | check(settings_.showPrinterBar), ID_SHOW_PRINTER_BAR,
+                Tr(S::MenuShowPrinterBar));
+    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(pinMenu), Tr(S::MenuQuickAccess));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_PAUSE_BOTH, keyed(S::MenuPauseBoth, Command::TogglePauseBoth).c_str());
     AppendMenuW(menu, MF_STRING, ID_PAUSE_PRINTER, keyed(S::MenuPausePrinter, Command::PausePrinter).c_str());
@@ -1144,7 +1328,42 @@ void MainWindow::HandleMenuCommand(UINT id) {
         ConnectTo(menuServers_[id - ID_SERVER_BASE]);
         return;
     }
+    if (id >= ID_SORT_BASE && id < ID_SORT_BASE + static_cast<UINT>(kSortCount)) {
+        SetSort(SortById(static_cast<SortBy>(id - ID_SORT_BASE)), settings_.sortDescending);
+        return;
+    }
+    if (id >= ID_PIN_BASE && id < ID_PIN_BASE + menuPrinters_.size()) {
+        TogglePinnedPrinter(menuPrinters_[id - ID_PIN_BASE]);
+        return;
+    }
     switch (id) {
+        case ID_SORT_DESC: SetSort(settings_.sortBy, !settings_.sortDescending); break;
+        case ID_PIN_CURRENT: TogglePinnedPrinter(EffectivePrinter()); break;
+        case ID_SHOW_PRINTER_BAR:
+            settings_.showPrinterBar = !settings_.showPrinterBar;
+            SaveSettings();
+            Layout();
+            UpdatePrinterBar();
+            break;
+        case ID_CHIP_PIN: TogglePinnedPrinter(chipPrinter_); break;
+        case ID_CHIP_PAUSE:
+        case ID_CHIP_RESUME:
+            // La barra actúa sobre su impresora (o sobre todas en el chip "Todas").
+            if (chipPrinter_ == kAllPrinters) SetPrintersPaused(id == ID_CHIP_PAUSE, TargetPrinters());
+            else SetPrintersPaused(id == ID_CHIP_PAUSE, {chipPrinter_});
+            break;
+        case ID_CHIP_PURGE:
+            if (!chipPrinter_.empty() && chipPrinter_ != kAllPrinters) {
+                std::wstring question = util::Format(Tr(S::ConfirmPurge), PrinterDisplay(chipPrinter_).c_str());
+                if (MessageBoxW(hwnd_, question.c_str(), Tr(S::AppTitle), MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) ==
+                    IDYES) {
+                    if (snapshot_)
+                        for (const auto& job : snapshot_->jobs)
+                            if (job.printer == chipPrinter_) tracker_.MarkCancelledByUser(job.Key());
+                    actions_->RunOnPrinters(JobAction::PurgePrinter, {chipPrinter_});
+                }
+            }
+            break;
         case ID_CONNECT: Execute(Command::Connect); break;
         case ID_REFRESH: Execute(Command::Refresh); break;
         case ID_HISTORY: ToggleHistory(); break;
@@ -1218,7 +1437,13 @@ void MainWindow::Layout() {
     const int statusH = status_.PreferredHeight();
     header_.Move({client.left, client.top, client.right, client.top + headerH});
     status_.Move({client.left, client.bottom - statusH, client.right, client.bottom});
-    RECT body{client.left, client.top + headerH, client.right, client.bottom - statusH};
+    // Barra de acceso rápido a impresoras (bajo la cabecera; se oculta en el historial).
+    const bool showBar = settings_.showPrinterBar && !historyView_ && !quickLook_;
+    const int barH = showBar ? printerBar_.PreferredHeight() : 0;
+    if (showBar)
+        printerBar_.Move({client.left, client.top + headerH, client.right, client.top + headerH + barH});
+    printerBar_.Show(showBar);
+    RECT body{client.left, client.top + headerH + barH, client.right, client.bottom - statusH};
     help_.Move(body);
 
     splitter_ = {};
@@ -1328,6 +1553,10 @@ bool MainWindow::PreTranslate(MSG& msg) {
     if (vk == VK_RETURN && !chord.ctrl && !chord.alt && !chord.shift) {
         ToggleQuickLook();
         return true;
+    }
+    // Ctrl+1..9: impresora del acceso rápido (fijas, no reasignables).
+    if (chord.ctrl && !chord.alt && !chord.shift && vk >= '1' && vk <= '9' && !header_.IsEditFocused()) {
+        if (SelectQuickAccess(static_cast<int>(vk - '0'))) return true;
     }
     if (chord.shift && !chord.ctrl && !chord.alt && (vk == VK_UP || vk == VK_DOWN)) {
         list_.MoveFocus(vk == VK_UP ? -1 : 1, true);

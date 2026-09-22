@@ -24,6 +24,7 @@ const CommandInfo kCommandTable[] = {
     {Command::PausePrinter, L"pausePrinter", S::CmdPausePrinter, L"Ctrl+Shift+P, F9"},
     {Command::ResumePrinter, L"resumePrinter", S::CmdResumePrinter, L"Ctrl+Shift+R"},
     {Command::ToggleAutoHold, L"toggleAutoHold", S::CmdToggleAutoHold, L"Ctrl+Shift+H"},
+    {Command::PinPrinter, L"pinPrinter", S::CmdPinPrinter, L"Ctrl+Shift+F"},
     // --- Selección y navegación ---
     {Command::NavUp, L"navUp", S::CmdNavUp, L"Up"},
     {Command::NavDown, L"navDown", S::CmdNavDown, L"Down"},
@@ -45,6 +46,8 @@ const CommandInfo kCommandTable[] = {
     {Command::ChoosePrinter, L"choosePrinter", S::CmdChoosePrinter, L"Ctrl+E"},
     {Command::NextPrinter, L"nextPrinter", S::CmdNextPrinter, L"Ctrl+Tab"},
     {Command::PrevPrinter, L"prevPrinter", S::CmdPrevPrinter, L"Ctrl+Shift+Tab"},
+    {Command::SortCycle, L"sortCycle", S::CmdSortCycle, L"F6"},
+    {Command::SortReverse, L"sortReverse", S::CmdSortReverse, L"Shift+F6"},
     {Command::Connect, L"connect", S::CmdConnect, L"Ctrl+O"},
     {Command::Refresh, L"refresh", S::CmdRefresh, L"F5"},
     // --- General ---

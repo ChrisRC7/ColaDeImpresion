@@ -4,7 +4,7 @@
 > contexto para cualquier IA o persona que continúe el trabajo. El modelo de
 > trabajo está en [GUIA_IA.md](GUIA_IA.md); las tareas en [TODO.md](../TODO.md).
 
-**Última actualización:** 2026-09-19
+**Última actualización:** 2026-09-22
 
 ---
 
@@ -36,6 +36,9 @@
 | D15 | **Ejecución `asInvoker`** + opción "Reiniciar como administrador" | Muchas funciones (leer spool, reordenar, pausar impresora, trabajos de otros usuarios) requieren permisos; se piden solo cuando hacen falta. |
 | D17 | **Retención automática** (activada por defecto): el `QueueMonitor` pausa cada trabajo nuevo apenas lo detecta (`core/AutoHold`), saltándose el agrupamiento de notificaciones si llega `PRINTER_CHANGE_ADD_JOB`. Cada trabajo se evalúa una sola vez (si un operador lo libera no se re-pausa); los existentes al conectar no se tocan. Los retenidos se marcan `heldByApp` y se muestran como "Retenido". | Pedido del usuario: nada debe imprimirse sin que un operador lo libere. Windows no tiene una opción de "retener todo" por trabajo (pausar la impresora frena la cola entera). Limitación: solo funciona con la app abierta; un trabajo muy pequeño podría empezar a imprimirse antes (se pausa igual). |
 | D18 | **Al iniciar/conectar se pausa todo**: se pausan las impresoras del servidor (`SetPrinter` + `PRINTER_CONTROL_PAUSE`) y se retienen los trabajos ya encolados. El resultado de esa pausa automática se informa solo en la barra de estado (sin diálogos) porque puede fallar por permisos. Atajos: `Ctrl+P` alterna el trabajo, `Ctrl+Shift+P`/`F9` la impresora (todas en la vista "Todas"), `Ctrl+Alt+P`/`F8` el trabajo y su impresora. El alternar de impresora usa el criterio "si hay alguna en pausa, reanudar; si ninguna, pausar" para que siga sirviendo aunque alguna impresora no se pueda controlar. Los errores de acciones sobre impresoras se muestran solo en la barra de estado (un modal bloqueaba el siguiente atajo). | Pedido del usuario: al abrir la app nada debe poder imprimirse. Pausar la impresora exige "Administrar esta impresora" (más estricto que "Administrar documentos"), por eso la retención de trabajos es la defensa principal y la pausa de impresora es complementaria. |
+| D19 | **Acceso rápido a impresoras**: barra de chips bajo la cabecera con las impresoras que el operador fija (`favoritePrinters` en config.json), con cuenta de trabajos y estado; `Ctrl+1`…`Ctrl+9` como teclas fijas (no reasignables) | En el LAIMI hay varias impresoras y el operador trabaja casi siempre con dos o tres; abrir el menú para cambiar de cola era lento. Las teclas numéricas son fijas porque su significado depende de la posición en la barra, no de un comando concreto. |
+| D20 | **Orden de la cola configurable** (`SortBy` en `app/RowBuilder`): orden real de impresión (predeterminado), equipo, hora, usuario, documento, estado o tamaño, con orden inverso; a igualdad de criterio se conserva el orden de impresión | Pedido del usuario: ubicar rápido de qué equipo o de qué hora es un trabajo. Se mantiene como una *vista*: no cambia la prioridad real en el spooler (eso sigue siendo `Ctrl+↑/↓`). |
+| D21 | **Diagnóstico visible en vez de mensajes genéricos**: la búsqueda del spool devuelve las carpetas probadas y el error de cada una (`SpoolData::diagnostics`), y el monitor compara `PRINTER_INFO_2.cJobs` con los trabajos enumerados y publica la diferencia | En el servidor del LAIMI no hay depurador: "el archivo de spool ya no existe" y una cola incompleta no daban ninguna pista. Ahora el panel y `app.log` dicen dónde se buscó y qué falló, y la barra de estado avisa si faltan trabajos. |
 | D16 | **Idioma**: UI en español por defecto, inglés disponible (X-macro en `StringTable.inl`) | Público del TEC; el cambio es inmediato desde el menú. |
 
 ## 3. Arquitectura
@@ -47,10 +50,10 @@
 | `util` | `Strings`, `Format`, `Log`, `WorkQueue`, `ComPtr` | UTF-8/16, formato de tamaños y fechas, log a archivo con rotación, hilo de trabajo con cola, puntero COM. |
 | `i18n` | `Strings.h`, `StringTable.inl` | Todos los textos de UI (es/en). |
 | `config` | `Json`, `Settings`, `History`, `Paths`, `Autostart` | Configuración persistente, historial + estadísticas, rutas (normal/portable), clave Run. |
-| `core` | `PrintTypes`, `Spooler`, `JobStatus`, `QueueMonitor`, `JobTracker`, `AutoHold` | Tipos del dominio, envoltorio de winspool, mapeo de estados, monitor en tiempo real (hilo propio), detección de eventos entre instantáneas, retención automática de trabajos nuevos. |
+| `core` | `PrintTypes`, `Spooler`, `JobStatus`, `QueueMonitor`, `JobTracker`, `AutoHold` | Tipos del dominio, envoltorio de winspool (incluye `IsLocalServer` y la carpeta de spool por cola), mapeo de estados, monitor en tiempo real (hilo propio, sondeo con vencimiento propio y detección de trabajos no enumerados), detección de eventos entre instantáneas, retención automática de trabajos nuevos. |
 | `preview` | `SpoolFile`, `EmfSpool`, `ZipReader`, `ImageLoader`, `ExternalRenderer`, `PreviewBuilder`, `PreviewService`, `Reprint`, `PreviewTypes` | Ubicar/leer el spool (incl. pooling `FPnnnnn`), detectar formato (EMF/XPS/PDF/PS/PCL/PCL XL/imagen/texto, PJL), extraer páginas EMF, contar páginas XPS, WIC, miniaturas del Shell, Ghostscript, caché LRU asíncrona, impresión GDI/RAW para reenvío. |
 | `input` | `Commands`, `Shortcuts` | Enum de comandos con id estable, atajos configurables (parseo/formato "Ctrl+Shift+P"). |
-| `ui` | `Window`, `Style`, `Theme`, `Gfx`, `DarkMode`, `HeaderBar`, `JobListView`, `PreviewPane`, `StatusBar`, `HelpOverlay`, `TrayIcon` | Controles propios, paletas claro/oscuro, DPI, dibujo, bandeja del sistema. |
+| `ui` | `Window`, `Style`, `Theme`, `Gfx`, `DarkMode`, `HeaderBar`, `PrinterBar`, `JobListView`, `PreviewPane`, `StatusBar`, `HelpOverlay`, `TrayIcon` | Controles propios, paletas claro/oscuro, DPI, dibujo, bandeja del sistema. `PrinterBar` es la barra de acceso rápido a impresoras. |
 | `app` | `Application`, `MainWindow`, `JobActions`, `RowBuilder` | Arranque (instancia única, COM, GDI+), bucle de mensajes con atajos, ventana principal que orquesta todo, acciones en segundo plano, filas y textos. |
 
 Otros: `tests/` (pruebas unitarias, framework mínimo propio), `tools/testjob.cpp`
@@ -73,18 +76,19 @@ puntero que el receptor libera.
 
 ### 3.3 Archivos de datos del usuario
 
-- `config.json`: tema, idioma, servidores, impresora activa, atajos personalizados, `spoolDirOverrides`, sondeo, notificaciones, ventana, rutas de Ghostscript, DPI/páginas de vista previa.
+- `config.json`: tema, idioma, servidores, impresora activa, impresoras fijadas (`favoritePrinters`, `showPrinterBar`), orden de la cola (`sortBy`, `sortDescending`), atajos personalizados, `spoolDirOverrides`, sondeo, notificaciones, ventana, rutas de Ghostscript, DPI/páginas de vista previa.
 - `historial.json`: últimos N trabajos (por defecto 2000).
 - `app.log`: log con rotación a 2 MB.
 
 ## 4. Estado actual
 
-**Versión 0.1.0** — funcional de punta a punta en local. Verificado en la PC de
+**Versión 0.2.0** — funcional de punta a punta en local. Verificado en la PC de
 desarrollo (Windows 11, sin permisos de administrador) con trabajos reales en
 "Microsoft Print to PDF": lista en tiempo real, pausar/reanudar/cancelar,
 confirmaciones, filtro, vista previa EMF con navegación, vista rápida, tema
 claro/oscuro, panel de atajos con reasignación persistente, historial, manejo
-de servidor inaccesible. 34 pruebas unitarias en verde (Debug y Release).
+de servidor inaccesible, barra de acceso rápido a impresoras y ordenamiento de
+la cola. 44 pruebas unitarias en verde (Debug y Release).
 
 **Pendiente de verificar en el LAIMI** (no se puede en la PC de desarrollo):
 conexión al servidor real, lectura del spool por `C$`/`ADMIN$` como
@@ -94,7 +98,10 @@ impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 
 ## 5. Limitaciones conocidas
 
-- Sin permisos de administración en el servidor no hay vista previa del spool (se muestra un mensaje explicativo) ni se pueden gestionar trabajos ajenos.
+- Sin permisos de administración en el servidor no hay vista previa del spool (se muestra un mensaje explicativo con las carpetas probadas) ni se pueden gestionar trabajos ajenos.
+- El ejecutable no está firmado digitalmente: SmartScreen puede advertir la primera vez (la información de versión completa y `Desbloquear archivos.bat` reducen el problema, pero solo un certificado lo elimina).
+- El ordenamiento de la cola es una vista: no cambia la prioridad real del spooler.
+- El acceso rápido guarda nombres completos de impresora, así que las impresoras fijadas de un servidor no aparecen al conectarse a otro (es intencional).
 - Trabajos PCL/PostScript/PDF/XPS necesitan Ghostscript/GhostPCL/GhostXPS para verse; sin ellos se muestra el formato y cómo habilitarlo (XPS/PDF intentan la miniatura de Windows).
 - El reenvío rasterizado (otro driver) imprime imágenes a 300 DPI: calidad buena pero no vectorial; el nuevo trabajo queda a nombre del operador, no del estudiante.
 - `SetJob` para reordenar requiere "Administrar documentos"; algunos drivers ignoran cambios de posición de trabajos que ya se están imprimiendo.
@@ -124,3 +131,7 @@ impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 | 2026-09-19 | Pausa total al iniciar (D18), atajo combinado `Ctrl+Alt+P`, selección por arrastre tipo Explorador y posibilidad de no tener nada seleccionado (`Esc` / `Ctrl+Shift+A` / clic en el vacío). Verificado con trabajos reales: los encolados antes de abrir la app quedan retenidos. 38 pruebas. |
 | 2026-09-19 | **Retención automática** de trabajos nuevos (D17, `Ctrl+Shift+H`, activada por defecto): verificada con trabajos reales (quedan "Paused, Spooling" sin llegar a imprimirse; al liberarlos no se re-pausan). Panel de atajos: selección y reasignación con clic/doble clic. 36 pruebas. Publicado en GitHub (`origin`). |
 | 2026-09-19 | `build.ps1 -Package` arma `dist\` lista para USB: modo portable, lanzador `Abrir vtec-laimiprint.bat`, instrucciones de prueba, PRUEBAS.md y `herramientas\cola_testjob.exe`. |
+| 2026-09-22 | **Acceso rápido a impresoras** (D19, `ui/PrinterBar` + `BuildQuickAccess`) y **orden de la cola** por equipo/hora/usuario/documento/estado/tamaño (D20, `F6`/`Shift+F6`). Verificado en la app con dos impresoras fijadas y trabajos reales. |
+| 2026-09-22 | **Trabajos que faltaban respecto a la cola de Windows**: el sondeo de respaldo pasa a tener vencimiento propio (antes cada notificación lo reiniciaba y una impresora "ruidosa" dejaba a las demás sin refrescar); la enumeración de impresoras de un servidor suma sus colas locales y las conexiones a ese servidor (`PRINTER_ENUM_NAME` solo devuelve las compartidas); si `cJobs` supera lo enumerado se reintenta y se avisa en la barra de estado. |
+| 2026-09-22 | **Vista previa en el servidor** (D21): rutas locales si la app corre en el propio servidor (`IsLocalServer`), carpeta de spool propia de cada cola, segunda pasada en los `.SHD` solo por id, errores de lectura ya no se ignoran y el panel/`app.log` muestran dónde se buscó y por qué falló. |
+| 2026-09-22 | Versión 0.2.0. Información de versión completa del ejecutable con empresa **ChrisCorp** (descripción, copyright, comentarios, bloques es/en) y manifiesto con Windows 7–11/Server; `Desbloquear archivos.bat` en el paquete portable. |

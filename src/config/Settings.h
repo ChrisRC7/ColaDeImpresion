@@ -33,6 +33,14 @@ struct Settings {
     std::wstring activeServer;
     // Impresora seleccionada; "*" = vista de todas las impresoras del servidor.
     std::wstring activePrinter = L"*";
+    // Impresoras fijadas en la barra de acceso rápido (nombre completo, en orden).
+    std::vector<std::wstring> favoritePrinters;
+    bool showPrinterBar = true;
+
+    // Orden de la cola: "queue" (orden real de impresión), "machine", "time",
+    // "user", "document", "status", "size" (ver app::SortBy).
+    std::wstring sortBy = L"queue";
+    bool sortDescending = false;
 
     // Atajos personalizados: nombre de comando -> combinación ("Ctrl+P").
     // Solo se guardan los que difieren de los predeterminados.

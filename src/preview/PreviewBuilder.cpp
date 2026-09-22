@@ -23,6 +23,17 @@ std::wstring PreviewRequest::Key() const {
 
 namespace {
 
+// Lista de carpetas probadas, acortada para que quepa en el panel.
+std::wstring ShortDiagnostics(const std::wstring& diagnostics) {
+    std::wstring out;
+    for (const auto& line : util::Split(diagnostics, L'\n')) {
+        if (line.empty()) continue;
+        if (!out.empty()) out += L"\n";
+        out += util::EllipsisMiddle(line, 70);
+    }
+    return out;
+}
+
 bool LooksLikePath(const std::wstring& text) {
     return (text.size() > 3 && text[1] == L':' && text[2] == L'\\') || text.rfind(L"\\\\", 0) == 0;
 }
@@ -89,8 +100,12 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
     const auto& opt = request.options;
     doc->totalPages = request.job.totalPages;
 
-    SpoolData spool = ReadSpoolFile(request.server, request.job.id, request.job.document, opt.spoolOverrideDir, opt.maxSpoolBytes);
-    if (spool.error == 0) {
+    SpoolSearch search{request.server, request.job.printer, opt.spoolOverrideDir};
+    SpoolData spool = ReadSpoolFile(search, request.job.id, request.job.document, opt.maxSpoolBytes);
+    if (spool.error == 0 && spool.bytes.empty()) {
+        // El archivo existe pero todavía está vacío: el trabajo sigue llegando.
+        doc->message = Tr(S::PreviewSpoolEmpty);
+    } else if (spool.error == 0) {
         doc->format = spool.format;
         doc->dataBytes = spool.fileSize;
         doc->source = util::Format(Tr(S::PreviewSourceSpool), DataFormatName(spool.format));
@@ -122,8 +137,16 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
         if (spool.truncated) doc->truncated = true;
     } else if (spool.error == ERROR_ACCESS_DENIED) {
         doc->message = Tr(S::PreviewAccessDenied);
+        if (!spool.diagnostics.empty())
+            doc->message += L"\n\n" + std::wstring(Tr(S::PreviewSearchedIn)) + L"\n" +
+                            ShortDiagnostics(spool.diagnostics);
     } else {
-        doc->message = Tr(S::PreviewSpoolMissing);
+        // Se indica dónde se buscó: en un servidor real casi siempre es un
+        // problema de carpeta o de permisos, no un trabajo que ya terminó.
+        doc->message = util::Format(Tr(S::PreviewSpoolMissing), request.job.id);
+        if (!spool.diagnostics.empty())
+            doc->message += L"\n\n" + std::wstring(Tr(S::PreviewSearchedIn)) + L"\n" +
+                            ShortDiagnostics(spool.diagnostics);
     }
 
     // Respaldo: el archivo original (solo si el documento es una ruta accesible desde aquí).

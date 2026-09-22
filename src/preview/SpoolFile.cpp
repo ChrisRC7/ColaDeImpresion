@@ -8,6 +8,7 @@
 #include <mutex>
 
 #include "core/Spooler.h"
+#include "util/Log.h"
 #include "util/Strings.h"
 
 namespace cola::preview {
@@ -56,35 +57,49 @@ std::wstring ToAdminShare(const std::wstring& server, const std::wstring& localP
     return localPath;
 }
 
-std::vector<std::wstring> SpoolDirectories(const std::wstring& serverIn, const std::wstring& overrideDir) {
-    const std::wstring server = core::spooler::NormalizeServerName(serverIn);
+std::vector<std::wstring> SpoolDirectories(const SpoolSearch& search) {
+    const std::wstring server = core::spooler::NormalizeServerName(search.server);
+    // Si la app corre en el propio servidor, las rutas locales evitan pasar por
+    // \\SRV\C$ (que exige SMB y ser administrador aunque el archivo esté al lado).
+    const bool local = core::spooler::IsLocalServer(server);
     std::vector<std::wstring> dirs;
-    if (!overrideDir.empty()) {
-        std::wstring dir = overrideDir;
-        while (!dir.empty() && dir.back() == L'\\') dir.pop_back();
-        dirs.push_back(dir);
-    }
-    std::wstring dir = SpoolDirectoryFor(server);
-    dirs.push_back(ToAdminShare(server, dir));
-    if (!server.empty()) {
-        // Alternativa por ADMIN$ (apunta a %windir% del servidor).
-        std::wstring lower = util::ToLower(dir);
-        size_t pos = lower.find(L"\\system32\\spool");
-        if (pos != std::wstring::npos) dirs.push_back(server + L"\\ADMIN$" + dir.substr(pos));
-    }
-    dirs.erase(std::unique(dirs.begin(), dirs.end()), dirs.end());
+
+    auto add = [&dirs](std::wstring dir) {
+        while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L' ')) dir.pop_back();
+        if (dir.empty()) return;
+        for (const auto& existing : dirs)
+            if (util::EqualsInsensitive(existing, dir)) return;
+        dirs.push_back(std::move(dir));
+    };
+    // Una carpeta local del servidor, en las formas en que puede alcanzarse.
+    auto addServerDir = [&](const std::wstring& dir) {
+        if (dir.empty()) return;
+        if (local || server.empty()) add(dir);
+        if (!server.empty()) {
+            add(ToAdminShare(server, dir));
+            // Alternativa por ADMIN$ (apunta a %windir% del servidor).
+            std::wstring lower = util::ToLower(dir);
+            size_t pos = lower.find(L"\\system32\\spool");
+            if (pos != std::wstring::npos) add(server + L"\\ADMIN$" + dir.substr(pos));
+        }
+    };
+
+    if (!search.overrideDir.empty()) add(search.overrideDir);
+    // Carpeta propia de la cola, si tiene una configurada.
+    if (!search.printer.empty()) addServerDir(core::spooler::GetPrinterSpoolDirectory(search.printer));
+    addServerDir(SpoolDirectoryFor(server));
     return dirs;
 }
 
-std::vector<std::wstring> SpoolFileCandidates(const std::wstring& server, std::uint32_t jobId,
-                                              const std::wstring& overrideDir) {
+std::vector<std::wstring> SpoolFileCandidates(const SpoolSearch& search, std::uint32_t jobId) {
     std::vector<std::wstring> candidates;
-    for (const auto& dir : SpoolDirectories(server, overrideDir))
+    for (const auto& dir : SpoolDirectories(search))
         candidates.push_back(dir + L"\\" + util::Format(L"%05u.SPL", jobId));
     return candidates;
 }
 
-bool ShadowMatchesJob(const std::uint8_t* data, size_t size, std::uint32_t jobId, const std::wstring& document) {
+bool ShadowMatchesJob(const std::uint8_t* data, size_t size, std::uint32_t jobId, const std::wstring& document,
+                      bool requireDocument) {
     // El id del trabajo está en el encabezado del .SHD (los primeros campos DWORD;
     // el desplazamiento exacto varía entre versiones de Windows y 32/64 bits).
     bool idFound = false;
@@ -95,7 +110,7 @@ bool ShadowMatchesJob(const std::uint8_t* data, size_t size, std::uint32_t jobId
         }
     }
     if (!idFound) return false;
-    if (document.empty()) return true;
+    if (document.empty() || !requireDocument) return true;
     // Confirma con el nombre del documento (UTF-16 dentro del .SHD).
     std::wstring needle = document.substr(0, std::min<size_t>(document.size(), 32));
     const size_t needleBytes = needle.size() * sizeof(wchar_t);
@@ -111,22 +126,39 @@ std::wstring FindPooledSpoolFile(const std::wstring& dir, std::uint32_t jobId, c
     WIN32_FIND_DATAW fd{};
     HANDLE find = FindFirstFileW((dir + L"\\*.SHD").c_str(), &fd);
     if (find == INVALID_HANDLE_VALUE) {
-        if (error) *error = GetLastError();
+        DWORD err = GetLastError();
+        // Sin archivos .SHD la carpeta existe pero el trabajo no está ahí.
+        if (error) *error = err == ERROR_FILE_NOT_FOUND ? ERROR_FILE_NOT_FOUND : err;
         return L"";
     }
-    std::wstring result;
+    std::vector<std::wstring> shadows;
     do {
-        std::wstring shd = dir + L"\\" + fd.cFileName;
-        std::vector<std::uint8_t> bytes;
-        if (!ReadFileShared(shd, 256 * 1024, bytes, nullptr, nullptr)) continue;
-        if (ShadowMatchesJob(bytes.data(), bytes.size(), jobId, document)) {
-            result = shd.substr(0, shd.size() - 4) + L".SPL";
-            break;
-        }
+        shadows.push_back(dir + L"\\" + fd.cFileName);
     } while (FindNextFileW(find, &fd));
     FindClose(find);
-    if (error) *error = result.empty() ? ERROR_FILE_NOT_FOUND : ERROR_SUCCESS;
-    return result;
+
+    // Primera pasada: id + nombre del documento. Segunda: solo el id (algunos
+    // servidores guardan el documento de otra forma y si no, no se encontraba).
+    unsigned long worst = ERROR_FILE_NOT_FOUND;
+    for (int pass = 0; pass < 2; ++pass) {
+        for (const auto& shd : shadows) {
+            std::vector<std::uint8_t> bytes;
+            unsigned long err = 0;
+            if (!ReadFileShared(shd, 256 * 1024, bytes, nullptr, &err)) {
+                // No se pudo leer el .SHD (permisos, bloqueo): hay que reportarlo,
+                // si no el trabajo parece "inexistente".
+                if (pass == 0 && err != ERROR_FILE_NOT_FOUND) worst = err;
+                continue;
+            }
+            if (ShadowMatchesJob(bytes.data(), bytes.size(), jobId, document, pass == 0)) {
+                if (error) *error = ERROR_SUCCESS;
+                return shd.substr(0, shd.size() - 4) + L".SPL";
+            }
+        }
+        if (document.empty()) break;  // la segunda pasada sería idéntica
+    }
+    if (error) *error = worst;
+    return L"";
 }
 
 bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vector<std::uint8_t>& out,
@@ -155,8 +187,8 @@ bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vecto
     return true;
 }
 
-SpoolData ReadSpoolFile(const std::wstring& server, std::uint32_t jobId, const std::wstring& document,
-                        const std::wstring& overrideDir, std::uint64_t maxBytes) {
+SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const std::wstring& document,
+                        std::uint64_t maxBytes) {
     SpoolData data;
     data.error = ERROR_FILE_NOT_FOUND;
     // Conserva el error más informativo (acceso denegado > no encontrado).
@@ -177,13 +209,27 @@ SpoolData ReadSpoolFile(const std::wstring& server, std::uint32_t jobId, const s
         return false;
     };
 
-    for (const auto& dir : SpoolDirectories(server, overrideDir)) {
-        if (tryRead(dir + L"\\" + util::Format(L"%05u.SPL", jobId))) return data;
+    data.searched = SpoolDirectories(search);
+    for (const auto& dir : data.searched) {
+        if (tryRead(dir + L"\\" + util::Format(L"%05u.SPL", jobId))) {
+            util::LogInfo(L"Spool del trabajo %u: %ls (%llu bytes)", jobId, data.path.c_str(),
+                          static_cast<unsigned long long>(data.fileSize));
+            return data;
+        }
         unsigned long err = 0;
         std::wstring pooled = FindPooledSpoolFile(dir, jobId, document, &err);
-        if (!pooled.empty() && tryRead(pooled)) return data;
+        if (!pooled.empty() && tryRead(pooled)) {
+            util::LogInfo(L"Spool del trabajo %u: %ls (%llu bytes)", jobId, data.path.c_str(),
+                          static_cast<unsigned long long>(data.fileSize));
+            return data;
+        }
         keepError(err);
+        if (!data.diagnostics.empty()) data.diagnostics += L"\n";
+        data.diagnostics += dir + L" — " + util::Win32ErrorMessage(err ? err : ERROR_FILE_NOT_FOUND);
     }
+    if (data.searched.empty()) data.diagnostics = util::Win32ErrorMessage(data.error);
+    util::LogError(L"No se encontró el spool del trabajo %u ('%ls'). Carpetas probadas:\n%ls", jobId, document.c_str(),
+                   data.diagnostics.c_str());
     return data;
 }
 

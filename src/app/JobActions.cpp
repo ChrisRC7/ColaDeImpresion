@@ -110,8 +110,8 @@ void JobActionRunner::Redirect(RedirectRequest request) {
         };
 
         // 1. Leer los datos completos del trabajo.
-        preview::SpoolData spool =
-            preview::ReadSpoolFile(request.server, job.id, job.document, request.spoolOverrideDir, 4ull * 1024 * 1024 * 1024);
+        preview::SpoolSearch search{request.server, job.printer, request.spoolOverrideDir};
+        preview::SpoolData spool = preview::ReadSpoolFile(search, job.id, job.document, 4ull * 1024 * 1024 * 1024);
         if (spool.error != 0 || spool.truncated || spool.bytes.empty()) {
             fail(spool.error ? spool.error : ERROR_NO_DATA,
                  spool.error == ERROR_ACCESS_DENIED ? Tr(S::PreviewAccessDenied) : Tr(S::RedirectNoData));

@@ -1,4 +1,7 @@
 // Recursos de la aplicación: ícono, manifiesto e información de versión.
+// La información de versión se llena completa a propósito: un ejecutable sin
+// metadatos (empresa, descripción, copyright) es más propenso a que SmartScreen
+// o un antivirus lo traten como sospechoso.
 #include <windows.h>
 
 1 ICON "app.ico"
@@ -6,26 +9,45 @@
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 0,1,0,0
-PRODUCTVERSION 0,1,0,0
+FILEVERSION 0,2,0,0
+PRODUCTVERSION 0,2,0,0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0x0L
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
         BLOCK "0C0A04B0"
         BEGIN
-            VALUE "CompanyName", "LAIMI - Instituto Tecnologico de Costa Rica"
-            VALUE "FileDescription", "Cola de Impresion"
-            VALUE "FileVersion", "0.1.0"
+            VALUE "CompanyName", "ChrisCorp"
+            VALUE "FileDescription", "Cola de Impresion - gestor de colas de impresion"
+            VALUE "FileVersion", "0.2.0.0"
             VALUE "InternalName", "ColaDeImpresion"
+            VALUE "LegalCopyright", "Copyright (C) 2026 ChrisCorp. Todos los derechos reservados."
+            VALUE "LegalTrademarks", "ChrisCorp"
             VALUE "OriginalFilename", "ColaDeImpresion.exe"
             VALUE "ProductName", "Cola de Impresion"
-            VALUE "ProductVersion", "0.1.0"
+            VALUE "ProductVersion", "0.2.0.0"
+            VALUE "Comments", "Administra las colas de un servidor de impresion: ver, pausar, retener, cancelar, reordenar y previsualizar trabajos. Desarrollado por ChrisCorp para el LAIMI del Instituto Tecnologico de Costa Rica."
+        END
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "ChrisCorp"
+            VALUE "FileDescription", "Print Queue - print queue manager"
+            VALUE "FileVersion", "0.2.0.0"
+            VALUE "InternalName", "ColaDeImpresion"
+            VALUE "LegalCopyright", "Copyright (C) 2026 ChrisCorp. All rights reserved."
+            VALUE "LegalTrademarks", "ChrisCorp"
+            VALUE "OriginalFilename", "ColaDeImpresion.exe"
+            VALUE "ProductName", "Print Queue"
+            VALUE "ProductVersion", "0.2.0.0"
+            VALUE "Comments", "Manages the queues of a Windows print server: view, pause, hold, cancel, reorder and preview jobs. Built by ChrisCorp for LAIMI, Costa Rica Institute of Technology."
         END
     END
     BLOCK "VarFileInfo"
     BEGIN
-        VALUE "Translation", 0x0C0A, 1200
+        VALUE "Translation", 0x0C0A, 1200, 0x0409, 1200
     END
 END

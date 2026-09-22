@@ -315,3 +315,132 @@ TEST(PrinterShortcutsExist) {
     CHECK(find(L"Ctrl+Alt+P") == input::Command::TogglePauseBoth);  // ambos
     CHECK(find(L"F8") == input::Command::TogglePauseBoth);
 }
+
+namespace {
+// Trabajos de dos equipos y horas distintas para probar el ordenamiento.
+core::QueueSnapshot MakeMixedSnapshot() {
+    auto at = [](WORD hour, WORD minute) {
+        SYSTEMTIME t{};
+        t.wYear = 2026;
+        t.wMonth = 9;
+        t.wDay = 22;
+        t.wHour = hour;
+        t.wMinute = minute;
+        return t;
+    };
+    core::JobInfo a = MakeJob(10, core::JobState::Queued, 1);
+    a.machine = L"\\\\LAB-PC07";
+    a.user = L"ana";
+    a.submitted = at(9, 30);
+    a.sizeBytes = 100;
+    core::JobInfo b = MakeJob(11, core::JobState::Queued, 2);
+    b.machine = L"\\\\LAB-PC02";
+    b.user = L"bruno";
+    b.submitted = at(8, 15);
+    b.sizeBytes = 300;
+    core::JobInfo c = MakeJob(12, core::JobState::Queued, 3);
+    c.machine = L"\\\\LAB-PC02";
+    c.user = L"carla";
+    c.submitted = at(10, 45);
+    c.sizeBytes = 200;
+    return MakeSnapshot({a, b, c});
+}
+}  // namespace
+
+TEST(SortQueueByMachineAndTime) {
+    auto snapshot = MakeMixedSnapshot();
+    auto ids = [](const std::vector<const core::JobInfo*>& jobs) {
+        std::vector<std::uint32_t> out;
+        for (const auto* job : jobs) out.push_back(job->id);
+        return out;
+    };
+
+    // Orden natural: posición en la cola.
+    auto queue = ids(app::VisibleJobs(snapshot, app::kAllPrinters, L""));
+    CHECK_EQ(queue[0], 10u);
+    CHECK_EQ(queue[2], 12u);
+
+    // Por equipo: LAB-PC02 antes que LAB-PC07; dentro del equipo, orden de cola.
+    auto machine = ids(app::VisibleJobs(snapshot, app::kAllPrinters, L"", app::SortBy::Machine));
+    CHECK_EQ(machine[0], 11u);
+    CHECK_EQ(machine[1], 12u);
+    CHECK_EQ(machine[2], 10u);
+
+    // Por hora de envío: 8:15, 9:30, 10:45.
+    auto time = ids(app::VisibleJobs(snapshot, app::kAllPrinters, L"", app::SortBy::Time));
+    CHECK_EQ(time[0], 11u);
+    CHECK_EQ(time[1], 10u);
+    CHECK_EQ(time[2], 12u);
+
+    // Invertido: el más reciente primero.
+    auto desc = ids(app::VisibleJobs(snapshot, app::kAllPrinters, L"", app::SortBy::Time, true));
+    CHECK_EQ(desc[0], 12u);
+    CHECK_EQ(desc[2], 11u);
+
+    // Y la cola invertida sigue siendo la cola, al revés.
+    auto queueDesc = ids(app::VisibleJobs(snapshot, app::kAllPrinters, L"", app::SortBy::Queue, true));
+    CHECK_EQ(queueDesc[0], 12u);
+    CHECK_EQ(queueDesc[2], 10u);
+
+    // Por usuario y por tamaño.
+    CHECK_EQ(ids(app::VisibleJobs(snapshot, app::kAllPrinters, L"", app::SortBy::User))[0], 10u);
+    CHECK_EQ(ids(app::VisibleJobs(snapshot, app::kAllPrinters, L"", app::SortBy::Size))[0], 10u);
+}
+
+TEST(SortIdsRoundTrip) {
+    for (int i = 0; i < app::kSortCount; ++i) {
+        auto sort = static_cast<app::SortBy>(i);
+        CHECK(app::SortByFromId(app::SortById(sort)) == sort);
+    }
+    CHECK(app::SortByFromId(L"criterio-inventado") == app::SortBy::Queue);
+    CHECK(app::SortByFromId(L"MACHINE") == app::SortBy::Machine);
+}
+
+TEST(QuickAccessPrinters) {
+    auto snapshot = MakeMixedSnapshot();
+    core::PrinterInfo second;
+    second.name = L"\\\\S\\P2";
+    second.problems = core::ProblemPaperOut;
+    snapshot.printers.push_back(second);
+
+    // Sin impresoras fijadas solo está "Todas", con el total de trabajos.
+    auto chips = app::BuildQuickAccess(snapshot, {});
+    CHECK_EQ(chips.size(), size_t(1));
+    CHECK_EQ(chips[0].name, std::wstring(app::kAllPrinters));
+    CHECK_EQ(chips[0].jobs, 3u);
+    CHECK(chips[0].tone == ui::Tone::Danger);  // P2 está sin papel
+
+    // Fijar respeta el orden e ignora impresoras de otro servidor.
+    auto favorites = app::TogglePinned({}, L"\\\\S\\P2");
+    favorites = app::TogglePinned(favorites, L"\\\\S\\P1");
+    favorites = app::TogglePinned(favorites, L"\\\\OTRO\\P9");
+    CHECK(app::IsPinned(favorites, L"\\\\S\\P1"));
+    chips = app::BuildQuickAccess(snapshot, favorites);
+    CHECK_EQ(chips.size(), size_t(3));
+    CHECK_EQ(chips[1].name, std::wstring(L"\\\\S\\P2"));
+    CHECK_EQ(chips[1].jobs, 0u);
+    CHECK_EQ(chips[2].name, std::wstring(L"\\\\S\\P1"));
+    CHECK_EQ(chips[2].jobs, 3u);
+
+    // Volver a fijar la misma impresora la quita.
+    favorites = app::TogglePinned(favorites, L"\\\\S\\P2");
+    CHECK(!app::IsPinned(favorites, L"\\\\S\\P2"));
+    CHECK_EQ(app::BuildQuickAccess(snapshot, favorites).size(), size_t(2));
+}
+
+TEST(SettingsSortAndFavoritesRoundTrip) {
+    config::Settings settings;
+    CHECK_EQ(settings.sortBy, std::wstring(L"queue"));
+    CHECK(!settings.sortDescending);
+    CHECK(settings.showPrinterBar);
+    settings.sortBy = L"machine";
+    settings.sortDescending = true;
+    settings.favoritePrinters = {L"\\\\S\\P1", L"\\\\S\\P2"};
+    settings.showPrinterBar = false;
+    auto restored = config::Settings::FromJson(settings.ToJson());
+    CHECK_EQ(restored.sortBy, std::wstring(L"machine"));
+    CHECK(restored.sortDescending);
+    CHECK(!restored.showPrinterBar);
+    CHECK_EQ(restored.favoritePrinters.size(), size_t(2));
+    CHECK_EQ(restored.favoritePrinters[1], std::wstring(L"\\\\S\\P2"));
+}

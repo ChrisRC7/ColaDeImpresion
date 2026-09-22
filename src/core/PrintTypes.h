@@ -97,6 +97,10 @@ struct QueueSnapshot {
     bool autoHold = false;             // retención automática activa
     std::uint32_t holdFailures = 0;    // trabajos nuevos que no se pudieron pausar (acumulado)
     unsigned long holdError = 0;       // último error Win32 al intentar retener
+    // Trabajos que el spooler cuenta en sus colas pero no se pudieron enumerar
+    // (la cola de Windows los muestra y la app no): se avisa en la barra de estado.
+    std::uint32_t missingJobs = 0;
+    std::uint32_t unreachablePrinters = 0;  // impresoras que no se pudieron abrir
 
     const PrinterInfo* FindPrinter(const std::wstring& name) const;
 };

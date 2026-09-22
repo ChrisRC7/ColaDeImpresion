@@ -22,6 +22,7 @@
 #include "ui/HelpOverlay.h"
 #include "ui/JobListView.h"
 #include "ui/PreviewPane.h"
+#include "ui/PrinterBar.h"
 #include "ui/StatusBar.h"
 #include "ui/TrayIcon.h"
 #include "ui/Window.h"
@@ -64,6 +65,13 @@ private:
     std::wstring ServerDisplayName() const;
     void SelectPrinter(const std::wstring& printer);
     void CyclePrinter(int delta);
+    // Acceso rápido: barra superior con las impresoras fijadas por el operador.
+    void UpdatePrinterBar();
+    void TogglePinnedPrinter(const std::wstring& printer);
+    void ShowQuickAccessMenu(POINT screen);
+    void ShowPrinterChipMenu(const std::wstring& printer, POINT screen);
+    // Ctrl+1..9: elige la n-ésima impresora del acceso rápido.
+    bool SelectQuickAccess(int index);
     std::wstring EffectivePrinter() const;  // impresora para acciones de impresora
 
     // --- Datos ---
@@ -102,6 +110,9 @@ private:
     void ToggleHistory();
     void ToggleTheme();
     void SetFilter(const std::wstring& filter);
+    // Orden de la cola (equipo, hora, usuario...). delta rota entre criterios.
+    void CycleSort(int delta);
+    void SetSort(const std::wstring& sortId, bool descending);
     void ShowTransient(const std::wstring& text, ui::Tone tone);
 
     // --- Menús ---
@@ -131,6 +142,7 @@ private:
 
     // Controles
     ui::HeaderBar header_;
+    ui::PrinterBar printerBar_;
     ui::JobListView list_;
     ui::PreviewPane preview_;
     ui::StatusBar status_;
@@ -156,6 +168,7 @@ private:
     RECT splitter_{};
     bool draggingSplitter_ = false;
     std::vector<std::wstring> menuPrinters_;  // impresoras listadas en el último menú
+    std::wstring chipPrinter_;                // impresora del menú contextual de la barra
     std::vector<std::wstring> menuServers_;
     core::JobInfo redirectJob_;
 };

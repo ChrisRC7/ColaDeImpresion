@@ -15,8 +15,12 @@ namespace {
 constexpr size_t kMaxNotifiedPrinters = MAXIMUM_WAIT_OBJECTS - 3;
 // Tiempo para agrupar ráfagas de notificaciones antes de publicar.
 constexpr DWORD kDebounceMs = 120;
-// Cada cuántos sondeos se vuelve a enumerar la lista de impresoras.
-constexpr int kPrinterReloadEvery = 10;
+// Cada cuánto se vuelve a enumerar la lista de impresoras del servidor.
+constexpr DWORD kPrinterReloadMs = 30000;
+// Veces seguidas que el spooler debe reportar más trabajos de los enumerados
+// para considerarlo un problema real (entre las dos llamadas un trabajo puede
+// terminar, y eso no es un error).
+constexpr int kMissingStreakToReport = 2;
 }  // namespace
 
 struct QueueMonitor::Watched {
@@ -27,6 +31,8 @@ struct QueueMonitor::Watched {
     HANDLE change = INVALID_HANDLE_VALUE;
     std::vector<JobInfo> jobs;
     bool dirty = true;
+    std::uint32_t missing = 0;  // trabajos que el spooler cuenta y no se pudieron enumerar
+    int missingStreak = 0;
 
     ~Watched() {
         if (change != INVALID_HANDLE_VALUE) FindClosePrinterChangeNotification(change);
@@ -110,6 +116,24 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     spooler::QueryPrinter(w.handle.get(), server_, w.info);
     DWORD err = ERROR_SUCCESS;
     w.jobs = spooler::EnumerateJobs(w.handle.get(), w.info.name, w.info.problems, &err);
+    // El spooler dice cuántos trabajos tiene la cola (cJobs). Si enumeramos
+    // menos, algo se perdió (carrera, buffer corto, permisos): se reintenta una
+    // vez y, si persiste, se avisa en la interfaz en vez de mostrar la cola
+    // incompleta en silencio (antes los trabajos solo se veían en la cola de Windows).
+    if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
+        DWORD retryErr = ERROR_SUCCESS;
+        auto retry = spooler::EnumerateJobs(w.handle.get(), w.info.name, w.info.problems, &retryErr);
+        if (retryErr == ERROR_SUCCESS && retry.size() > w.jobs.size()) w.jobs = std::move(retry);
+    }
+    if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
+        w.missing = w.info.jobCount - static_cast<std::uint32_t>(w.jobs.size());
+        if (++w.missingStreak == kMissingStreakToReport)
+            util::LogError(L"%ls: el spooler reporta %u trabajos y solo se enumeraron %zu", w.info.name.c_str(),
+                           w.info.jobCount, w.jobs.size());
+    } else {
+        w.missing = 0;
+        w.missingStreak = 0;
+    }
     if (err == ERROR_SUCCESS) ApplyAutoHold(w);
     if (err != ERROR_SUCCESS) {
         util::LogError(L"EnumJobs(%ls) falló: %lu", w.info.name.c_str(), err);
@@ -160,6 +184,8 @@ void QueueMonitor::Publish(const std::vector<std::unique_ptr<Watched>>& watched,
     for (const auto& w : watched) {
         snapshot->printers.push_back(w->info);
         snapshot->jobs.insert(snapshot->jobs.end(), w->jobs.begin(), w->jobs.end());
+        if (w->missingStreak >= kMissingStreakToReport) snapshot->missingJobs += w->missing;
+        if (!w->handle) ++snapshot->unreachablePrinters;
     }
     if (callback_) callback_(std::move(snapshot));
 }
@@ -168,7 +194,8 @@ void QueueMonitor::Run() {
     util::LogInfo(L"Monitor iniciado para '%ls'", server_.empty() ? L"(local)" : server_.c_str());
     std::vector<std::unique_ptr<Watched>> watched;
     std::wstring error;
-    int pollsSinceReload = 0;
+    DWORD lastPoll = GetTickCount();
+    DWORD lastReload = lastPoll;
     hold_.Reset();
     holdFailures_ = 0;
     holdError_ = 0;
@@ -184,7 +211,7 @@ void QueueMonitor::Run() {
     for (;;) {
         if (reload) {
             ReloadPrinters(watched, error);
-            pollsSinceReload = 0;
+            lastReload = GetTickCount();
             reload = false;
         }
         for (auto& w : watched)
@@ -209,8 +236,14 @@ void QueueMonitor::Run() {
             }
         }
 
-        DWORD rc = WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), FALSE,
-                                          static_cast<DWORD>(pollMs_.load()));
+        // El sondeo de respaldo tiene su propio vencimiento: antes cada
+        // notificación reiniciaba la espera, así que una impresora "ruidosa"
+        // podía dejar a las demás sin refrescar (sus trabajos no aparecían).
+        const DWORD interval = static_cast<DWORD>(std::max(500, pollMs_.load()));
+        const DWORD since = GetTickCount() - lastPoll;
+        const DWORD timeout = since >= interval ? 0 : interval - since;
+
+        DWORD rc = WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), FALSE, timeout);
         if (rc == WAIT_OBJECT_0) break;  // stop
 
         bool newJob = false;
@@ -240,10 +273,12 @@ void QueueMonitor::Run() {
         if (rc == WAIT_TIMEOUT) {
             // Sondeo de respaldo: refresca todo.
             for (auto& w : watched) w->dirty = true;
-            if (++pollsSinceReload >= kPrinterReloadEvery) reload = true;
+            lastPoll = GetTickCount();
+            if (GetTickCount() - lastReload >= kPrinterReloadMs) reload = true;
             if (error.size()) reload = true;  // reintenta conectar al servidor
         } else if (rc == WAIT_OBJECT_0 + 1) {
             for (auto& w : watched) w->dirty = true;
+            lastPoll = GetTickCount();
             reload = true;
         } else if (rc > WAIT_OBJECT_0 + 1 && rc < WAIT_OBJECT_0 + handles.size()) {
             rearm(rc - WAIT_OBJECT_0);
@@ -257,8 +292,9 @@ void QueueMonitor::Run() {
             }
         } else if (rc == WAIT_FAILED) {
             util::LogError(L"WaitForMultipleObjects falló: %lu", GetLastError());
-            Sleep(static_cast<DWORD>(pollMs_.load()));
+            Sleep(interval);
             for (auto& w : watched) w->dirty = true;
+            lastPoll = GetTickCount();
         }
     }
 

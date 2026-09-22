@@ -93,4 +93,11 @@ std::wstring Win32ErrorMessage(unsigned long error) {
     return message;
 }
 
+std::wstring EllipsisMiddle(const std::wstring& text, size_t maxChars) {
+    if (maxChars < 8 || text.size() <= maxChars) return text;
+    const size_t head = maxChars / 3;
+    const size_t tail = maxChars - head - 1;
+    return text.substr(0, head) + L"…" + text.substr(text.size() - tail);
+}
+
 }  // namespace cola::util

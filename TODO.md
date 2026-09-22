@@ -45,7 +45,9 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] **Retención automática**: todo trabajo nuevo queda en pausa ("Retenido") hasta que un operador lo libere (`Ctrl+Shift+H` para activar/desactivar; activada por defecto)
 - [x] Al iniciar / conectar: pausar las impresoras y retener los trabajos que ya estaban en cola (opción del menú, activada por defecto)
 - [x] Atajos: `Ctrl+P` alterna pausa del trabajo, `Ctrl+Shift+P` o `F9` alternan la impresora, `Ctrl+Alt+P` o `F8` el trabajo y su impresora (verificados con impresoras reales)
+- [x] **Cola completa**: se enumeran también las colas locales del servidor y las conexiones a ese servidor (antes `PRINTER_ENUM_NAME` solo devolvía las compartidas), el sondeo de respaldo ya no se pospone cuando llegan notificaciones seguidas, y si el spooler reporta más trabajos de los que se pudieron enumerar se reintenta y se avisa en la barra de estado
 - [ ] (LAIMI) Verificar la retención con trabajos de estudiantes en `vtec-laimiprint` (requiere "Administrar documentos")
+- [ ] (LAIMI) Confirmar que ya no faltan trabajos respecto a la cola de Windows (indicador "trabajos que el spooler cuenta no se pudieron leer")
 - [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
 - [ ] (LAIMI) Verificar reordenamiento y reenvío con impresoras físicas del laboratorio
 
@@ -65,6 +67,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Permitir hacer zoom o pasar páginas dentro de la vista previa (atajos, rueda, arrastre)
 - [x] Cachear vistas previas para no regenerarlas en cada refresco (LRU con límite de memoria)
 - [x] Localizar el spool con *spool file pooling* (`FPnnnnn.SPL` vía `.SHD`)
+- [x] Localización del spool más robusta: rutas locales cuando la app corre en el propio servidor, carpeta propia de cada cola (`SpoolDirectory`), búsqueda en los `.SHD` solo por id cuando el nombre del documento no coincide, y errores de lectura que antes se ignoraban
+- [x] Explicar por qué no hay vista previa: el panel y `app.log` listan las carpetas probadas y el motivo de cada fallo (antes siempre decía "el archivo de spool ya no existe")
 - [ ] (LAIMI) Verificar lectura del spool por `\\SERVIDOR\C$` / `ADMIN$` y con trabajos PCL/PS reales
 - [ ] Renderizar XPS sin GhostXPS (p. ej. con PDFium/otra biblioteca, o convertir XPS→PDF)
 - [ ] Miniaturas pequeñas en la lista de trabajos (opcional)
@@ -88,6 +92,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Elegir y reasignar atajos también con el mouse (clic para elegir; segundo clic, doble clic o clic en la tecla para reasignar)
 - [x] Panel de atajos agrupado por temas y con barra de desplazamiento (todos los comandos, incluidos los de pausa de impresora, se pueden reasignar ahí)
 - [x] Selección múltiple arrastrando con el botón izquierdo (rectángulo como en el Explorador) y poder quedarse sin selección (`Esc`, `Ctrl+Shift+A` o clic en el vacío)
+- [x] `F6` / `Shift+F6`: cambiar e invertir el orden de la cola; `Ctrl+Shift+F`: fijar/quitar la impresora del acceso rápido; `Ctrl+1`…`Ctrl+9`: impresoras del acceso rápido (teclas fijas)
 
 ---
 
@@ -97,6 +102,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Diseñar layout simple: nombre, páginas, tamaño, estado, usuario/equipo/hora
 - [x] Barra de estado con resumen (ej. "3 trabajos · 1 imprimiendo · 2 en pausa")
 - [x] Selector de impresora activa (y de servidor)
+- [x] **Barra de acceso rápido a impresoras**: el operador fija las impresoras que quiere arriba (botón `+`), cada una con su cantidad de trabajos y su estado; clic para filtrar, `Ctrl+1`…`Ctrl+9`, clic derecho para pausar/reanudar/vaciar
+- [x] **Ordenar la cola** por equipo, hora de envío, usuario, documento, estado o tamaño (además del orden real de impresión), con orden inverso; se guarda entre sesiones
 - [x] Indicadores visuales claros de estado (colores + íconos por estado)
 - [x] Evitar menús anidados; priorizar acciones directas y atajos (un único menú plano)
 - [x] Soporte de DPI alto (Per-Monitor V2)
@@ -124,7 +131,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 36 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 44 pruebas)
 - [x] Herramienta para generar trabajos de prueba (`tools/testjob.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)
@@ -145,7 +152,9 @@ Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
 - [x] Configurar la app para iniciar con Windows (opcional, desde el menú o el instalador)
 - [x] Definir si reemplaza el ícono de la bandeja del sistema del spooler original → **no** (Windows no lo permite); la app tiene su propio ícono (D14)
 - [x] Documentación básica de uso (README + docs/MANUAL.md)
-- [ ] Firmar digitalmente el ejecutable (opcional, evita advertencias de SmartScreen)
+- [x] Información de versión completa en el ejecutable (empresa **ChrisCorp**, descripción, copyright, comentarios, versión 0.2.0) y manifiesto con los sistemas soportados, para que Windows no lo trate como un binario anónimo
+- [x] `Desbloquear archivos.bat` en el paquete portable: quita la marca de "archivo de otro equipo" (Mark of the Web) que dispara SmartScreen al copiar desde un USB
+- [ ] Firmar digitalmente el ejecutable (única forma de eliminar del todo la advertencia de SmartScreen; requiere un certificado de firma de código)
 
 ---
 

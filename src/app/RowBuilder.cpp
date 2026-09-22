@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "core/JobStatus.h"
 #include "i18n/Strings.h"
 #include "ui/Style.h"
 #include "util/Format.h"
@@ -59,6 +60,13 @@ std::wstring ProblemText(core::PrinterProblem problem) {
         case ProblemOutOfMemory: return Tr(S::ProblemOutOfMemory);
         default: return L"";
     }
+}
+
+ui::Tone ToneForProblem(core::PrinterProblem problem) {
+    using namespace core;
+    if (problem == ProblemNone) return ui::Tone::Neutral;
+    if (problem == ProblemPaused || problem == ProblemTonerLow) return ui::Tone::Warning;
+    return ui::Tone::Danger;
 }
 
 std::wstring PagesText(const core::JobInfo& job) {
@@ -120,8 +128,73 @@ bool HistoryMatchesFilter(const config::HistoryEntry& e, const std::wstring& fil
     return AllWordsMatch(haystack, filter);
 }
 
+std::wstring MachineName(const std::wstring& machine) {
+    std::wstring name = machine;
+    while (!name.empty() && name.front() == L'\\') name.erase(name.begin());
+    return name;
+}
+
+const wchar_t* SortById(SortBy sort) {
+    switch (sort) {
+        case SortBy::Machine: return L"machine";
+        case SortBy::Time: return L"time";
+        case SortBy::User: return L"user";
+        case SortBy::Document: return L"document";
+        case SortBy::Status: return L"status";
+        case SortBy::Size: return L"size";
+        default: return L"queue";
+    }
+}
+
+SortBy SortByFromId(const std::wstring& id) {
+    for (int i = 0; i < kSortCount; ++i) {
+        auto sort = static_cast<SortBy>(i);
+        if (util::EqualsInsensitive(id, SortById(sort))) return sort;
+    }
+    return SortBy::Queue;
+}
+
+std::wstring SortName(SortBy sort) {
+    switch (sort) {
+        case SortBy::Machine: return Tr(S::SortMachine);
+        case SortBy::Time: return Tr(S::SortTime);
+        case SortBy::User: return Tr(S::SortUser);
+        case SortBy::Document: return Tr(S::SortDocument);
+        case SortBy::Status: return Tr(S::SortStatus);
+        case SortBy::Size: return Tr(S::SortSize);
+        default: return Tr(S::SortQueue);
+    }
+}
+
+namespace {
+// Orden natural de la cola: impresora, posición y, si empatan, id.
+bool BeforeInQueue(const core::JobInfo& a, const core::JobInfo& b) {
+    int printer = _wcsicmp(a.printer.c_str(), b.printer.c_str());
+    if (printer != 0) return printer < 0;
+    if (a.position != b.position) return a.position < b.position;
+    return a.id < b.id;
+}
+
+// Compara por el criterio elegido. 0 = empate (se desempata con la cola).
+int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b) {
+    auto text = [](const std::wstring& x, const std::wstring& y) { return _wcsicmp(x.c_str(), y.c_str()); };
+    auto number = [](std::uint64_t x, std::uint64_t y) { return x < y ? -1 : (x > y ? 1 : 0); };
+    switch (sort) {
+        case SortBy::Machine: return text(MachineName(a.machine), MachineName(b.machine));
+        case SortBy::Time:
+            return number(static_cast<std::uint64_t>(util::ToUnixSeconds(a.submitted)),
+                          static_cast<std::uint64_t>(util::ToUnixSeconds(b.submitted)));
+        case SortBy::User: return text(a.user, b.user);
+        case SortBy::Document: return text(a.document, b.document);
+        case SortBy::Status: return text(JobStatusText(a), JobStatusText(b));
+        case SortBy::Size: return number(a.sizeBytes, b.sizeBytes);
+        default: return 0;
+    }
+}
+}  // namespace
+
 std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapshot, const std::wstring& printer,
-                                              const std::wstring& filter) {
+                                              const std::wstring& filter, SortBy sort, bool descending) {
     std::vector<const core::JobInfo*> jobs;
     const bool all = printer == kAllPrinters || printer.empty();
     for (const auto& job : snapshot.jobs) {
@@ -129,10 +202,12 @@ std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapsho
         if (!JobMatchesFilter(job, filter)) continue;
         jobs.push_back(&job);
     }
-    std::stable_sort(jobs.begin(), jobs.end(), [](const core::JobInfo* a, const core::JobInfo* b) {
-        if (a->printer != b->printer) return _wcsicmp(a->printer.c_str(), b->printer.c_str()) < 0;
-        if (a->position != b->position) return a->position < b->position;
-        return a->id < b->id;
+    std::stable_sort(jobs.begin(), jobs.end(), [&](const core::JobInfo* a, const core::JobInfo* b) {
+        int cmp = CompareBy(sort, *a, *b);
+        if (descending) cmp = -cmp;
+        if (cmp != 0) return cmp < 0;
+        // A igualdad de criterio (y siempre en "Cola"), el orden real de impresión.
+        return descending ? BeforeInQueue(*b, *a) : BeforeInQueue(*a, *b);
     });
     return jobs;
 }
@@ -143,11 +218,7 @@ ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter) {
     row.title = job.document.empty() ? Tr(S::Unknown) : job.document;
     std::vector<std::wstring> parts;
     if (!job.user.empty()) parts.push_back(job.user);
-    if (!job.machine.empty()) {
-        std::wstring machine = job.machine;
-        while (!machine.empty() && machine.front() == L'\\') machine.erase(machine.begin());
-        parts.push_back(machine);
-    }
+    if (!job.machine.empty()) parts.push_back(MachineName(job.machine));
     std::wstring time = util::FormatTimeShort(job.submitted);
     if (!time.empty()) parts.push_back(time);
     if (showPrinter) parts.push_back(PrinterShortName(job.printer));
@@ -168,9 +239,7 @@ ui::ListRow MakeHistoryRow(const config::HistoryEntry& e, size_t index) {
     ui::ListRow row;
     row.key = HistoryKey(e, index);
     row.title = e.document.empty() ? Tr(S::Unknown) : e.document;
-    std::wstring machine = e.machine;
-    while (!machine.empty() && machine.front() == L'\\') machine.erase(machine.begin());
-    for (const auto& p : {e.user, machine, PrinterShortName(e.printer), util::FormatTimeIso(util::FromUnixSeconds(e.timeUnix))})
+    for (const auto& p : {e.user, MachineName(e.machine), PrinterShortName(e.printer), util::FormatTimeIso(util::FromUnixSeconds(e.timeUnix))})
         if (!p.empty()) row.subtitle += (row.subtitle.empty() ? L"" : L" · ") + p;
     if (e.pages == 0) row.pages = Tr(S::PagesUnknown);
     else if (e.pages == 1) row.pages = Tr(S::PagesOne);
@@ -182,6 +251,63 @@ ui::ListRow MakeHistoryRow(const config::HistoryEntry& e, size_t index) {
                 : e.outcome == config::JobOutcome::Failed ? ui::glyph::Error
                                                           : ui::glyph::Cancel;
     return row;
+}
+
+bool IsPinned(const std::vector<std::wstring>& favorites, const std::wstring& printer) {
+    return std::any_of(favorites.begin(), favorites.end(),
+                       [&](const std::wstring& p) { return util::EqualsInsensitive(p, printer); });
+}
+
+std::vector<std::wstring> TogglePinned(std::vector<std::wstring> favorites, const std::wstring& printer) {
+    if (printer.empty() || printer == kAllPrinters) return favorites;
+    if (IsPinned(favorites, printer)) {
+        favorites.erase(std::remove_if(favorites.begin(), favorites.end(),
+                                       [&](const std::wstring& p) { return util::EqualsInsensitive(p, printer); }),
+                        favorites.end());
+    } else {
+        favorites.push_back(printer);
+    }
+    return favorites;
+}
+
+std::vector<ui::PrinterChip> BuildQuickAccess(const core::QueueSnapshot& snapshot,
+                                              const std::vector<std::wstring>& favorites) {
+    // Cuenta los trabajos de una impresora ("" = todas).
+    auto count = [&snapshot](const std::wstring& printer, unsigned& held) {
+        unsigned jobs = 0;
+        held = 0;
+        for (const auto& job : snapshot.jobs) {
+            if (!printer.empty() && job.printer != printer) continue;
+            ++jobs;
+            if (job.heldByApp) ++held;
+        }
+        return jobs;
+    };
+
+    std::vector<ui::PrinterChip> chips;
+    ui::PrinterChip all;
+    all.name = kAllPrinters;
+    all.label = Tr(S::AllPrinters);
+    all.jobs = count(L"", all.held);
+    core::PrinterProblem worst = core::ProblemNone;
+    for (const auto& p : snapshot.printers) {
+        auto problem = core::MostSevereProblem(p.problems);
+        if (problem != core::ProblemNone && (worst == core::ProblemNone || problem < worst)) worst = problem;
+    }
+    all.tone = ToneForProblem(worst);
+    chips.push_back(std::move(all));
+
+    for (const auto& name : favorites) {
+        const auto* printer = snapshot.FindPrinter(name);
+        if (!printer) continue;  // ya no existe en este servidor
+        ui::PrinterChip chip;
+        chip.name = printer->name;
+        chip.label = printer->DisplayName();
+        chip.jobs = count(printer->name, chip.held);
+        chip.tone = ToneForProblem(core::MostSevereProblem(printer->problems));
+        chips.push_back(std::move(chip));
+    }
+    return chips;
 }
 
 bool ShouldPauseJobs(const std::vector<core::JobInfo>& jobs) {
