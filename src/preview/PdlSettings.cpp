@@ -130,11 +130,37 @@ void ParsePjl(const std::vector<std::string>& lines, core::ContentFacts& facts) 
     else if (duplex == "ON") facts.duplex.Set(binding == "SHORTEDGE" ? DMDUP_HORIZONTAL : DMDUP_VERTICAL);
 }
 
-void ParseEjl(const std::vector<std::string>& header, const std::vector<std::string>& trailer,
-              core::ContentFacts& facts) {
-    std::string dx, bd;
+// Controladores con los que se verificó el significado de las claves EJL
+// (generando sus datos "a archivo" con distintas opciones, 2026-10-02):
+//   QT = copias (CO no cambia), PS = papel (LT/A4/LGL), DX/BD = doble cara y
+//   borde, "JI PAGES" = hojas físicas (ya incluye copias y doble cara), y en
+//   ESC/Page "GS n poE" = orientación (0 vertical, 1 horizontal).
+bool VerifiedEpsonDriver(const std::string& driverUpper) {
+    return driverUpper.find("EPSON AM-C6000") != std::string::npos;
+}
+
+// "GS <n> poE" (orientación de página de ESC/Page) en el comienzo del documento.
+int EscPageOrientation(const std::uint8_t* data, size_t size) {
+    std::string_view text(reinterpret_cast<const char*>(data), std::min<size_t>(size, 64 * 1024));
+    size_t lang = text.find("LA=ESC/PAGE");
+    size_t at = text.find("poE", lang == std::string_view::npos ? 0 : lang);
+    if (at == std::string_view::npos || at < 2) return -1;
+    size_t start = at;
+    while (start > 0 && text[start - 1] >= '0' && text[start - 1] <= '9') --start;
+    if (start == at || start == 0 || text[start - 1] != 0x1d) return -1;
+    return atoi(std::string(text.substr(start, at - start)).c_str());
+}
+
+void ParseEjl(const std::uint8_t* data, size_t size, const std::vector<std::string>& header,
+              const std::vector<std::string>& trailer, core::ContentFacts& facts) {
+    std::string dx, bd, driver;
+    std::uint32_t quantity = 0;
     bool any = false;
     for (const auto& line : header) {
+        if (line.rfind("@EJL JI ", 0) == 0) {
+            size_t at = line.find("DRIVER=\"");
+            if (at != std::string::npos) driver = line.substr(at + 8, line.find('"', at + 8) - at - 8);
+        }
         if (line.rfind("@EJL SET ", 0) != 0) continue;
         any = true;
         std::string rest = line.substr(9);
@@ -148,26 +174,32 @@ void ParseEjl(const std::vector<std::string>& header, const std::vector<std::str
             size_t eq = token.find('=');
             if (eq == std::string::npos) continue;
             std::string key = token.substr(0, eq), value = TrimAscii(token.substr(eq + 1));
-            if (key == "PS") SetPaper(value, facts);
+            if (key == "PS") SetPaper(value == "LGL" ? std::string("LG") : value, facts);
             else if (key == "DX") dx = value;
             else if (key == "BD") bd = value;
+            else if (key == "QT") quantity = static_cast<std::uint32_t>(std::max(0, atoi(value.c_str())));
         }
     }
     if (any) {
         facts.settingsSource = core::ContentFacts::SettingsSource::Ejl;
-        facts.settingsDocumented = false;
+        // La sintaxis EJL no tiene documentación pública: solo se considera
+        // confirmada con un controlador cuyo comportamiento se verificó.
+        facts.settingsDocumented = VerifiedEpsonDriver(driver);
+        if (facts.settingsDocumented) facts.verifiedDriver = util::FromUtf8(driver);
         if (dx == "OFF") facts.duplex.Set(DMDUP_SIMPLEX);
         else if (dx == "ON") facts.duplex.Set(bd == "SE" ? DMDUP_HORIZONTAL : DMDUP_VERTICAL);
+        if (quantity > 0) facts.copies.Set(quantity);
+        int orientation = EscPageOrientation(data, size);
+        if (orientation == 0) facts.orientation.Set(DMORIENT_PORTRAIT);
+        else if (orientation == 1) facts.orientation.Set(DMORIENT_LANDSCAPE);
     }
-    // "@EJL JI PAGES="2"" al final: páginas que generó el controlador.
+    // "@EJL JI PAGES="2"" al final: hojas físicas que calculó el controlador
+    // (1 pág. x 10 copias = 10; 2 págs. a doble cara = 1).
     for (const auto& line : trailer) {
         size_t at = line.find("PAGES=");
         if (line.rfind("@EJL JI", 0) != 0 || at == std::string::npos) continue;
-        int pages = atoi(TrimAscii(line.substr(at + 6)).c_str());
-        if (pages > 0 && facts.pageSource == core::ContentFacts::PageSource::None) {
-            facts.pageSource = core::ContentFacts::PageSource::PdlCounter;
-            facts.pages = static_cast<std::uint32_t>(pages);
-        }
+        int sheets = atoi(TrimAscii(line.substr(at + 6)).c_str());
+        if (sheets > 0) facts.sheetsCounter.Set(static_cast<std::uint32_t>(sheets));
     }
 }
 
@@ -252,7 +284,7 @@ void ParsePdlSettings(const std::uint8_t* data, size_t size, bool complete, core
         trailer = CommandLines(data + start, size - start, false);
     }
     const bool isEjl = std::any_of(header.begin(), header.end(), [](const std::string& l) { return l.rfind("@EJL", 0) == 0; });
-    if (isEjl) ParseEjl(header, trailer, facts);
+    if (isEjl) ParseEjl(data, size, header, trailer, facts);
     else ParsePjl(header, facts);
     // PostScript (directo o tras el encabezado PJL): comentarios DSC.
     const size_t start = SkipPjlHeader(data, size);

@@ -47,7 +47,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Atajos: `Ctrl+P` alterna pausa del trabajo, `Ctrl+Shift+P` o `F9` alternan la impresora, `Ctrl+Alt+P` o `F8` el trabajo y su impresora (verificados con impresoras reales)
 - [x] **Cola completa**: se enumeran también las colas locales del servidor y las conexiones a ese servidor (antes `PRINTER_ENUM_NAME` solo devolvía las compartidas), el sondeo de respaldo ya no se pospone cuando llegan notificaciones seguidas, y si el spooler reporta más trabajos de los que se pudieron enumerar se reintenta y se avisa en la barra de estado
 - [ ] (LAIMI) Verificar la retención con trabajos de estudiantes en `vtec-laimiprint` (requiere "Administrar documentos")
-- [ ] (LAIMI) Confirmar que ya no faltan trabajos respecto a la cola de Windows (indicador "trabajos que el spooler cuenta no se pudieron leer")
+- [x] Trabajos enviados desde otras PCs que no aparecían hasta que llegaba otro documento: se enumera también sin la caché del cliente (`OpenPrinter2` + `PRINTER_OPTION_NO_CACHE`) en cada refresco
+- [ ] (LAIMI) Confirmar con trabajos reales que ya no faltan trabajos (en `app.log` aparece "trabajo(s) del servidor que la caché del cliente no mostraba" cuando la corrección actúa)
 - [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
 - [ ] (LAIMI) Verificar reordenamiento y reenvío con impresoras físicas del laboratorio
 
@@ -89,7 +90,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Pestaña "Configuración" (`F7`) en el panel y resumen de una línea en el encabezado
 - [x] `cola_jobinspect` (ficha en consola, `--hold`, `--release`, `--csv`) y serie de pruebas de Word (`tools/pruebas`)
 - [x] Matriz de pruebas con Word, Acrobat, Chrome, Edge y RAW (`docs/DATOS_DE_IMPRESION.md`)
-- [ ] (LAIMI) Pruebas P1–P8: qué refleja el DEVMODE del servidor en trabajos RAW de las Epson; significado de `CO`/`QT` del EJL (si se confirma, interpretarlos)
+- [x] Significado del EJL del controlador EPSON AM-C6000 verificado sin papel (`QT` copias, `JI PAGES` hojas, `DX`/`BD`, `PS`, `poE`): copias y hojas de trabajos de otras PCs fiables
+- [ ] (LAIMI) Pruebas P6–P8 (Lexmark, etiquetas, operador sin permisos)
 - [ ] Mostrar copias / caras previstas también como columna de la lista (opcional)
 
 ---

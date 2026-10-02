@@ -44,8 +44,10 @@ std::wstring Join(const std::wstring& a, const std::wstring& b) {
     return a + L" " + b;
 }
 
-const wchar_t* ContentSourceName(const core::ContentFacts* facts) {
+std::wstring ContentSourceName(const core::ContentFacts* facts) {
     if (!facts) return L"";
+    if (facts->settingsSource == core::ContentFacts::SettingsSource::Ejl && !facts->verifiedDriver.empty())
+        return util::Format(Tr(S::SourceEjlVerified), facts->verifiedDriver.c_str());
     switch (facts->settingsSource) {
         case core::ContentFacts::SettingsSource::Pjl: return Tr(S::SourcePjl);
         case core::ContentFacts::SettingsSource::Ejl: return Tr(S::SourceEjl);
@@ -61,12 +63,12 @@ std::wstring OriginText(Basis basis, const std::wstring& dmFields, const core::C
         case Basis::DevMode: return util::Format(Tr(S::OriginDevMode), dmFields.c_str());
         case Basis::SpoolDevMode: return util::Format(Tr(S::OriginSpoolDevMode), dmFields.c_str());
         case Basis::DevModeAndContent:
-            return util::Format(Tr(S::OriginDevModeAndContent), dmFields.c_str(), ContentSourceName(facts));
-        case Basis::Content: return util::Format(Tr(S::OriginContent), ContentSourceName(facts));
+            return util::Format(Tr(S::OriginDevModeAndContent), dmFields.c_str(), ContentSourceName(facts).c_str());
+        case Basis::Content: return util::Format(Tr(S::OriginContent), ContentSourceName(facts).c_str());
         case Basis::SpoolerTotalPages: return Tr(S::OriginSpoolerPages);
         case Basis::ContentPages: return util::Format(Tr(S::OriginContentPages), facts ? facts->language.c_str() : L"");
         case Basis::ContentRepeat: return Tr(S::OriginContentRepeat);
-        case Basis::PdlCounter: return Tr(S::OriginPdlCounter);
+        case Basis::DriverSheets: return Tr(S::OriginDriverSheets);
         case Basis::AssumedDefault: return Tr(S::OriginAssumed);
         case Basis::SinglePage: return Tr(S::OriginSinglePage);
         default: return L"";
@@ -314,7 +316,7 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
                 extra = util::Format(Tr(S::NoteDevModeSays), value.c_str());
                 value = contentText;
             } else {
-                extra = util::Format(Tr(S::NoteContentSays), ContentSourceName(facts), contentText.c_str());
+                extra = util::Format(Tr(S::NoteContentSays), ContentSourceName(facts).c_str(), contentText.c_str());
             }
         }
         rows.push_back(SettingRow(S::SheetPaper, value, a, PaperFields(dm), facts, extra));
@@ -376,6 +378,9 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
                                acc.pagesPerSide.Known() ? OriginText(acc.pagesPerSide.basis, L"", facts) : L""));
     if (facts && !facts->rawSettings.empty())
         rows.push_back(Field(S::SheetInData, facts->rawSettings, ContentSourceName(facts)));
+    if (facts && facts->sheetsCounter.valid)
+        rows.push_back(Field(S::SheetDriverSheets, util::Format(L"%u", facts->sheetsCounter.value),
+                             Tr(S::OriginDriverSheets)));
     if (acc.jobDevModeStale) {
         // JOB_INFO_2.pDevMode no es lo que se aplica: se muestra para que se vea la diferencia.
         std::wstring stale = PaperText(job.settings);
@@ -412,7 +417,9 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         rows.push_back(QuantityRow(S::SheetAppCopies, acc.appCopies, OriginText(acc.appCopies.basis, L"", facts)));
     {
         std::wstring origin;
-        if (acc.sides.Known() && acc.copies.value > 0)
+        if (acc.sides.basis == Basis::DriverSheets)
+            origin = Tr(S::OriginSidesFromSheets);
+        else if (acc.sides.Known() && acc.copies.value > 0)
             origin = acc.sides.basis == Basis::SinglePage
                          ? std::wstring(Tr(S::OriginSinglePage))
                          : util::Format(Tr(S::OriginCalcSides), acc.sides.value / acc.copies.value, acc.copies.value);
@@ -420,9 +427,15 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
     }
     {
         std::wstring origin;
-        if (acc.sheets.Known() && acc.copies.value > 0)
+        if (acc.sheets.basis == Basis::DriverSheets) {
+            origin = Tr(S::OriginDriverSheets);
+            if (acc.sheetsMismatch) origin += L". " + util::Format(Tr(S::NoteSheetsMismatch), acc.calculatedSheets);
+        } else if (acc.sheets.Known() && acc.copies.value > 0) {
             origin = util::Format(Tr(S::OriginCalcSheets), acc.sheets.value / acc.copies.value, acc.copies.value,
                                   DuplexText(static_cast<short>(acc.duplex.value)).c_str());
+            if (acc.sheetsMismatch && facts)
+                origin += L". " + util::Format(Tr(S::NoteDriverSheetsHint), facts->sheetsCounter.value);
+        }
         rows.push_back(QuantityRow(S::SheetSheets, acc.sheets, origin));
     }
     rows.push_back(Field(S::SheetProgress, util::Format(Tr(S::ValueProgress), job.pagesPrinted, job.totalPages),

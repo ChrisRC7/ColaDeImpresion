@@ -48,6 +48,12 @@ public:
     bool Open(const std::wstring& name, bool admin);
     // Intenta abrir con permisos de administración y, si no, de uso normal.
     bool OpenBest(const std::wstring& name, bool* gotAdmin = nullptr);
+    // Abre SIN la caché del cliente (OpenPrinter2 + PRINTER_OPTION_NO_CACHE):
+    // cada llamada consulta al servidor. Con una conexión a una impresora
+    // compartida, el handle normal responde EnumJobs desde la caché local de
+    // Client Side Rendering, que a veces no recibe los trabajos de otras PCs
+    // hasta el siguiente evento (el trabajo no aparecía hasta que llegaba otro).
+    bool OpenDirect(const std::wstring& name);
     void Close();
 
     HANDLE get() const { return handle_; }

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ColaDeImpresion VERSION 0.3.0 LANGUAGES CXX RC)
+project(ColaDeImpresion VERSION 0.3.1 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

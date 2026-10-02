@@ -118,4 +118,10 @@ struct QueueSnapshot {
 
 using SnapshotPtr = std::shared_ptr<const QueueSnapshot>;
 
+// Une la lista de trabajos de la caché del cliente con la consultada
+// directamente al servidor: conserva todos los de 'cached' (incluidos los que
+// solo existen en esta PC mientras se procesan) y agrega los de 'direct' que
+// faltan. El resultado queda ordenado por posición en la cola.
+std::vector<JobInfo> MergeJobLists(std::vector<JobInfo> cached, const std::vector<JobInfo>& direct);
+
 }  // namespace cola::core

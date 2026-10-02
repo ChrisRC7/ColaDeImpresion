@@ -34,6 +34,19 @@ bool PrinterHandle::OpenBest(const std::wstring& name, bool* gotAdmin) {
     return Open(name, false);
 }
 
+bool PrinterHandle::OpenDirect(const std::wstring& name) {
+    Close();
+    PRINTER_DEFAULTSW defaults{};
+    defaults.DesiredAccess = PRINTER_ACCESS_USE;
+    PRINTER_OPTIONS options{};
+    options.cbSize = sizeof(options);
+    options.dwFlags = PRINTER_OPTION_NO_CACHE;
+    HANDLE h = nullptr;
+    if (!OpenPrinter2W(name.c_str(), &h, &defaults, &options)) return false;
+    handle_ = h;
+    return true;
+}
+
 void PrinterHandle::Close() {
     if (handle_) {
         ClosePrinter(handle_);

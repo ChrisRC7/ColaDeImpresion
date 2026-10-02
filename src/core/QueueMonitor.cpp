@@ -28,6 +28,8 @@ struct QueueMonitor::Watched {
     PrinterHandle handle;
     PrinterHandle adminHandle;  // para pausar trabajos ajenos (retención); se abre al necesitarlo
     bool adminTried = false;
+    // Impresoras de un servidor: si abrir sin caché falla, cuándo reintentar (GetTickCount64).
+    ULONGLONG directRetryAt = 0;
     HANDLE change = INVALID_HANDLE_VALUE;
     std::vector<JobInfo> jobs;
     bool dirty = true;
@@ -116,14 +118,35 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     spooler::QueryPrinter(w.handle.get(), server_, w.info);
     DWORD err = ERROR_SUCCESS;
     w.jobs = spooler::EnumerateJobs(w.handle.get(), w.info.name, w.info.problems, &err);
-    // El spooler dice cuántos trabajos tiene la cola (cJobs). Si enumeramos
-    // menos, algo se perdió (carrera, buffer corto, permisos): se reintenta una
-    // vez y, si persiste, se avisa en la interfaz en vez de mostrar la cola
-    // incompleta en silencio (antes los trabajos solo se veían en la cola de Windows).
+    // Impresora de un servidor: la lista del handle normal sale de la caché del
+    // cliente, que a veces no recibe los trabajos enviados desde otras PCs hasta
+    // el siguiente evento. Se consulta también directamente al servidor y se
+    // agregan los que falten (los de la caché se conservan: incluyen los
+    // trabajos que esta PC todavía procesa localmente).
+    if (err == ERROR_SUCCESS && w.info.name.rfind(L"\\\\", 0) == 0) {
+        // Handle nuevo en cada refresco: un handle de larga duración también se
+        // quedaba con una lista vieja. Abrir + enumerar cuesta menos de 1 ms.
+        PrinterHandle direct;
+        if (GetTickCount64() >= w.directRetryAt && !direct.OpenDirect(w.info.name)) {
+            util::LogError(L"OpenPrinter2 sin caché (%ls) falló: %lu", w.info.name.c_str(), GetLastError());
+            w.directRetryAt = GetTickCount64() + 60000;
+        }
+        if (direct) {
+            DWORD directErr = ERROR_SUCCESS;
+            auto fresh = spooler::EnumerateJobs(direct.get(), w.info.name, w.info.problems, &directErr);
+            if (directErr == ERROR_SUCCESS) {
+                const size_t before = w.jobs.size();
+                w.jobs = MergeJobLists(std::move(w.jobs), fresh);
+                if (w.jobs.size() > before)
+                    util::LogInfo(L"%ls: %zu trabajo(s) del servidor que la caché del cliente no mostraba",
+                                  w.info.name.c_str(), w.jobs.size() - before);
+            }
+        }
+    }
     if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
         DWORD retryErr = ERROR_SUCCESS;
         auto retry = spooler::EnumerateJobs(w.handle.get(), w.info.name, w.info.problems, &retryErr);
-        if (retryErr == ERROR_SUCCESS && retry.size() > w.jobs.size()) w.jobs = std::move(retry);
+        if (retryErr == ERROR_SUCCESS) w.jobs = MergeJobLists(std::move(w.jobs), retry);
     }
     if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
         w.missing = w.info.jobCount - static_cast<std::uint32_t>(w.jobs.size());

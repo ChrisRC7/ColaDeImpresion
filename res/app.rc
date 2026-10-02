@@ -9,8 +9,8 @@
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 0,3,0,0
-PRODUCTVERSION 0,3,0,0
+FILEVERSION 0,3,1,0
+PRODUCTVERSION 0,3,1,0
 FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
 FILEFLAGS 0x0L
 FILEOS VOS_NT_WINDOWS32
@@ -23,26 +23,26 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ChrisCorp"
             VALUE "FileDescription", "Cola de Impresion - gestor de colas de impresion"
-            VALUE "FileVersion", "0.3.0.0"
+            VALUE "FileVersion", "0.3.1.0"
             VALUE "InternalName", "ColaDeImpresion"
             VALUE "LegalCopyright", "Copyright (C) 2026 ChrisCorp. Todos los derechos reservados."
             VALUE "LegalTrademarks", "ChrisCorp"
             VALUE "OriginalFilename", "ColaDeImpresion.exe"
             VALUE "ProductName", "Cola de Impresion"
-            VALUE "ProductVersion", "0.3.0.0"
+            VALUE "ProductVersion", "0.3.1.0"
             VALUE "Comments", "Administra las colas de un servidor de impresion: ver, pausar, retener, cancelar, reordenar y previsualizar trabajos. Desarrollado por ChrisCorp para el LAIMI del Instituto Tecnologico de Costa Rica."
         END
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "ChrisCorp"
             VALUE "FileDescription", "Print Queue - print queue manager"
-            VALUE "FileVersion", "0.3.0.0"
+            VALUE "FileVersion", "0.3.1.0"
             VALUE "InternalName", "ColaDeImpresion"
             VALUE "LegalCopyright", "Copyright (C) 2026 ChrisCorp. All rights reserved."
             VALUE "LegalTrademarks", "ChrisCorp"
             VALUE "OriginalFilename", "ColaDeImpresion.exe"
             VALUE "ProductName", "Print Queue"
-            VALUE "ProductVersion", "0.3.0.0"
+            VALUE "ProductVersion", "0.3.1.0"
             VALUE "Comments", "Manages the queues of a Windows print server: view, pause, hold, cancel, reorder and preview jobs. Built by ChrisCorp for LAIMI, Costa Rica Institute of Technology."
         END
     END

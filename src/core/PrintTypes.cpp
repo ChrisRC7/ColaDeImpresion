@@ -1,5 +1,7 @@
 #include "core/PrintTypes.h"
 
+#include <algorithm>
+
 namespace cola::core {
 
 std::wstring PrinterInfo::DisplayName() const {
@@ -12,6 +14,16 @@ std::wstring PrinterInfo::DisplayName() const {
 }
 
 std::wstring JobInfo::Key() const { return printer + L"#" + std::to_wstring(id); }
+
+std::vector<JobInfo> MergeJobLists(std::vector<JobInfo> cached, const std::vector<JobInfo>& direct) {
+    for (const auto& job : direct) {
+        bool known = std::any_of(cached.begin(), cached.end(), [&](const JobInfo& j) { return j.id == job.id; });
+        if (!known) cached.push_back(job);
+    }
+    std::stable_sort(cached.begin(), cached.end(),
+                     [](const JobInfo& a, const JobInfo& b) { return a.position < b.position; });
+    return cached;
+}
 
 const PrinterInfo* QueueSnapshot::FindPrinter(const std::wstring& name) const {
     for (const auto& p : printers)

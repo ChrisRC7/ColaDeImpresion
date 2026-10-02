@@ -44,7 +44,7 @@ struct ContentFacts {
     DataKind kind = DataKind::Unknown;
     std::wstring language;  // "EMF", "XPS", "ESC/Page", "PCL"... (para mostrar)
 
-    enum class PageSource { None, EmfRecords, XpsFixedPages, PostScriptDsc, PdlCounter };
+    enum class PageSource { None, EmfRecords, XpsFixedPages, PostScriptDsc };
     PageSource pageSource = PageSource::None;
     std::uint32_t pages = 0;
     // La secuencia de páginas se repite de forma exacta con este período
@@ -68,6 +68,11 @@ struct ContentFacts {
     Field<short> paperWidth;        // décimas de mm
     Field<short> paperLength;
     std::wstring rawSettings;       // opciones crudas (para mostrarlas tal cual)
+    // Hojas físicas que declaró el controlador en los datos (EJL "JI PAGES"):
+    // ya incluyen copias y doble cara.
+    Field<std::uint32_t> sheetsCounter;
+    // Controlador con el que se verificó la sintaxis EJL (vacío = solo indicio).
+    std::wstring verifiedDriver;
 
     // EMF: DEVMODE que viaja dentro del spool (registro EMRI_DEVMODE vigente para
     // la primera página). Es el que aplica el procesador de impresión; puede no
@@ -84,13 +89,13 @@ enum class Basis {
     SpoolerTotalPages,  // JOB_INFO_2.TotalPages
     ContentPages,       // páginas contadas en los datos (EMF / XPS)
     ContentRepeat,      // período de repetición detectado en los datos
-    PdlCounter,         // contador de páginas declarado por el controlador (EJL/PJL)
     DevMode,            // DEVMODE del trabajo (JOB_INFO_2.pDevMode)
     SpoolDevMode,       // DEVMODE dentro del spool EMF (EMRI_DEVMODE)
     DevModeAndContent,  // DEVMODE y datos coinciden
     Content,            // solo los datos (PJL / PrintTicket)
     AssumedDefault,     // supuesto (p. ej. 1 copia, una cara)
     SinglePage,         // 1 página lógica: 1 cara por copia sea cual sea el N-up
+    DriverSheets,       // hojas físicas declaradas por el controlador (EJL "JI PAGES")
     Calculated,         // cálculo a partir de otras magnitudes
 };
 
@@ -139,6 +144,8 @@ struct PageAccounting {
     bool copiesConflict = false;  // DEVMODE y datos declaran copias distintas
     bool duplexConflict = false;
     bool pagesMismatch = false;   // TotalPages != páginas contadas en los datos
+    bool sheetsMismatch = false;  // el contador de hojas del controlador no coincide con el cálculo
+    std::uint32_t calculatedSheets = 0;  // hojas según el cálculo (para explicar una diferencia)
     // Se usó el DEVMODE del spool EMF en lugar de JOB_INFO_2.pDevMode.
     bool devModeFromSpool = false;
     // JOB_INFO_2.pDevMode no coincide con el DEVMODE efectivo del spool.

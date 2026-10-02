@@ -49,18 +49,19 @@ Quantity ResolveCopies(DataKind kind, const PrintSettings& dm, bool fromSpool, c
             if (dmValid) return Make(dmCopies, Reliability::Reliable, fromSpool ? Basis::SpoolDevMode : Basis::DevMode);
             return Make(1, Reliability::Estimated, Basis::AssumedDefault, Reason::FieldNotDeclared);
         case DataKind::Xps:
-            if (documented) {
-                if (*conflict) return Make(contentCopies, Reliability::Estimated, Basis::Content, Reason::Conflict);
-                return Make(contentCopies, Reliability::Reliable, dmValid ? Basis::DevModeAndContent : Basis::Content);
-            }
+            // El PrintTicket es lo que aplica el camino XPS: manda aunque el DEVMODE diga otra cosa.
+            if (documented)
+                return Make(contentCopies, Reliability::Reliable,
+                            dmValid && !*conflict ? Basis::DevModeAndContent : Basis::Content);
             if (dmValid) return Make(dmCopies, Reliability::Estimated, Basis::DevMode, Reason::XpsTicketUnread);
             return Make(1, Reliability::Estimated, Basis::AssumedDefault, Reason::FieldNotDeclared);
         case DataKind::Pdl:
             // RAW: el controlador ya generó los datos en el cliente; la impresora obedece lo que dicen los datos.
-            if (documented) {
-                if (*conflict) return Make(contentCopies, Reliability::Estimated, Basis::Content, Reason::Conflict);
-                return Make(contentCopies, Reliability::Reliable, dmValid ? Basis::DevModeAndContent : Basis::Content);
-            }
+            // La impresora obedece a los datos. En los trabajos que llegan por Client Side
+            // Rendering el DEVMODE del servidor resultó ser el predeterminado de la cola.
+            if (documented)
+                return Make(contentCopies, Reliability::Reliable,
+                            dmValid && !*conflict ? Basis::DevModeAndContent : Basis::Content);
             if (dmValid) {
                 Reason reason = hasContent ? Reason::UndocumentedHint : Reason::RawUnverified;
                 return Make(dmCopies, Reliability::Estimated, Basis::DevMode, reason);
@@ -91,6 +92,26 @@ Quantity ResolveDuplex(DataKind kind, const PrintSettings& dm, const ContentFact
     return Make(value, a.reliability, a.basis, a.reason);
 }
 
+// Hojas físicas que declaró el controlador (EJL "JI PAGES"). Con un controlador
+// verificado es el dato más directo: ya incluye copias, doble cara y N-up.
+void ApplyDriverSheets(PageAccounting& acc, const ContentFacts* facts) {
+    if (!facts || !facts->sheetsCounter.valid || facts->sheetsCounter.value == 0) return;
+    const std::uint32_t counter = facts->sheetsCounter.value;
+    acc.calculatedSheets = acc.sheets.Known() ? acc.sheets.value : 0;
+    acc.sheetsMismatch = acc.sheets.Known() && acc.sheets.value != counter;
+    if (!facts->settingsDocumented) return;  // solo indicio: se deja el cálculo
+    acc.sheets = Make(counter, Reliability::Reliable, Basis::DriverSheets);
+    const bool simplex = acc.duplex.value == DMDUP_SIMPLEX && acc.duplex.reliability == Reliability::Reliable;
+    if (simplex) {
+        acc.sides = Make(counter, Reliability::Reliable, Basis::DriverSheets);  // una cara: caras = hojas
+    } else if (!acc.sheetsMismatch && acc.sides.Known() && acc.copies.reliability == Reliability::Reliable &&
+               acc.dataPages.reliability == Reliability::Reliable) {
+        // El cálculo coincide con el controlador: las caras calculadas quedan confirmadas.
+        acc.sides.reliability = Reliability::Reliable;
+        acc.sides.reason = Reason::None;
+    }
+}
+
 }  // namespace
 
 Reliability Worst(Reliability a, Reliability b) { return Rank(a) <= Rank(b) ? a : b; }
@@ -117,9 +138,9 @@ SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, b
         return a;
     }
     if (inDevMode && inContent && contentDocumented) {
+        // Los datos (PrintTicket, PJL, DSC, EJL verificado) son lo que se aplica: mandan.
         a.basis = agree ? Basis::DevModeAndContent : Basis::Content;
-        a.reliability = agree ? Reliability::Reliable : Reliability::Estimated;
-        a.reason = agree ? Reason::None : Reason::Conflict;
+        a.reliability = Reliability::Reliable;
         return a;
     }
     if (inContent && contentDocumented) {
@@ -193,8 +214,6 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
         acc.dataPages = Make(job.totalPages, Reliability::Reliable, Basis::SpoolerTotalPages);
     } else if (job.totalPages > 0) {
         acc.dataPages = Make(job.totalPages, Reliability::Estimated, Basis::SpoolerTotalPages, Reason::StillSpooling);
-    } else if (facts && facts->pageSource == ContentFacts::PageSource::PdlCounter && facts->pages > 0) {
-        acc.dataPages = Make(facts->pages, Reliability::Estimated, Basis::PdlCounter, Reason::UndocumentedHint);
     } else {
         acc.dataPages = Unknown(spooling ? Reason::StillSpooling : Reason::PagesUnknown);
     }
@@ -244,6 +263,7 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
     if (!acc.logicalPages.Known() || !acc.copies.Known()) {
         acc.sides = Unknown(!acc.logicalPages.Known() ? acc.logicalPages.reason : acc.copies.reason);
         acc.sheets = acc.sides;
+        ApplyDriverSheets(acc, facts);  // el controlador puede declarar las hojas aunque no haya páginas
         return acc;
     }
     const std::uint32_t logical = acc.logicalPages.value;
@@ -274,6 +294,7 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
                       sheetsRel == Reliability::Reliable ? Reason::None
                                                          : (sidesRel == Reliability::Reliable ? acc.duplex.reason
                                                                                               : sidesReason));
+    ApplyDriverSheets(acc, facts);
     return acc;
 }
 

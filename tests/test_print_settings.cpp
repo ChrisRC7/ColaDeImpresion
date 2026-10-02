@@ -262,12 +262,13 @@ TEST(RawCopiesNeedConfirmationFromData) {
     CHECK(acc.copies.basis == core::Basis::DevModeAndContent);
     CHECK(acc.sides.reliability == Reliability::Reliable);
 
-    // PJL contradice al DEVMODE: se muestra lo que dicen los datos, como estimado.
+    // PJL contradice al DEVMODE: la impresora obedece a los datos, que mandan.
     pjl.copies.Set(3);
     acc = core::ComputePageAccounting(job, &pjl);
     CHECK(acc.copiesConflict);
     CHECK_EQ(acc.copies.value, 3u);
-    CHECK(acc.copies.reliability == Reliability::Estimated);
+    CHECK(acc.copies.reliability == Reliability::Reliable);
+    CHECK(acc.copies.basis == core::Basis::Content);
 
     // EJL (no documentado): nunca vuelve fiable las copias.
     core::ContentFacts ejl = pjl;
@@ -333,19 +334,60 @@ TEST(EpsonEjlFromLaimiServer) {
     core::ContentFacts f;
     preview::ParsePdlSettings(bytes.data(), bytes.size(), true, f);
     CHECK(f.settingsSource == core::ContentFacts::SettingsSource::Ejl);
-    CHECK(!f.settingsDocumented);  // sintaxis sin documentación pública
+    CHECK(!f.settingsDocumented);  // sin DRIVER= de un controlador verificado: solo indicio
     CHECK_EQ(f.paperWidth.value, 2159);  // PS=LT => Carta
     CHECK_EQ(f.duplex.value, static_cast<short>(DMDUP_SIMPLEX));
-    CHECK(!f.copies.valid);  // CO/QT no se interpretan
-    CHECK(f.pageSource == core::ContentFacts::PageSource::PdlCounter);
-    CHECK_EQ(f.pages, 2u);
+    CHECK_EQ(f.copies.value, 1u);        // QT
+    CHECK(f.pageSource == core::ContentFacts::PageSource::None);  // JI PAGES son hojas, no páginas
+    CHECK_EQ(f.sheetsCounter.value, 2u);
     CHECK(f.rawSettings.find(L"CO=1") != std::wstring::npos);
     CHECK(f.rawSettings.find(L"USER") == std::wstring::npos);  // sin datos personales
 
     // Datos incompletos: el final (JI PAGES) no se busca.
     core::ContentFacts partial;
     preview::ParsePdlSettings(bytes.data(), bytes.size(), false, partial);
-    CHECK_EQ(partial.pages, 0u);
+    CHECK(!partial.sheetsCounter.valid);
+}
+
+TEST(EpsonAmC6000OnePageTenCopies) {
+    // Encabezado tal como lo genera el controlador EPSON AM-C6000 de las colas del
+    // LAIMI para 1 página x 10 copias en horizontal (verificado imprimiendo a archivo).
+    std::string data =
+        "\x1b\x01@EJL \n@EJL JI USER=\"x\" MACHINE=\"\\\\PC\" DOCUMENT=\"d\" DRIVER=\"EPSON AM-C6000 Series\"\n"
+        "@EJL SE LA=ESC/PAGE\n@EJL SET PS=LT DX=OFF BD=LE CO=1 QT=10\n@EJL EN LA=ESC/PAGE-COLOR\n"
+        "\x1d" "30psE\x1d" "1poE\x1d" "0bdE";
+    data += std::string(64, '\0');
+    data += "\x1b\x01@EJL \n@EJL JI PAGES=\"10\"\n\x1b\x01@EJL \n@EJL EJ \n";
+    auto bytes = Bytes(data);
+    core::ContentFacts f;
+    f.analyzed = f.complete = true;
+    f.kind = core::DataKind::Pdl;
+    preview::ParsePdlSettings(bytes.data(), bytes.size(), true, f);
+    CHECK(f.settingsDocumented);
+    CHECK(f.verifiedDriver.find(L"AM-C6000") != std::wstring::npos);
+    CHECK_EQ(f.copies.value, 10u);
+    CHECK_EQ(f.orientation.value, static_cast<short>(DMORIENT_LANDSCAPE));
+    CHECK_EQ(f.sheetsCounter.value, 10u);
+
+    // En el servidor el DEVMODE es el predeterminado de la cola (1 copia): mandan los datos.
+    DEVMODEW dm = MakeDevMode();
+    dm.dmFields = DM_COPIES | DM_DUPLEX;
+    dm.dmCopies = 1;
+    dm.dmDuplex = DMDUP_VERTICAL;
+    core::JobInfo job;
+    job.datatype = L"RAW";
+    job.totalPages = 1;
+    job.settings = core::ParseDevMode(&dm);
+    auto acc = core::ComputePageAccounting(job, &f);
+    CHECK_EQ(acc.copies.value, 10u);
+    CHECK(acc.copies.reliability == Reliability::Reliable);
+    CHECK(acc.copiesConflict);
+    CHECK_EQ(acc.duplex.value, static_cast<std::uint32_t>(DMDUP_SIMPLEX));
+    CHECK(acc.duplex.reliability == Reliability::Reliable);
+    CHECK_EQ(acc.sides.value, 10u);
+    CHECK(acc.sides.reliability == Reliability::Reliable);
+    CHECK_EQ(acc.sheets.value, 10u);
+    CHECK(acc.sheets.basis == core::Basis::DriverSheets);
 }
 
 TEST(PostScriptDscIsParsed) {
@@ -453,6 +495,27 @@ TEST(JobSheetShowsReliabilityPerValue) {
         CHECK_EQ(row.value, std::wstring(L"No determinable"));
     }
     CHECK(found);
+}
+
+// --- Cola: caché del cliente + servidor ---------------------------------------
+
+TEST(MergeJobListsAddsJobsMissingFromClientCache) {
+    auto job = [](std::uint32_t id, std::uint32_t position) {
+        core::JobInfo j;
+        j.id = id;
+        j.position = position;
+        return j;
+    };
+    // La caché del cliente no tiene el 85 (llegó desde otra PC) y sí tiene el
+    // 29957 (trabajo local de esta PC que el servidor todavía no conoce).
+    std::vector<core::JobInfo> cached = {job(84, 1), job(29957, 3)};
+    std::vector<core::JobInfo> direct = {job(84, 1), job(85, 2)};
+    auto merged = core::MergeJobLists(cached, direct);
+    CHECK_EQ(merged.size(), static_cast<size_t>(3));
+    CHECK_EQ(merged[0].id, 84u);
+    CHECK_EQ(merged[1].id, 85u);
+    CHECK_EQ(merged[2].id, 29957u);
+    CHECK_EQ(core::MergeJobLists(direct, direct).size(), static_cast<size_t>(2));  // sin duplicados
 }
 
 // --- Archivos temporales ----------------------------------------------------

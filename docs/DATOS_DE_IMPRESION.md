@@ -32,9 +32,12 @@ sin permisos de administrador del servidor) · **Servidor:** `\\vtec-laimiprint`
   (Word lo cambia después de `StartDoc`): el efectivo viaja dentro del spool
   (registro `EMRI_DEVMODE`) y es el que se usa. Comprobado contra la salida real.
 - Las colas Epson del LAIMI reciben **ESC/Page-Color** (lenguaje propio de
-  Epson generado en la PC del estudiante): **sin vista previa posible** con
-  intérpretes libres; la configuración sí se muestra (con fiabilidad *Estimado*
-  mientras no se confirme en el LAIMI qué refleja el DEVMODE del servidor).
+  Epson generado en la PC del estudiante): **sin vista previa posible** (las
+  bandas raster usan una compresión propietaria). La configuración sí se
+  muestra y, desde la 0.3.1, **copias, doble cara, papel, orientación y hojas
+  son fiables**: se leen del EJL, cuyo significado se verificó con el
+  controlador real de esas colas (sección 4, hallazgo 11). El DEVMODE del
+  servidor no sirve para eso: es el predeterminado de la cola.
 
 ## 2. De dónde sale cada dato
 
@@ -47,7 +50,7 @@ sin permisos de administrador del servidor) · **Servidor:** `\\vtec-laimiprint`
 | 3b | XPS / OpenXPS | XPS Object Model de Windows (`IXpsOMObjectFactory1`) + Print Schema | Páginas y PrintTicket (copias, papel, orientación, doble cara, N-up, color) |
 | 3c | PostScript | Comentarios DSC 3.0 / PPD (documentados) | `%%Pages`, `NumCopies`, `*PageSize`, `%%Orientation`, `*Duplex` |
 | 3d | PCL / PCL XL | PJL (documentado por HP) | `COPIES`, `QTY`, `DUPLEX`, `BINDING`, `PAPER`, `ORIENTATION` |
-| 3e | ESC/Page (Epson) | EJL (`ESC 01 @EJL`, **sin documentación pública**) | Solo indicios: `PS` papel, `DX`/`BD` doble cara, `JI PAGES` |
+| 3e | ESC/Page (Epson) | EJL (`ESC 01 @EJL`, sin documentación pública) y comandos ESC/Page | Con el controlador EPSON AM-C6000 (verificado): `QT` copias, `PS` papel, `DX`/`BD` doble cara, `GS n poE` orientación, `JI PAGES` hojas físicas. Con otros controladores: solo indicio |
 | 4 | Archivo de spool | `\\SRV\C$\...\PRINTERS` o ruta local | Respaldo si la API falla (requiere administrador del servidor) |
 
 El formato se detecta **por el contenido**, no por `pDatatype`: un driver v4
@@ -71,13 +74,13 @@ Fiabilidad: **F** = fiable, **E** = estimado, **N** = no determinable.
 | Papel | `dmPaperSize`, `dmFormName`, `dmPaperWidth/Length` (décimas de mm) | F (DEVMODE efectivo del spool) | F si el PrintTicket coincide; E si no se leyó | F si PJL/DSC lo confirman; E si solo DEVMODE o EJL | `dmPaperWidth/Length` prevalecen sobre `dmPaperSize`. |
 | Orientación | `dmOrientation` | F | F/E | F/E | |
 | Doble cara | `dmDuplex` (1 una cara, 2 borde largo, 3 borde corto) | F; E (supuesto una cara) si `DM_DUPLEX` no está | F/E | F/E | |
-| Copias | `dmCopies` (solo con `DM_COPIES`) | F | F con PrintTicket | F con PJL/DSC; **E** con ESC/Page | En RAW el controlador ya aplicó las copias en el cliente. |
+| Copias | `dmCopies` (solo con `DM_COPIES`) | F | F con PrintTicket | F con PJL/DSC o EJL verificado (`QT`); E si solo hay DEVMODE | En RAW el controlador ya aplicó las copias en el cliente; los datos mandan sobre el DEVMODE del servidor. |
 | Intercalar | `dmCollate` | F | F/E | F/E | |
 | Color | `dmColor` | F | F/E | F/E | |
 | Origen del papel, calidad, escala, tipo de medio | `dmDefaultSource`, `dmPrintQuality`, `dmScale`, `dmMediaType` | informativo | informativo | informativo | Valores ≥ 256 son propios del controlador. |
 | Páginas por cara (N-up) | PrintTicket (`PagesPerSheet`) | **N** (opción privada) | F si el ticket lo trae; N si no | N | `dmNup` solo dice *quién* compone, no cuántas. |
 | Caras físicas previstas | Cálculo | F con 1 página lógica; E con varias (N-up desconocido) | F con N-up en el ticket | E | Hereda la peor fiabilidad de sus datos. |
-| Hojas físicas previstas | Cálculo con la doble cara | igual que caras y doble cara | | | Cada copia empieza en hoja nueva. |
+| Hojas físicas previstas | Cálculo con la doble cara, o `JI PAGES` del controlador Epson | igual que caras y doble cara | | F con EJL verificado | Cada copia empieza en hoja nueva. `JI PAGES` ya incluye copias, doble cara y N-up. |
 | Progreso | `PagesPrinted / TotalPages` | — | — | — | Páginas enviadas por el spooler; **no** son hojas entregadas. |
 
 Validación del DEVMODE (`core/PrintSettings`): cada campo se usa solo si
@@ -124,6 +127,27 @@ Hallazgos, con la prueba que los respalda (sección 8):
    en 100×148 "Postal japonesa"; Word → CutePDF: A4). La app muestra el tamaño
    del DEVMODE efectivo, que es el que se usa.
 10. **`PagesPrinted`** es un avance del spooler, no un contador de hojas.
+11. **EJL del controlador EPSON AM-C6000 (colas LAIMI 1/2 - INK), verificado.**
+    Se generaron sus datos "imprimiendo a archivo" desde esta PC (no sale nada
+    hacia la impresora) variando una opción por vez:
+
+    | Pedido | EJL / ESC/Page resultante |
+    |---|---|
+    | 1 pág. × 10 copias | `QT=10`, `JI PAGES="10"`; la página va **una sola vez** en los datos (60 618 vs 60 620 bytes) |
+    | 2 págs. × 3 copias | `QT=3`, `JI PAGES="6"` |
+    | Doble cara borde largo / corto (2 págs.) | `DX=ON BD=LE` / `DX=ON BD=SE`, `JI PAGES="1"` |
+    | A4 / Oficio / Carta | `PS=A4` / `PS=LGL` / `PS=LT` y `GS 14/32/30 psE` |
+    | Horizontal | `GS 1 poE` (vertical: `GS 0 poE`) |
+
+    `CO` no cambia nunca; las copias van en `QT`; `JI PAGES` son **hojas
+    físicas** (no páginas). El intercalado no se pudo variar: el controlador lo
+    fuerza.
+12. **Lista de trabajos incompleta desde otras PCs:** en una conexión a una
+    impresora compartida, el handle normal responde `EnumJobs` desde la caché
+    del cliente (Client Side Rendering), que a veces no recibe los trabajos
+    enviados desde otras PCs hasta el siguiente evento. La app consulta además
+    con un handle nuevo abierto con `OpenPrinter2` + `PRINTER_OPTION_NO_CACHE`
+    en cada refresco (menos de 1 ms) y une ambas listas.
 
 ## 5. Reglas de cálculo
 
@@ -158,7 +182,7 @@ Colas del LAIMI observadas:
 
 | Cola | Controlador | Datos que recibe el servidor | Vista previa |
 |---|---|---|---|
-| `LAIMI 1 - INK`, `LAIMI 2 - INK` | EPSON AM-C6000 Series (v3) | RAW ESC/Page-Color (verificado) | No disponible; configuración sí |
+| `LAIMI 1 - INK`, `LAIMI 2 - INK` | EPSON AM-C6000 Series (v3) | RAW ESC/Page-Color (verificado) | No disponible (compresión propietaria); configuración sí, con copias/doble cara/papel/orientación/hojas fiables |
 | `LAIMI1_BN` | Lexmark Universal v2 | Probablemente PCL XL o PostScript (sin verificar) | Previsible con GhostPCL/Ghostscript — P6 |
 | `LAIMI 2 - Etiquetas` | EPSON CW-C6500Au | Sin verificar | P7 |
 
@@ -248,7 +272,8 @@ real en todos los casos.
 | Dato | Por qué | Qué muestra la app |
 |---|---|---|
 | Páginas por cara (N-up) en EMF y RAW | Es una opción privada del controlador (parte privada del DEVMODE); la parte pública solo tiene `dmNup` (quién compone) | *No determinable*; las caras se estiman con 1 por cara (salvo 1 página lógica) |
-| Copias en trabajos Epson (ESC/Page) | El controlador las aplica en la PC del estudiante; el DEVMODE del servidor coincidió con el de la cola; `CO`/`QT` del EJL no tienen documentación pública | *Estimado*, con el motivo, hasta confirmar P1 |
+| Copias en trabajos ESC/Page de **otros** controladores Epson | Solo se verificó el EPSON AM-C6000 | *Estimado* (indicio EJL) |
+| Intercalado en ESC/Page | El controlador lo fuerza; no se pudo variar | Lo del DEVMODE, como estimado |
 | Copias hechas por la aplicación sin repetición exacta | Si las páginas repetidas no son idénticas byte a byte no se detectan | Páginas lógicas *Estimado* ("no se pudo comprobar…") |
 | Hojas realmente entregadas | Ninguna API del spooler las informa; `PagesPrinted` es avance del spooler | Solo "hojas previstas" |
 | Doble cara en controladores sin `DM_DUPLEX` | No hay dato | "Una cara" *Estimado* (supuesto) |
@@ -318,13 +343,9 @@ las "Opciones en los datos" (EJL) y `TotalPages`, con:
 herramientas\cola_jobinspect.exe "\\vtec-laimiprint\LAIMI 1 - INK" --data --csv laimi.csv --label "P1 1 pag x10"
 ```
 
-- **P1** Word, 1 pág. × 10 copias, una cara. ¿El DEVMODE del servidor dice 10?
-  ¿Cambia `CO` o `QT` en el EJL? Si `CO`/`QT` reflejan las copias, se puede
-  pasar a interpretarlos (hoy solo se muestran).
-- **P2** 3 págs. × 2 copias, intercaladas y sin intercalar.
-- **P3** Una cara, doble cara borde largo y borde corto (¿`DX`/`BD` y `dmDuplex` cambian?).
-- **P4** Carta, A4 (si hay papel) y un tamaño personalizado (`PS=`).
-- **P5** Retrato y paisaje.
+- ~~P1–P5~~ Resueltas sin papel generando los datos del controlador real a
+  archivo (hallazgo 11). Queda solo confirmar con un trabajo real de un
+  estudiante que la ficha muestre las copias y la doble cara elegidas.
 - **P6** `LAIMI1_BN` (Lexmark): formato real y vista previa con GhostPCL/Ghostscript.
 - **P7** `LAIMI 2 - Etiquetas`: formato real.
 - **P8** Operador sin "Administrar documentos": debe ver el mensaje de permiso.

@@ -247,6 +247,7 @@ X(MediaGlossy, L"Brillante", L"Glossy")
 X(MediaDriver, L"Tipo propio del controlador (%lu)", L"Driver-specific type (%lu)")
 X(SourcePjl, L"PJL", L"PJL")
 X(SourceEjl, L"EJL de Epson", L"Epson EJL")
+X(SourceEjlVerified, L"EJL de Epson (verificado con el controlador %ls)", L"Epson EJL (verified with the %ls driver)")
 X(SourcePrintTicket, L"PrintTicket XPS", L"XPS PrintTicket")
 X(SourceDsc, L"Comentarios DSC de PostScript", L"PostScript DSC comments")
 X(OriginDevMode, L"DEVMODE del trabajo (%ls)", L"Job DEVMODE (%ls)")
@@ -268,9 +269,15 @@ X(ValueDevModeChanges, L"Sí: la configuración cambia entre páginas; se muestr
 X(OriginSpoolerPages, L"JOB_INFO_2.TotalPages", L"JOB_INFO_2.TotalPages")
 X(OriginContentPages, L"Páginas contadas en los datos (%ls)", L"Pages counted in the data (%ls)")
 X(OriginContentRepeat, L"Secuencia de páginas repetida en los datos", L"Repeated page sequence in the data")
-X(OriginPdlCounter, L"Contador del controlador en los datos (EJL «JI PAGES»)",
-  L"Driver counter in the data (EJL \"JI PAGES\")")
+X(OriginDriverSheets, L"Hojas que declaró el controlador en los datos (EJL «JI PAGES»; incluye copias y doble cara)",
+  L"Sheets declared by the driver in the data (EJL \"JI PAGES\"; includes copies and duplex)")
 X(OriginAssumed, L"Supuesto", L"Assumed")
+X(OriginSidesFromSheets, L"A una cara, las caras son las hojas que declaró el controlador (EJL «JI PAGES»)",
+  L"One-sided: the sides are the sheets declared by the driver (EJL \"JI PAGES\")")
+X(NoteSheetsMismatch, L"El cálculo con páginas y copias daba %u: se usa el dato del controlador (p. ej. varias páginas por hoja)",
+  L"The calculation from pages and copies gave %u: the driver figure is used (e.g. several pages per sheet)")
+X(NoteDriverSheetsHint, L"El controlador declara %u hojas (indicio)", L"The driver declares %u sheets (hint)")
+X(SheetDriverSheets, L"Hojas según el controlador", L"Sheets according to the driver")
 X(OriginSinglePage, L"Una sola página lógica ocupa una cara por copia con cualquier N-up",
   L"A single logical page takes one side per copy with any N-up")
 X(OriginCalcSides, L"Cálculo: %u cara(s) por copia × %u copia(s)", L"Calculation: %u side(s) per copy × %u copy(ies)")
