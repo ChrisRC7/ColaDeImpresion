@@ -14,6 +14,9 @@ std::wstring FormatBytes(std::uint64_t bytes);
 // Hora local corta: "14:05" si es hoy, "18/09 14:05" si es otro día.
 std::wstring FormatTimeShort(const SYSTEMTIME& utc);
 
+// Fecha y hora local "02/10/2026 14:05" (columna "Enviado" de la lista).
+std::wstring FormatDateTime(const SYSTEMTIME& utc);
+
 // Fecha y hora ISO local "2026-09-19 14:05:33" (para historial).
 std::wstring FormatTimeIso(const SYSTEMTIME& utc);
 

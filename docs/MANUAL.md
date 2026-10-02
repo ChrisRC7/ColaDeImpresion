@@ -16,7 +16,9 @@ el servidor, problemas de impresoras y si la actualización es **en vivo** o por
 La cola es una **tabla** como la de Windows. Columnas: `#` (posición en la
 cola), **Documento**, **Estado**, **Usuario**, **Equipo** (la PC desde la que
 se envió), **Impresora** (en la vista "Todas"), **Páginas**, **Papel**,
-**Orientación**, **Doble cara**, **Origen del papel**, **Tamaño** y **Enviado**.
+**Orientación**, **Doble cara**, **Origen del papel**, **Tamaño** y **Enviado**
+(fecha y hora de envío). Desde Estado en adelante los valores van centrados
+bajo su título.
 
 - **Ordenar:** un clic en el encabezado de una columna ordena por ella; otro
   clic invierte el orden (la flecha del encabezado lo indica). Un clic en `#`

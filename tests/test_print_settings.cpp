@@ -20,6 +20,7 @@
 #include "preview/SpoolFile.h"
 #include "preview/TempFiles.h"
 #include "preview/XpsPackage.h"
+#include "util/Format.h"
 
 using namespace cola;
 using core::Reliability;
@@ -539,6 +540,20 @@ TEST(TotalPrintPagesIsPagesTimesCopies) {
         if (columns[i].label == L"Páginas") CHECK_EQ(row.cells[i], std::wstring(L"9"));
     CHECK_EQ(app::MakeJobRow(job, true, &facts).cells.size(), app::JobColumns(true).size());
     CHECK(app::HistoryColumns().size() == app::MakeHistoryRow(config::HistoryEntry{}, 0).cells.size());
+}
+
+TEST(SubmittedShowsDateAndTime) {
+    SYSTEMTIME utc{};
+    CHECK(util::FormatDateTime(utc).empty());  // sin fecha
+    utc.wYear = 2026;
+    utc.wMonth = 10;
+    utc.wDay = 2;
+    utc.wHour = 18;
+    utc.wMinute = 5;
+    std::wstring text = util::FormatDateTime(utc);  // hora local: "dd/mm/aaaa hh:mm"
+    CHECK_EQ(text.size(), static_cast<size_t>(16));
+    CHECK(text[2] == L'/' && text[5] == L'/' && text[10] == L' ' && text[13] == L':');
+    CHECK(text.find(L"/2026 ") != std::wstring::npos);
 }
 
 TEST(ColumnClickSortsLikeWindowsQueue) {

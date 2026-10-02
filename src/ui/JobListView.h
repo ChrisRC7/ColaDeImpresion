@@ -20,10 +20,12 @@
 
 namespace cola::ui {
 
+enum class Align { Left, Center, Right };
+
 struct ListColumn {
     std::wstring label;
     int width = 0;          // en DIP; 0 = flexible (ocupa el espacio que sobre)
-    bool alignRight = false;
+    Align align = Align::Left;  // del encabezado y de los valores
     bool pill = false;      // la celda se dibuja como insignia de estado (con el tono de la fila)
     bool emphasis = false;  // texto principal de la fila (semibold)
     int sortId = -1;        // identificador que se devuelve al hacer clic; -1 = no ordenable

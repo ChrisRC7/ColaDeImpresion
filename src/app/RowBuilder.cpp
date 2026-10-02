@@ -272,38 +272,41 @@ std::wstring TotalPagesText(const PrintTotal& total) {
 }
 
 std::vector<ui::ListColumn> JobColumns(bool showPrinter) {
+    using ui::Align;
     auto id = [](SortBy s) { return static_cast<int>(s); };
     std::vector<ui::ListColumn> columns;
-    //               texto              ancho  derecha pill   énfasis orden                 ocultar
+    // Desde Estado en adelante los valores van centrados bajo su título.
     // En ventanas angostas se ocultan primero las de número mayor: #, Impresora,
     // Tamaño, Enviado, Origen, Orientación, Doble cara, Papel. Usuario, Equipo
     // (de qué PC se envió) y Páginas se mantienen: son las que más usa el operador.
-    columns.push_back({Tr(S::ColNumber), 30, true, false, false, id(SortBy::Queue), 12});
-    columns.push_back({Tr(S::ColDocument), 0, false, false, true, id(SortBy::Document), 0});
-    columns.push_back({Tr(S::ColStatus), 104, false, true, false, id(SortBy::Status), 0});
-    columns.push_back({Tr(S::ColUser), 100, false, false, false, id(SortBy::User), 2});
-    columns.push_back({Tr(S::ColMachine), 100, false, false, false, id(SortBy::Machine), 3});
-    if (showPrinter) columns.push_back({Tr(S::ColPrinter), 120, false, false, false, id(SortBy::Printer), 11});
-    columns.push_back({Tr(S::ColPages), 78, true, false, false, id(SortBy::Pages), 1});
-    columns.push_back({Tr(S::ColPaper), 84, false, false, false, id(SortBy::Paper), 4});
-    columns.push_back({Tr(S::ColOrientation), 96, false, false, false, id(SortBy::Orientation), 6});
-    columns.push_back({Tr(S::ColDuplex), 96, false, false, false, id(SortBy::Duplex), 5});
-    columns.push_back({Tr(S::ColSource), 130, false, false, false, id(SortBy::Source), 7});
-    columns.push_back({Tr(S::ColSize), 70, true, false, false, id(SortBy::Size), 10});
-    columns.push_back({Tr(S::ColSubmitted), 76, false, false, false, id(SortBy::Time), 9});
+    //               texto                 ancho alineación     pill   énfasis orden                     ocultar
+    columns.push_back({Tr(S::ColNumber), 30, Align::Right, false, false, id(SortBy::Queue), 12});
+    columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, id(SortBy::Document), 0});
+    columns.push_back({Tr(S::ColStatus), 104, Align::Center, true, false, id(SortBy::Status), 0});
+    columns.push_back({Tr(S::ColUser), 100, Align::Center, false, false, id(SortBy::User), 2});
+    columns.push_back({Tr(S::ColMachine), 100, Align::Center, false, false, id(SortBy::Machine), 3});
+    if (showPrinter) columns.push_back({Tr(S::ColPrinter), 120, Align::Center, false, false, id(SortBy::Printer), 11});
+    columns.push_back({Tr(S::ColPages), 78, Align::Center, false, false, id(SortBy::Pages), 1});
+    columns.push_back({Tr(S::ColPaper), 84, Align::Center, false, false, id(SortBy::Paper), 4});
+    columns.push_back({Tr(S::ColOrientation), 96, Align::Center, false, false, id(SortBy::Orientation), 6});
+    columns.push_back({Tr(S::ColDuplex), 96, Align::Center, false, false, id(SortBy::Duplex), 5});
+    columns.push_back({Tr(S::ColSource), 130, Align::Center, false, false, id(SortBy::Source), 7});
+    columns.push_back({Tr(S::ColSize), 72, Align::Center, false, false, id(SortBy::Size), 10});
+    columns.push_back({Tr(S::ColSubmitted), 124, Align::Center, false, false, id(SortBy::Time), 9});
     return columns;
 }
 
 std::vector<ui::ListColumn> HistoryColumns() {
+    using ui::Align;
     std::vector<ui::ListColumn> columns;
-    columns.push_back({Tr(S::ColDocument), 0, false, false, true, -1, 0});
-    columns.push_back({Tr(S::ColResult), 118, false, true, false, -1, 0});
-    columns.push_back({Tr(S::ColUser), 118, false, false, false, -1, 3});
-    columns.push_back({Tr(S::ColMachine), 118, false, false, false, -1, 5});
-    columns.push_back({Tr(S::ColPrinter), 130, false, false, false, -1, 4});
-    columns.push_back({Tr(S::ColPages), 64, true, false, false, -1, 1});
-    columns.push_back({Tr(S::ColSize), 74, true, false, false, -1, 2});
-    columns.push_back({Tr(S::ColTime), 136, false, false, false, -1, 2});
+    columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, -1, 0});
+    columns.push_back({Tr(S::ColResult), 118, Align::Center, true, false, -1, 0});
+    columns.push_back({Tr(S::ColUser), 118, Align::Center, false, false, -1, 3});
+    columns.push_back({Tr(S::ColMachine), 118, Align::Center, false, false, -1, 5});
+    columns.push_back({Tr(S::ColPrinter), 130, Align::Center, false, false, -1, 4});
+    columns.push_back({Tr(S::ColPages), 64, Align::Center, false, false, -1, 1});
+    columns.push_back({Tr(S::ColSize), 74, Align::Center, false, false, -1, 2});
+    columns.push_back({Tr(S::ColTime), 136, Align::Center, false, false, -1, 2});
     return columns;
 }
 
@@ -328,7 +331,7 @@ ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::C
     row.cells.push_back(settings.duplex);
     row.cells.push_back(settings.source);
     row.cells.push_back(util::FormatBytes(job.sizeBytes));
-    row.cells.push_back(util::FormatTimeShort(job.submitted));
+    row.cells.push_back(util::FormatDateTime(job.submitted));  // fecha y hora completas
     row.tone = job.heldByApp ? ui::Tone::Special : ui::ToneForState(job.state);
     row.glyph = GlyphForState(job.state);
     return row;

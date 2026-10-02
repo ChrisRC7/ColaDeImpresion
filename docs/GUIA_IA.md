@@ -124,6 +124,7 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **Word por COM desde PowerShell 5.1**: los métodos exigen `[ref]` y los valores llegan envueltos en `PSObject`; usar `InvokeMember` con valores desenvueltos (ver `tools/pruebas/word_jobs.ps1`) y guardar los `.ps1` con BOM UTF-8.
 - **Probar una compilación con la versión de producción abierta**: la app es de instancia única; usar `--instancia-adicional` con `build\portable.txt` y un `config.json` propio (escribirlo con una biblioteca JSON: las barras invertidas de las rutas se rompen fácilmente). Con la configuración por defecto la app activa la retención y pausa impresoras al iniciar.
 - **Caché de las conexiones a impresoras compartidas**: por el nombre de la conexión (`\\srv\Cola`) `EnumJobs`/`GetPrinter` responden desde la caché del cliente aunque se use `PRINTER_OPTION_NO_CACHE`; para la verdad del servidor abrir con el nombre DNS completo (`spooler::CacheBypassName`). Medir el tiempo de la llamada delata la caché (< 1 ms).
+- **Capturas de la app sin robar el foco**: si el usuario está escribiendo, una ventana que se abre en primer plano recibe sus teclas (`Espacio`/`Enter` abren la vista rápida). Lanzar con `--instancia-adicional --tray` y mostrar la ventana con `ShowWindow(h, SW_SHOWNOACTIVATE)` antes de `PrintWindow`.
 - **Vista "Este equipo"**: incluye las conexiones a impresoras del servidor, así que muestra (y puede leer) trabajos reales de estudiantes.
 
 ## 7. Cómo verificar en la app real

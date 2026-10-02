@@ -325,16 +325,19 @@ void JobListView::PaintHeader(HDC dc, const RECT& client) {
             gfx::FillRounded(dc, h, style.Px(4), pal.hover);
         }
         const COLORREF color = sorted ? pal.text : pal.textMuted;
+        HFONT font = sorted ? fonts.semibold : fonts.small;
+        // Texto + flecha (si está ordenada) como un bloque alineado igual que los valores.
         const int arrow = sorted ? style.Px(14) : 0;
-        RECT text{slot.left, bar.top, slot.right - arrow, bar.bottom};
-        if (column.alignRight) text = {slot.left, bar.top, slot.right - arrow, bar.bottom};
-        gfx::Text(dc, column.label, text, sorted ? fonts.semibold : fonts.small, color,
-                  (column.alignRight ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        const int textW = std::min<int>(gfx::MeasureText(dc, column.label, font).cx, slot.right - slot.left - arrow);
+        int textLeft = slot.left;
+        if (column.align == Align::Right) textLeft = slot.right - arrow - textW;
+        else if (column.align == Align::Center) textLeft = (slot.left + slot.right - textW - arrow) / 2;
+        textLeft = std::max(textLeft, static_cast<int>(slot.left));
+        RECT text{textLeft, bar.top, textLeft + textW, bar.bottom};
+        gfx::Text(dc, column.label, text, font, color,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         if (sorted) {
-            // Flecha junto al texto (a su derecha).
-            SIZE size = gfx::MeasureText(dc, column.label, fonts.semibold);
-            int ax = column.alignRight ? slot.right - arrow : std::min<int>(slot.left + size.cx + style.Px(2), slot.right - arrow);
-            RECT a{ax, bar.top, ax + arrow, bar.bottom};
+            RECT a{text.right + style.Px(1), bar.top, text.right + style.Px(1) + arrow, bar.bottom};
             gfx::Glyph(dc, sortDescending_ ? kGlyphSortDown : kGlyphSortUp, a, fonts.iconSmall, pal.accent);
         }
     }
@@ -369,7 +372,10 @@ void JobListView::PaintRow(HDC dc, int index, const RECT& r, const std::vector<S
         if (column.pill) {
             SIZE size = gfx::MeasureText(dc, cell, fonts.small);
             int w = std::min<int>(size.cx + style.Px(20), slot.right - slot.left);
-            RECT pill{slot.left, cy - style.Px(11), slot.left + w, cy + style.Px(11)};
+            int left = slot.left;
+            if (column.align == Align::Center) left = (slot.left + slot.right - w) / 2;
+            else if (column.align == Align::Right) left = slot.right - w;
+            RECT pill{left, cy - style.Px(11), left + w, cy + style.Px(11)};
             gfx::FillRounded(dc, pill, style.Px(11), selected ? pal.surface : pal.ToneBackground(row.tone));
             gfx::Text(dc, cell, gfx::Inset(pill, style.Px(6), 0), fonts.small, toneColor,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
@@ -378,7 +384,8 @@ void JobListView::PaintRow(HDC dc, int index, const RECT& r, const std::vector<S
         RECT cellRect{slot.left, r.top, slot.right, r.bottom};
         gfx::Text(dc, cell, cellRect, column.emphasis ? fonts.semibold : fonts.normal,
                   column.emphasis ? textColor : mutedColor,
-                  (column.alignRight ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                  (column.align == Align::Right ? DT_RIGHT : column.align == Align::Center ? DT_CENTER : DT_LEFT) |
+                      DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
 }
 

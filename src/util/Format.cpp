@@ -33,6 +33,12 @@ std::wstring FormatTimeShort(const SYSTEMTIME& utc) {
     return Format(L"%02u/%02u %02u:%02u", local.wDay, local.wMonth, local.wHour, local.wMinute);
 }
 
+std::wstring FormatDateTime(const SYSTEMTIME& utc) {
+    if (utc.wYear == 0) return L"";
+    SYSTEMTIME l = ToLocal(utc);
+    return Format(L"%02u/%02u/%04u %02u:%02u", l.wDay, l.wMonth, l.wYear, l.wHour, l.wMinute);
+}
+
 std::wstring FormatTimeIso(const SYSTEMTIME& utc) {
     if (utc.wYear == 0) return L"";
     SYSTEMTIME l = ToLocal(utc);
