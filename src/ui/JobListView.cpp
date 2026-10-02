@@ -69,7 +69,7 @@ void JobListView::SetSortIndicator(int sortId, bool descending) {
 std::vector<JobListView::Slot> JobListView::Layout(int width) const {
     const auto& style = Style::Get();
     const int gap = style.Px(12);
-    const int left = style.Px(12) + style.Px(32);  // margen + ícono de estado
+    const int left = style.Px(18);  // margen (el estado se ve en su columna, sin ícono aparte)
     const int right = width - style.Px(16);
     const int flexMin = style.Px(140);
 
@@ -354,18 +354,12 @@ void JobListView::PaintRow(HDC dc, int index, const RECT& r, const std::vector<S
     else if (index == hover_) gfx::FillRounded(dc, card, style.Px(6), pal.hover);
     if (focused && !selected) gfx::StrokeRounded(dc, card, style.Px(6), pal.accent);
     if (!selected && index != hover_ && index + 1 < RowCount() && !selected_.count(rows_[static_cast<size_t>(index + 1)].key))
-        gfx::HLine(dc, r.left + pad + style.Px(28), r.right - pad, r.bottom - 1, pal.border);
+        gfx::HLine(dc, r.left + pad, r.right - pad, r.bottom - 1, pal.border);
 
     const COLORREF textColor = selected ? pal.selectionText : pal.text;
     const COLORREF mutedColor = selected ? Blend(pal.selectionText, pal.selection, 0.3) : pal.textMuted;
     const COLORREF toneColor = pal.ToneColor(row.tone);
-
-    // Indicador de estado.
-    int x = r.left + pad + style.Px(4);
-    int cy = (r.top + r.bottom) / 2;
-    RECT iconRect{x, cy - style.Px(10), x + style.Px(20), cy + style.Px(10)};
-    if (row.glyph) gfx::Glyph(dc, row.glyph, iconRect, fonts.icon, toneColor);
-    else gfx::FillCircle(dc, x + style.Px(10), cy, style.Px(4), toneColor);
+    const int cy = (r.top + r.bottom) / 2;
 
     for (const auto& slot : slots) {
         const ListColumn& column = columns_[slot.column];

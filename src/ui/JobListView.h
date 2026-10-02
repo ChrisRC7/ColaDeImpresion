@@ -1,7 +1,7 @@
 #pragma once
 // Lista de trabajos (control propio) en forma de tabla, como la cola de
 // Windows: un encabezado con columnas y una fila por trabajo.
-//   [●]  #  Documento            Estado     Usuario   Equipo   Páginas  Tamaño  Enviado
+//   #  Documento            Estado     Usuario   Equipo   Páginas  Tamaño  Enviado
 // Un clic en el encabezado de una columna ordenable avisa por callback
 // (sortClicked) y la columna muestra la flecha del orden actual. Soporta
 // selección múltiple (Ctrl/Shift + clic, Shift + flechas, arrastre con el botón
@@ -34,7 +34,7 @@ struct ListRow {
     std::wstring key;
     std::vector<std::wstring> cells;  // una por columna, en el mismo orden
     Tone tone = Tone::Neutral;
-    wchar_t glyph = 0;  // ícono de estado (0 = punto)
+    wchar_t glyph = 0;  // ícono del estado (no se dibuja en la tabla: el estado tiene su columna)
 };
 
 class JobListView : public Window {
