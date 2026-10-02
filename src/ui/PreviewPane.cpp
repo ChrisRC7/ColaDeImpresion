@@ -28,6 +28,8 @@ bool PreviewPane::Create(HWND parent) {
 void PreviewPane::ShowEmpty(const std::wstring& message) {
     mode_ = Mode::Empty;
     doc_.reset();
+    sheet_.clear();
+    sheetScroll_ = 0;
     emptyMessage_ = message;
     title_.clear();
     details_.clear();
@@ -37,6 +39,7 @@ void PreviewPane::ShowEmpty(const std::wstring& message) {
 void PreviewPane::ShowLoading(const std::wstring& title, const std::vector<std::wstring>& details) {
     if (mode_ != Mode::Loading || title != title_) {
         page_ = 0;
+        sheetScroll_ = 0;
         ZoomReset();
     }
     mode_ = Mode::Loading;
@@ -50,6 +53,7 @@ void PreviewPane::ShowDocument(const std::wstring& title, const std::vector<std:
                                preview::DocumentPtr doc) {
     bool sameDocument = mode_ == Mode::Document && title == title_ && doc_ && doc &&
                         doc_->format == doc->format;
+    if (title != title_) sheetScroll_ = 0;
     mode_ = Mode::Document;
     doc_ = std::move(doc);
     title_ = title;
@@ -69,9 +73,32 @@ void PreviewPane::SetInfo(const std::wstring& title, const std::vector<std::wstr
     Invalidate();
 }
 
+void PreviewPane::SetSheet(std::vector<InfoRow> rows) {
+    sheet_ = std::move(rows);
+    if (tab_ == Tab::Sheet) Invalidate();
+}
+
+void PreviewPane::SetTab(Tab tab) {
+    if (tab_ == tab) return;
+    tab_ = tab;
+    dragging_ = false;
+    Invalidate();
+}
+
+void PreviewPane::ScrollSheet(int delta) {
+    const int visible = gfx::Height(PageArea());
+    const int maxScroll = std::max(0, sheetContent_ - visible);
+    sheetScroll_ = std::clamp(sheetScroll_ - delta, 0, maxScroll);
+    Invalidate();
+}
+
 int PreviewPane::PageCount() const { return doc_ ? static_cast<int>(doc_->pages.size()) : 0; }
 
 void PreviewPane::NextPage() {
+    if (tab_ == Tab::Sheet) {  // en la ficha, avanza una pantalla
+        ScrollSheet(-gfx::Height(PageArea()) * 4 / 5);
+        return;
+    }
     if (page_ + 1 < PageCount()) {
         ++page_;
         pan_ = {0, 0};
@@ -80,6 +107,10 @@ void PreviewPane::NextPage() {
 }
 
 void PreviewPane::PrevPage() {
+    if (tab_ == Tab::Sheet) {
+        ScrollSheet(gfx::Height(PageArea()) * 4 / 5);
+        return;
+    }
     if (page_ > 0) {
         --page_;
         pan_ = {0, 0};
@@ -161,9 +192,103 @@ int PreviewPane::PaintHeader(HDC dc, const RECT& client) {
         gfx::Text(dc, line, r, style.fonts().small, pal.textMuted, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
         y += h + style.Px(2);
     }
-    y += style.Px(10);
+    y += style.Px(4);
+    y += PaintTabs(dc, client, y);
     gfx::HLine(dc, client.left, client.right, y - 1, pal.border);
     return y - client.top;
+}
+
+int PreviewPane::PaintTabs(HDC dc, const RECT& client, int top) {
+    const auto& style = Style::Get();
+    const auto& pal = style.palette();
+    const int height = style.Px(30);
+    int x = client.left + style.Px(14);
+    auto tab = [&](const wchar_t* text, bool selected, RECT& out) {
+        SIZE size = gfx::MeasureText(dc, text, style.fonts().semibold);
+        out = {x, top, x + size.cx + style.Px(16), top + height};
+        gfx::Text(dc, text, out, style.fonts().semibold, selected ? pal.text : pal.textMuted,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (selected) {
+            RECT bar{out.left + style.Px(4), out.bottom - style.Px(3), out.right - style.Px(4), out.bottom - style.Px(1)};
+            gfx::FillRounded(dc, bar, style.Px(1), pal.accent);
+        }
+        x = out.right + style.Px(4);
+    };
+    tab(Tr(S::PreviewTabPreview), tab_ == Tab::Preview, tabPreview_);
+    tab(Tr(S::PreviewTabSheet), tab_ == Tab::Sheet, tabSheet_);
+    return height;
+}
+
+void PreviewPane::PaintSheet(HDC dc, const RECT& area) {
+    const auto& style = Style::Get();
+    const auto& pal = style.palette();
+    gfx::Fill(dc, area, pal.surface);
+    if (sheet_.empty()) {
+        sheetContent_ = 0;
+        PaintMessage(dc, area, glyph::Document, Tr(S::SheetEmpty));
+        return;
+    }
+    const int pad = style.Px(18);
+    const int width = gfx::Width(area) - pad * 2;
+    const int labelWidth = std::min(style.Px(170), width * 38 / 100);
+    const UINT wrap = DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX;
+    int saved = SaveDC(dc);
+    IntersectClipRect(dc, area.left, area.top, area.right, area.bottom);
+    int y = area.top + style.Px(8) - sheetScroll_;
+    bool first = true;
+    for (const auto& row : sheet_) {
+        if (row.kind == InfoRow::Kind::Section) {
+            if (!first) y += style.Px(10);
+            RECT r{area.left + pad, y, area.right - pad, y + style.Px(24)};
+            gfx::Text(dc, row.label, r, style.fonts().semibold, pal.text);
+            gfx::HLine(dc, area.left + pad, area.right - pad, r.bottom, pal.border);
+            y = r.bottom + style.Px(6);
+            first = false;
+            continue;
+        }
+        first = false;
+        const int left = area.left + pad;
+        const int valueX = left + labelWidth + style.Px(10);
+        int badgeWidth = 0;
+        if (!row.badge.empty()) badgeWidth = gfx::MeasureText(dc, row.badge, style.fonts().small).cx + style.Px(16);
+        const int valueWidth = std::max<int>(style.Px(40), area.right - pad - valueX - (badgeWidth ? badgeWidth + style.Px(8) : 0));
+        const int detailWidth = std::max<int>(style.Px(40), area.right - pad - valueX);
+        int labelHeight = gfx::MeasureWrapped(dc, row.label, style.fonts().small, labelWidth);
+        int valueHeight = gfx::MeasureWrapped(dc, row.value, style.fonts().normal, valueWidth);
+        int detailHeight = row.detail.empty() ? 0 : gfx::MeasureWrapped(dc, row.detail, style.fonts().small, detailWidth);
+        int rowHeight = std::max({labelHeight, valueHeight, badgeWidth ? style.Px(20) : 0}) +
+                        (detailHeight ? detailHeight + style.Px(2) : 0) + style.Px(8);
+        if (y + rowHeight >= area.top && y <= area.bottom) {
+            gfx::Text(dc, row.label, RECT{left, y + style.Px(1), left + labelWidth, y + labelHeight + style.Px(1)},
+                      style.fonts().small, pal.textMuted, wrap);
+            gfx::Text(dc, row.value, RECT{valueX, y, valueX + valueWidth, y + valueHeight}, style.fonts().normal,
+                      pal.text, wrap);
+            if (badgeWidth) {
+                RECT pill{area.right - pad - badgeWidth, y, area.right - pad, y + style.Px(20)};
+                gfx::FillRounded(dc, pill, style.Px(10), pal.ToneBackground(row.badgeTone));
+                gfx::Text(dc, row.badge, pill, style.fonts().small, pal.ToneColor(row.badgeTone),
+                          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            }
+            if (detailHeight) {
+                int top = y + std::max({labelHeight, valueHeight, badgeWidth ? style.Px(20) : 0}) + style.Px(2);
+                gfx::Text(dc, row.detail, RECT{valueX, top, valueX + detailWidth, top + detailHeight},
+                          style.fonts().small, pal.textMuted, wrap);
+            }
+        }
+        y += rowHeight;
+    }
+    RestoreDC(dc, saved);
+    sheetContent_ = y + sheetScroll_ - area.top + style.Px(12);
+    // Indicador de desplazamiento si la ficha no cabe.
+    const int visible = gfx::Height(area);
+    if (sheetContent_ > visible) {
+        int trackHeight = visible - style.Px(8);
+        int thumb = std::max(style.Px(24), trackHeight * visible / sheetContent_);
+        int maxScroll = sheetContent_ - visible;
+        int thumbTop = area.top + style.Px(4) + (trackHeight - thumb) * std::min(sheetScroll_, maxScroll) / maxScroll;
+        RECT bar{area.right - style.Px(6), thumbTop, area.right - style.Px(3), thumbTop + thumb};
+        gfx::FillRounded(dc, bar, style.Px(1), pal.border);
+    }
 }
 
 void PreviewPane::PaintMessage(HDC dc, const RECT& area, wchar_t glyph, const std::wstring& text) {
@@ -195,6 +320,11 @@ void PreviewPane::PaintFooter(HDC dc, const RECT& footer) {
     gfx::Fill(dc, footer, pal.surface);
     gfx::HLine(dc, footer.left, footer.right, footer.top, pal.border);
     prevButton_ = nextButton_ = RECT{};
+    if (tab_ == Tab::Sheet) {
+        RECT hint{footer.left + style.Px(14), footer.top, footer.right - style.Px(14), footer.bottom};
+        gfx::Text(dc, Tr(S::SheetLegend), hint, style.fonts().small, pal.textMuted);
+        return;
+    }
     if (mode_ != Mode::Document || PageCount() == 0) return;
 
     const int btn = style.Px(30);
@@ -237,6 +367,10 @@ void PreviewPane::Paint(HDC dc, const RECT& client) {
     RECT footer{client.left, area.bottom, client.right, client.bottom};
     PaintFooter(dc, footer);
 
+    if (tab_ == Tab::Sheet) {
+        PaintSheet(dc, area);
+        return;
+    }
     if (mode_ == Mode::Loading) {
         PaintMessage(dc, area, glyph::Clock, Tr(S::PreviewLoading));
         return;
@@ -287,6 +421,10 @@ LRESULT PreviewPane::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_MOUSEWHEEL: {
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            if (tab_ == Tab::Sheet) {
+                ScrollSheet(MulDiv(delta, Style::Get().Px(60), WHEEL_DELTA));
+                return 0;
+            }
             if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
                 SetZoom(zoom_ * (delta > 0 ? kZoomStep : 1.0 / kZoomStep));
             } else if (zoom_ > 1.0) {
@@ -308,6 +446,15 @@ LRESULT PreviewPane::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_LBUTTONDOWN: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (mode_ != Mode::Empty && gfx::Contains(tabPreview_, pt)) {
+                SetTab(Tab::Preview);
+                return 0;
+            }
+            if (mode_ != Mode::Empty && gfx::Contains(tabSheet_, pt)) {
+                SetTab(Tab::Sheet);
+                return 0;
+            }
+            if (tab_ == Tab::Sheet) return 0;
             if (gfx::Contains(prevButton_, pt)) {
                 PrevPage();
                 return 0;
@@ -339,6 +486,7 @@ LRESULT PreviewPane::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
         case WM_LBUTTONDBLCLK:
+            if (tab_ == Tab::Sheet) return 0;
             if (zoom_ != 1.0) ZoomReset();
             else SetZoom(2.0);
             return 0;

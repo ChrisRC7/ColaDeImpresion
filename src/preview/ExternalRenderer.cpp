@@ -4,11 +4,11 @@
 #include <shlwapi.h>
 
 #include <algorithm>
-#include <atomic>
 
 #include "config/Paths.h"
 #include "preview/ImageLoader.h"
 #include "preview/SpoolFile.h"
+#include "preview/TempFiles.h"
 #include "util/Log.h"
 #include "util/Strings.h"
 
@@ -56,14 +56,6 @@ std::wstring FindExecutable(const std::vector<std::wstring>& names) {
         if (SearchPathW(nullptr, name.c_str(), nullptr, MAX_PATH, found, nullptr)) return found;
     }
     return L"";
-}
-
-std::wstring TempDir() {
-    wchar_t temp[MAX_PATH] = {};
-    GetTempPathW(MAX_PATH, temp);
-    std::wstring dir = std::wstring(temp) + L"ColaDeImpresion";
-    config::EnsureDirectory(dir);
-    return dir;
 }
 
 bool WriteAll(const std::wstring& path, const std::uint8_t* data, size_t size) {
@@ -156,8 +148,12 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
     // Ghostscript no entiende PJL: se lo quitamos a PS/PDF. GhostPCL sí lo procesa.
     size_t skip = (format == DataFormat::PostScript || format == DataFormat::Pdf) ? SkipPjlHeader(data, size) : 0;
 
-    static std::atomic<unsigned> counter{0};
-    const std::wstring base = TempDir() + util::Format(L"\\r%lu_%u", GetCurrentProcessId(), ++counter);
+    // Carpeta privada del proceso (solo el usuario actual); los archivos se borran al terminar.
+    const std::wstring base = NewTempPath(L"");
+    if (base.empty()) {
+        result.error = util::Win32ErrorMessage(ERROR_ACCESS_DENIED);
+        return result;
+    }
     const std::wstring input = base + ExtensionFor(format);
     const std::wstring outputPattern = base + L"_p%03d.png";
     if (!WriteAll(input, data + skip, size - skip)) {

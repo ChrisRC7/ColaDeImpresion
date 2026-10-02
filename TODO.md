@@ -69,9 +69,28 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Localizar el spool con *spool file pooling* (`FPnnnnn.SPL` vía `.SHD`)
 - [x] Localización del spool más robusta: rutas locales cuando la app corre en el propio servidor, carpeta propia de cada cola (`SpoolDirectory`), búsqueda en los `.SHD` solo por id cuando el nombre del documento no coincide, y errores de lectura que antes se ignoraban
 - [x] Explicar por qué no hay vista previa: el panel y `app.log` listan las carpetas probadas y el motivo de cada fallo (antes siempre decía "el archivo de spool ya no existe")
-- [ ] (LAIMI) Verificar lectura del spool por `\\SERVIDOR\C$` / `ADMIN$` y con trabajos PCL/PS reales
+- [x] Leer los datos del trabajo con la API del spooler (`OpenPrinter("Cola,Job N")` + `ReadPrinter`) en lugar de la carpeta de spool: sin administrador ni `C$`, sin choques con los bloqueos del spooler (verificado en remoto contra `vtec-laimiprint`)
+- [x] Detectar ESC/Page / ESC/P-R de Epson (antes se tomaba por PCL) y explicar que no tiene vista previa
+- [x] Temporales de vista previa en carpeta privada (DACL solo del usuario), borrados al usar, al salir y al iniciar
+- [ ] (LAIMI) Verificar trabajos PCL/PS reales (`LAIMI1_BN`) y la cola de etiquetas
+- [ ] Vista previa universal: piloto de "renderizar siempre en el servidor" en una cola (ver `docs/DATOS_DE_IMPRESION.md` §11; requiere administrador del dominio/servidor)
 - [ ] Renderizar XPS sin GhostXPS (p. ej. con PDFium/otra biblioteca, o convertir XPS→PDF)
 - [ ] Miniaturas pequeñas en la lista de trabajos (opcional)
+
+---
+
+## 2b. Configuración de impresión por trabajo
+
+- [x] Datos de `JOB_INFO_2` completos (ID, documento, usuario, equipo, impresora, estado, fecha, tamaño, TotalPages, PagesPrinted, pDatatype, controlador, procesador, pParameters)
+- [x] DEVMODE **del trabajo** validado (`dmFields` + `dmSize`): papel (`dmPaperSize`, `dmFormName`, `dmPaperWidth/Length` en décimas de mm), orientación, doble cara, copias, intercalado, color, origen, calidad, escala, tipo de medio
+- [x] DEVMODE efectivo de los trabajos EMF tomado del spool (`EMRI_DEVMODE`): `JOB_INFO_2.pDevMode` puede estar desactualizado (Word)
+- [x] Opciones declaradas en los datos: PrintTicket XPS, DSC de PostScript, PJL (documentados) y EJL de Epson (indicio)
+- [x] Páginas en los datos / páginas lógicas / copias / caras / hojas previstas con fiabilidad (Fiable / Estimado / No determinable) y motivo; detección de páginas repetidas por la aplicación
+- [x] Pestaña "Configuración" (`F7`) en el panel y resumen de una línea en el encabezado
+- [x] `cola_jobinspect` (ficha en consola, `--hold`, `--release`, `--csv`) y serie de pruebas de Word (`tools/pruebas`)
+- [x] Matriz de pruebas con Word, Acrobat, Chrome, Edge y RAW (`docs/DATOS_DE_IMPRESION.md`)
+- [ ] (LAIMI) Pruebas P1–P8: qué refleja el DEVMODE del servidor en trabajos RAW de las Epson; significado de `CO`/`QT` del EJL (si se confirma, interpretarlos)
+- [ ] Mostrar copias / caras previstas también como columna de la lista (opcional)
 
 ---
 
@@ -92,6 +111,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Elegir y reasignar atajos también con el mouse (clic para elegir; segundo clic, doble clic o clic en la tecla para reasignar)
 - [x] Panel de atajos agrupado por temas y con barra de desplazamiento (todos los comandos, incluidos los de pausa de impresora, se pueden reasignar ahí)
 - [x] Selección múltiple arrastrando con el botón izquierdo (rectángulo como en el Explorador) y poder quedarse sin selección (`Esc`, `Ctrl+Shift+A` o clic en el vacío)
+- [x] `F7`: alternar vista previa / configuración de impresión del trabajo
 - [x] `F6` / `Shift+F6`: cambiar e invertir el orden de la cola; `Ctrl+Shift+F`: fijar/quitar la impresora del acceso rápido; `Ctrl+1`…`Ctrl+9`: impresoras del acceso rápido (teclas fijas)
 
 ---
@@ -131,8 +151,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 44 pruebas)
-- [x] Herramienta para generar trabajos de prueba (`tools/testjob.cpp`)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 62 pruebas)
+- [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)
 - [ ] (LAIMI) Probar comportamiento cuando la impresora se desconecta a mitad de un trabajo

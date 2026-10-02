@@ -40,6 +40,7 @@ const CommandInfo kCommandTable[] = {
     {Command::ZoomOut, L"zoomOut", S::CmdZoomOut, L"Ctrl+Minus"},
     {Command::ZoomReset, L"zoomReset", S::CmdZoomReset, L"Ctrl+0"},
     {Command::TogglePane, L"togglePane", S::CmdTogglePane, L"Ctrl+B"},
+    {Command::ToggleSheet, L"toggleSheet", S::CmdToggleSheet, L"F7"},
     // --- Buscar, impresoras y servidor ---
     {Command::Find, L"find", S::CmdFind, L"Ctrl+F"},
     {Command::History, L"history", S::CmdHistory, L"Ctrl+H"},

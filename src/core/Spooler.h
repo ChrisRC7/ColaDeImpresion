@@ -96,6 +96,18 @@ OpResult PurgePrinter(const std::wstring& printer);
 // true si el usuario actual puede administrar la impresora (trabajos de otros).
 bool CanAdminister(const std::wstring& printer);
 
+// Lee los datos de un trabajo con la API documentada del spooler:
+// OpenPrinter("Impresora,Job N") + ReadPrinter. No toca la carpeta de spool,
+// no necesita ser administrador del servidor ni acceso a \\SRV\C$, y no choca
+// con los bloqueos que el spooler mantiene sobre los .SHD/.SPL: el spooler
+// comprueba JOB_ACCESS_READ, que tienen el dueño del trabajo y quien tiene
+// "Administrar documentos" en la cola. Funciona igual con servidores remotos
+// (RPC). Lee como máximo maxBytes; *truncated indica si quedaron datos.
+// IMPORTANTE: con un trabajo que todavía se está recibiendo (JOB_STATUS_SPOOLING)
+// ReadPrinter espera a que lleguen más datos: no llamarla en ese caso.
+OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint64_t maxBytes,
+                     std::vector<std::uint8_t>& out, bool* truncated);
+
 // Carpeta de spool configurada en el servidor (p. ej. "C:\\Windows\\System32\\spool\\PRINTERS").
 std::wstring GetSpoolDirectory(const std::wstring& server);
 

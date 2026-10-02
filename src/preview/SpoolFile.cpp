@@ -49,6 +49,26 @@ std::uint32_t ReadU32(const std::uint8_t* p) {
 
 }  // namespace
 
+DataFormat EjlLanguage(const std::uint8_t* data, size_t size) {
+    size_t start = 0;
+    if (StartsWith(data, size, "\x1b\x01")) start = 2;
+    if (!StartsWith(data + start, size - start, "@EJL")) return DataFormat::Unknown;
+    std::string header(reinterpret_cast<const char*>(data), std::min<size_t>(size, 8192));
+    for (auto& c : header) c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
+    // "@EJL EN LA=ESC/PAGE-COLOR" (entrar al lenguaje) o "@EJL SE LA=..." (seleccionar).
+    size_t la = header.find("LA=");
+    if (la == std::string::npos) return DataFormat::EscPage;  // EJL sin lenguaje declarado: es de Epson
+    std::string lang = header.substr(la + 3, 24);
+    lang = lang.substr(0, lang.find_first_of(" \r\n"));
+    if (lang.rfind("ESC/PAGE", 0) == 0) return DataFormat::EscPage;
+    if (lang.rfind("ESCPR", 0) == 0 || lang.rfind("ESC/P-R", 0) == 0 || lang.rfind("ESC/P", 0) == 0)
+        return DataFormat::EscPr;
+    if (lang.rfind("POSTSCRIPT", 0) == 0) return DataFormat::PostScript;
+    if (lang.rfind("PCLXL", 0) == 0) return DataFormat::PclXl;
+    if (lang.rfind("PCL", 0) == 0) return DataFormat::Pcl;
+    return DataFormat::EscPage;
+}
+
 std::wstring ToAdminShare(const std::wstring& server, const std::wstring& localPath) {
     if (server.empty()) return localPath;
     if (localPath.rfind(L"\\\\", 0) == 0) return localPath;  // ya es UNC
@@ -233,6 +253,54 @@ SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const st
     return data;
 }
 
+SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes) {
+    // 1. Carpeta alternativa configurada a mano: tiene prioridad (pruebas, copias del spool).
+    if (!search.overrideDir.empty()) {
+        SpoolData data = ReadSpoolFile(search, job.id, job.document, maxBytes);
+        if (data.error == 0) {
+            data.origin = SpoolOrigin::File;
+            return data;
+        }
+    }
+
+    SpoolData data;
+    if (job.rawStatus & JOB_STATUS_SPOOLING) {
+        // ReadPrinter esperaría a que llegaran más datos: se intenta al terminar la recepción.
+        data.stillSpooling = true;
+        data.error = ERROR_BUSY;
+        return data;
+    }
+
+    // 2. API del spooler.
+    bool truncated = false;
+    core::OpResult api = core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated);
+    if (api.ok) {
+        data.origin = SpoolOrigin::SpoolerApi;
+        data.error = 0;
+        data.truncated = truncated;
+        data.fileSize = truncated ? std::max<std::uint64_t>(job.sizeBytes, data.bytes.size()) : data.bytes.size();
+        data.format = DetectFormat(data.bytes.data(), data.bytes.size());
+        util::LogInfo(L"Datos del trabajo %u leídos por la API del spooler (%llu bytes, %ls)", job.id,
+                      static_cast<unsigned long long>(data.bytes.size()), DataFormatName(data.format));
+        return data;
+    }
+    util::LogError(L"ReadPrinter del trabajo %u en '%ls' falló: %lu", job.id, job.printer.c_str(), api.error);
+
+    // 3. Respaldo: archivo de spool (requiere ser administrador del servidor).
+    SpoolData file = ReadSpoolFile(search, job.id, job.document, maxBytes);
+    file.apiError = api.error;
+    if (file.error == 0) {
+        file.origin = SpoolOrigin::File;
+        return file;
+    }
+    std::wstring apiLine = L"API del spooler (OpenPrinter/ReadPrinter) — " + util::Win32ErrorMessage(api.error);
+    file.diagnostics = file.diagnostics.empty() ? apiLine : apiLine + L"\n" + file.diagnostics;
+    // El motivo que se muestra es el de la API: es la vía principal.
+    if (api.error == ERROR_ACCESS_DENIED || file.error == ERROR_FILE_NOT_FOUND || file.error == ERROR_PATH_NOT_FOUND)
+        file.error = api.error;
+    return file;
+}
+
 size_t SkipPjlHeader(const std::uint8_t* data, size_t size) {
     // UEL = ESC%-12345X ; seguido de líneas "@PJL ..." terminadas en LF.
     size_t pos = 0;
@@ -267,6 +335,11 @@ DataFormat DetectFormat(const std::uint8_t* data, size_t size) {
     // EMF suelto (EMR_HEADER con firma " EMF").
     if (size >= 44 && ReadU32(data) == 1 && ReadU32(data + 40) == 0x464D4520u) return DataFormat::EmfSpool;
     if (StartsWith(data, size, "PK\x03\x04")) return DataFormat::Xps;
+
+    // Encabezado EJL de Epson ("ESC 01 @EJL ..."): el lenguaje va en "LA=".
+    // Antes caía en "empieza con ESC => PCL" y GhostPCL fallaba con ESC/Page.
+    DataFormat ejl = EjlLanguage(data, size);
+    if (ejl != DataFormat::Unknown) return ejl;
 
     // Busca "ENTER LANGUAGE=" dentro del encabezado PJL para saber qué sigue.
     size_t start = SkipPjlHeader(data, size);

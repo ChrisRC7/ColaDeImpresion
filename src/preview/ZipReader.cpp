@@ -1,5 +1,8 @@
 #include "preview/ZipReader.h"
 
+#include <windows.h>
+#include <shlwapi.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -46,20 +49,32 @@ std::vector<std::string> ListLocalHeaders(const std::uint8_t* data, size_t size)
     }
     return names;
 }
+
+// Posición del registro "End of central directory" o npos.
+size_t FindEndOfCentralDir(const std::uint8_t* data, size_t size) {
+    if (size < 22) return std::string::npos;
+    // Se busca desde el final (el comentario del ZIP mide como máximo 64 KB).
+    size_t minPos = size > 22 + 65535 ? size - 22 - 65535 : 0;
+    for (size_t i = size - 22 + 1; i-- > minPos;)
+        if (U32(data + i) == kEndOfCentralDir) return i;
+    return std::string::npos;
+}
+
+std::string Lower(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(),
+                   [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+    return text;
+}
+
+bool EndsWith(const std::string& text, const std::string& suffix) {
+    return text.size() >= suffix.size() && text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
 }  // namespace
 
 std::vector<std::string> ListZipEntries(const std::uint8_t* data, size_t size) {
     std::vector<std::string> names;
     if (size < 22) return names;
-    // Busca el registro "End of central directory" desde el final (comentario máx. 64 KB).
-    size_t minPos = size > 22 + 65535 ? size - 22 - 65535 : 0;
-    size_t eocd = std::string::npos;
-    for (size_t i = size - 22 + 1; i-- > minPos;) {
-        if (U32(data + i) == kEndOfCentralDir) {
-            eocd = i;
-            break;
-        }
-    }
+    size_t eocd = FindEndOfCentralDir(data, size);
     if (eocd == std::string::npos) return ListLocalHeaders(data, size);
 
     std::uint16_t entries = U16(data + eocd + 10);
@@ -89,6 +104,40 @@ std::uint32_t CountXpsPages(const std::uint8_t* data, size_t size) {
         else if (name.find(".fpage/[0].piece") != std::string::npos) ++pages;
     }
     return pages;
+}
+
+std::vector<std::uint64_t> XpsPageFingerprints(const std::uint8_t* data, size_t size) {
+    struct Page {
+        std::wstring name;
+        std::uint64_t fingerprint;
+    };
+    std::vector<Page> pages;
+    size_t eocd = FindEndOfCentralDir(data, size);
+    if (eocd == std::string::npos) return {};
+    std::uint16_t entries = U16(data + eocd + 10);
+    size_t pos = U32(data + eocd + 16);
+    for (std::uint16_t i = 0; i < entries; ++i) {
+        if (pos + 46 > size || U32(data + pos) != kCentralDirEntry) return {};
+        std::uint32_t crc = U32(data + pos + 16);
+        std::uint32_t uncompressed = U32(data + pos + 24);
+        std::uint16_t nameLen = U16(data + pos + 28);
+        std::uint16_t extraLen = U16(data + pos + 30);
+        std::uint16_t commentLen = U16(data + pos + 32);
+        if (pos + 46 + nameLen > size) return {};
+        std::string name = Lower(std::string(reinterpret_cast<const char*>(data + pos + 46), nameLen));
+        if (name.find(".fpage/") != std::string::npos) return {};  // páginas en piezas: no comparables
+        if (EndsWith(name, ".fpage"))
+            pages.push_back({std::wstring(name.begin(), name.end()),
+                             (static_cast<std::uint64_t>(crc) << 32) | uncompressed});
+        pos += 46 + nameLen + extraLen + commentLen;
+    }
+    // Orden natural: Documents/1/Pages/2.fpage antes que .../10.fpage.
+    std::sort(pages.begin(), pages.end(),
+              [](const Page& a, const Page& b) { return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0; });
+    std::vector<std::uint64_t> out;
+    out.reserve(pages.size());
+    for (const auto& p : pages) out.push_back(p.fingerprint);
+    return out;
 }
 
 }  // namespace cola::preview

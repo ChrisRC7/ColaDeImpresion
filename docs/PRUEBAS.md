@@ -7,7 +7,28 @@ JSON, ajustes, historial y estadísticas, formato, mapeo de estados del spooler,
 seguimiento de trabajos (eventos y resultado), atajos (parseo, reasignación,
 duplicados), contraste WCAG AA de ambas paletas, filtro de filas, extracción de
 páginas EMF de un spool sintético, detección de formatos y PJL, conteo de
-páginas XPS, búsqueda en `.SHD`, conversión a `C$`, ajuste de página.
+páginas XPS, búsqueda en `.SHD`, conversión a `C$`, ajuste de página. Desde la
+0.3.0 también: validación del DEVMODE (`dmFields` y `dmSize`), separación
+páginas / copias / caras / hojas con su fiabilidad (1 pág. × 10 copias, copias
+repetidas por la aplicación, RAW sin confirmar, N-up y doble cara), opciones
+PJL, EJL de Epson (encabezado real del servidor), comentarios DSC de PostScript,
+PrintTicket XPS, ficha "Configuración" y carpeta temporal privada (62 pruebas).
+
+## 1b. Configuración y vista previa por trabajo (2026-10-02, LAIMI1-CTRL1)
+
+Matriz completa, procedimiento reproducible y resultados observados en
+[DATOS_DE_IMPRESION.md](DATOS_DE_IMPRESION.md) (secciones 7 y 8). Resumen:
+
+| Prueba | Resultado |
+|---|---|
+| Lectura de datos por la API del spooler (`ReadPrinter`) en colas locales | OK (EMF, XPS, PCL, PostScript, ESC/Page) |
+| Lectura remota de un trabajo ajeno en `\\vtec-laimiprint` sin ser administrador | OK (6,6 MB, ESC/Page-Color) |
+| Word → CutePDF (EMF) W01–W07: copias, caras y hojas previstas vs. salida PostScript real | 7/7 coinciden |
+| Word → Microsoft Print to PDF (XPS) X01–X07 vs. páginas del PDF real | 7/7 coinciden |
+| Acrobat → CutePDF (RAW PostScript): páginas por DSC y vista previa con Ghostscript | OK |
+| Chrome y Edge → CutePDF (EMF) | OK |
+| RAW PJL+PCL y ESC/Page real del servidor | OK (ESC/Page: "vista previa no disponible" con motivo) |
+| Pestaña Configuración (`F7`), resumen en el encabezado y desplazamiento con AvPág | OK |
 
 ## 2. Pruebas manuales ya realizadas (PC de desarrollo, 2026-09-19)
 
@@ -81,6 +102,8 @@ Anotar resultado, fecha y versión en la tabla final.
 - [ ] Cancelar todos los trabajos de un usuario.
 
 ### 3.6 Vista previa con datos reales
+- [x] Lectura de los datos por la API del spooler con "Administrar documentos" (verificado en remoto el 2026-10-02).
+- [ ] Pruebas P1–P8 de [DATOS_DE_IMPRESION.md](DATOS_DE_IMPRESION.md) §12 (copias, doble cara, papel y orientación en las colas Epson; Lexmark; etiquetas; operador sin permisos).
 - [ ] Trabajo EMF (driver GDI con renderizado en el servidor).
 - [ ] Trabajo PCL / PS (Client Side Rendering) con GhostPCL / Ghostscript instalados.
 - [ ] Trabajo XPS (driver v4).

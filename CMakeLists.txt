@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ColaDeImpresion VERSION 0.2.0 LANGUAGES CXX RC)
+project(ColaDeImpresion VERSION 0.3.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -84,4 +84,9 @@ if(COLA_BUILD_TOOLS)
     if(NOT MSVC)
         target_link_options(cola_testjob PRIVATE -municode -static)
     endif()
+
+    # Inspección de trabajos (ficha de configuración, páginas/copias/caras y
+    # evaluación de la vista previa) con el mismo código que la app.
+    add_executable(cola_jobinspect tools/jobinspect.cpp)
+    target_link_libraries(cola_jobinspect PRIVATE cola_core)
 endif()

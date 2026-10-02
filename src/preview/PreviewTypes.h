@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "core/PageAccounting.h"
+
 namespace cola::preview {
 
 class PreviewPage {
@@ -60,8 +62,12 @@ private:
 
 using PagePtr = std::shared_ptr<const PreviewPage>;
 
-// Formato de los datos del trabajo, detectado a partir del archivo de spool.
-enum class DataFormat { Unknown, EmfSpool, Xps, Pdf, PostScript, Pcl, PclXl, Image, Text };
+// Formato de los datos del trabajo, detectado a partir de su contenido (no de
+// pDatatype: un trabajo de un driver v4 dice "RAW" y contiene XPS).
+// EscPage / EscPr: lenguajes propios de Epson (ESC/Page, ESC/Page-Color,
+// ESC/P-R) que generan los drivers de las impresoras del LAIMI; no existe un
+// intérprete libre para ellos, así que no tienen vista previa.
+enum class DataFormat { Unknown, EmfSpool, Xps, Pdf, PostScript, Pcl, PclXl, Image, Text, EscPage, EscPr };
 
 const wchar_t* DataFormatName(DataFormat format);
 
@@ -73,6 +79,9 @@ struct PreviewDocument {
     std::uint32_t totalPages = 0;  // total real si se conoce (puede ser > pages.size())
     std::uint64_t dataBytes = 0;   // tamaño del spool leído
     bool truncated = false;        // solo se renderizó una parte
+    // Lo que se averiguó de los datos (páginas, repeticiones, opciones PJL/EJL/PrintTicket).
+    core::ContentFacts facts;
+    std::wstring dataOrigin;       // cómo se obtuvieron los datos (API del spooler / archivo)
 
     size_t MemoryBytes() const;
     bool HasPages() const { return !pages.empty(); }

@@ -18,7 +18,8 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 - **Impresoras**: pausar/reanudar/vaciar cola; avisos de sin papel, atasco, sin tóner, fuera de línea...
 - **Acceso rápido a impresoras**: barra superior con las impresoras que el operador fija (botón `+`), cada una con su cantidad de trabajos y su estado; un clic o `Ctrl+1`…`Ctrl+9` filtran la cola por esa impresora.
 - **Orden de la cola** por equipo, hora de envío, usuario, documento, estado o tamaño (`F6`, `Shift+F6` para invertir), además del orden real de impresión.
-- **Vista previa** del archivo de spool: EMF nativo; PostScript, PDF, PCL y XPS con Ghostscript/GhostPCL/GhostXPS (opcionales, autodetectados). Zoom, arrastre y paso de páginas. Caché de vistas previas.
+- **Vista previa** de los datos del trabajo, leídos con la API del spooler (`OpenPrinter("Cola,Job N")` + `ReadPrinter`; basta con "Administrar documentos"): EMF nativo; PostScript, PDF, PCL y XPS con Ghostscript/GhostPCL/GhostXPS (opcionales, autodetectados). Zoom, arrastre y paso de páginas. Caché de vistas previas. Los datos ESC/Page de las Epson del LAIMI no tienen vista previa (se explica por qué).
+- **Configuración de impresión por trabajo** (`F7`): papel, orientación, doble cara, copias, intercalado, color, páginas lógicas, caras y hojas previstas, cada valor con su origen y su fiabilidad (*Fiable / Estimado / No determinable*). Ver [docs/DATOS_DE_IMPRESION.md](docs/DATOS_DE_IMPRESION.md).
 - **Atajos de teclado configurables** (F1 muestra y permite reasignarlos).
 - **Modo claro / oscuro** (sigue al sistema o manual), contraste verificado WCAG AA.
 - **Historial** con estadísticas de páginas por día/semana, **notificaciones**, **bandeja del sistema**, **inicio con Windows**, **español / inglés**.
@@ -40,6 +41,7 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 | `Ctrl+1` … `Ctrl+9` | Impresoras del acceso rápido |
 | `Ctrl+Shift+F` | Fijar / quitar la impresora del acceso rápido |
 | `F6` / `Shift+F6` | Cambiar / invertir el orden de la cola |
+| `F7` | Vista previa / configuración de impresión del trabajo |
 | `Ctrl+O` | Conectar a un servidor |
 | `Ctrl+F` | Buscar / filtrar |
 | `Ctrl+H` | Historial |
@@ -53,15 +55,14 @@ Manual completo: [docs/MANUAL.md](docs/MANUAL.md).
 
 La app se ejecuta con los permisos del usuario. Para gestionar trabajos de
 **otros** usuarios, reordenar la cola o pausar impresoras hace falta el permiso
-**"Administrar documentos" / "Administrar esta impresora"** en el servidor. Para
-la **vista previa** hay que poder leer la carpeta de spool del servidor. Si la
-app corre **en el propio servidor** se usa la ruta local y basta con ser
-administrador de ese equipo; desde otra PC se usa
-`\\SERVIDOR\C$\Windows\System32\spool\PRINTERS`, que exige ser administrador del
-servidor, y la alternativa es configurar una carpeta en `config.json`
-(`spoolDirOverrides`). El menú ofrece **"Reiniciar como administrador"**. Cuando
-no se encuentra el archivo de spool, el panel indica en qué carpetas se buscó y
-por qué falló cada una (lo mismo queda en `app.log`).
+**"Administrar documentos" / "Administrar esta impresora"** en el servidor. La
+**vista previa** y la **configuración** de cada trabajo usan el mismo permiso
+"Administrar documentos": los datos se leen con la API del spooler, sin ser
+administrador del servidor. Solo si esa vía falla se intenta leer el archivo de
+spool (por la ruta local en el propio servidor o por `\\SERVIDOR\C$`, que exige
+ser administrador). El menú ofrece **"Reiniciar como administrador"**. Si no se
+pueden leer los datos, el panel indica qué se intentó y por qué falló (lo mismo
+queda en `app.log`).
 
 ## Compilar
 
@@ -106,7 +107,7 @@ src/input    comandos y atajos
 src/config   JSON, ajustes, historial
 src/i18n     textos es/en
 src/util     utilidades
-tests/       pruebas unitarias      tools/  generador de trabajos de prueba
+tests/       pruebas unitarias      tools/  trabajos de prueba e inspección (cola_jobinspect)
 docs/        documentación          installer/  Inno Setup
 ```
 

@@ -38,7 +38,7 @@ de trabajo. El **qué** (estado del proyecto, decisiones, arquitectura) está en
    ```
    o manualmente:
    ```bash
-   export PATH="/d/Programacion/Herramientas/winlibs/mingw64/bin:$PATH"
+   export PATH="/d/Programacion/Herramientas/winlibs/mingw64/bin:$PATH"   # o ../Herramientas/winlibs junto al proyecto
    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
    cmake --build build && ./build/cola_tests.exe
    ```
@@ -116,6 +116,14 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **`cola_testjob --raw`**: si se mata el proceso (taskkill) los trabajos RAW quedan en cola. Borrarlos con `SetJob(..., JOB_CONTROL_DELETE)` (funciona con trabajos propios); `Remove-PrintJob` exige administrador.
 - **Renderizadores**: `third_party/` no se versiona; regenerar con `scripts/get-renderers.ps1` (necesita 7-Zip).
 - **Macro `CHECK_EQ`**: copia sus argumentos; no cambiarla a referencias (en Release se leían temporales destruidos).
+- **Datos de un trabajo**: usar `core::spooler::ReadJobData` (API), no la carpeta de spool. Nunca llamarla con un trabajo en `JOB_STATUS_SPOOLING`: `ReadPrinter` se queda esperando datos.
+- **`JOB_INFO_2.pDevMode` no siempre es lo aplicado**: en EMF manda el `EMRI_DEVMODE` del spool (Word lo cambia tras `StartDoc`). Usar `core::EffectiveDevMode`.
+- **`pDatatype` no dice el formato real**: un driver v4 declara `RAW` y envía OpenXPS; detectar siempre por contenido (`DetectFormat`).
+- **Pruebas con "imprimir a archivo"** (`lpszOutput`): si el trabajo queda pausado, `EndDoc` de la aplicación se bloquea hasta que se reanude. Con `cola_jobinspect --hold` usar `--release`.
+- **Macro `near`** de `windows.h`: no usar ese nombre para variables o lambdas.
+- **Word por COM desde PowerShell 5.1**: los métodos exigen `[ref]` y los valores llegan envueltos en `PSObject`; usar `InvokeMember` con valores desenvueltos (ver `tools/pruebas/word_jobs.ps1`) y guardar los `.ps1` con BOM UTF-8.
+- **Probar una compilación con la versión de producción abierta**: la app es de instancia única; usar `--instancia-adicional` con `build\portable.txt` y un `config.json` propio (escribirlo con una biblioteca JSON: las barras invertidas de las rutas se rompen fácilmente). Con la configuración por defecto la app activa la retención y pausa impresoras al iniciar.
+- **Vista "Este equipo"**: incluye las conexiones a impresoras del servidor, así que muestra (y puede leer) trabajos reales de estudiantes.
 
 ## 7. Cómo verificar en la app real
 

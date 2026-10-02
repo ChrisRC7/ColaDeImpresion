@@ -1,0 +1,265 @@
+#include "preview/PdlSettings.h"
+
+#include <windows.h>
+
+#include <algorithm>
+#include <cctype>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "preview/SpoolFile.h"
+#include "util/Strings.h"
+
+namespace cola::preview {
+
+namespace {
+
+constexpr size_t kHeaderWindow = 64 * 1024;
+constexpr size_t kTrailerWindow = 16 * 1024;
+
+std::string Upper(std::string text) {
+    for (auto& c : text) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return text;
+}
+
+std::string TrimAscii(const std::string& text) {
+    size_t a = text.find_first_not_of(" \t\r\"");
+    if (a == std::string::npos) return "";
+    size_t b = text.find_last_not_of(" \t\r\"");
+    return text.substr(a, b - a + 1);
+}
+
+// Líneas "@PJL ..." / "@EJL ..." de una ventana de los datos, en orden.
+// stopAtEnter = no seguir después de la línea que entra al lenguaje de página
+// (lo que sigue es el documento, no opciones).
+std::vector<std::string> CommandLines(const std::uint8_t* data, size_t size, bool stopAtEnter) {
+    std::vector<std::string> lines;
+    std::string window(reinterpret_cast<const char*>(data), size);
+    size_t pos = 0;
+    while (pos < window.size()) {
+        size_t pjl = window.find("@PJL", pos);
+        size_t ejl = window.find("@EJL", pos);
+        size_t at = std::min(pjl, ejl);
+        if (at == std::string::npos) break;
+        size_t end = window.find('\n', at);
+        if (end == std::string::npos) end = window.size();
+        std::string line = Upper(window.substr(at, end - at));
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        lines.push_back(line);
+        pos = end;
+        if (stopAtEnter && (line.find("ENTER LANGUAGE") != std::string::npos || line.rfind("@EJL EN ", 0) == 0))
+            break;
+    }
+    return lines;
+}
+
+// "A4" -> DMPAPER_A4, etc. (nombres PJL y abreviaturas EJL observadas).
+short PaperCode(const std::string& name) {
+    struct Entry {
+        const char* name;
+        short code;
+    };
+    static const Entry kNames[] = {
+        {"LETTER", DMPAPER_LETTER}, {"LT", DMPAPER_LETTER},       {"LEGAL", DMPAPER_LEGAL},
+        {"LG", DMPAPER_LEGAL},      {"A4", DMPAPER_A4},           {"A3", DMPAPER_A3},
+        {"A5", DMPAPER_A5},         {"A6", DMPAPER_A6},           {"EXECUTIVE", DMPAPER_EXECUTIVE},
+        {"EX", DMPAPER_EXECUTIVE},  {"LEDGER", DMPAPER_LEDGER},   {"B4", DMPAPER_B4},
+        {"JISB4", DMPAPER_B4},      {"B5", DMPAPER_B5},           {"JISB5", DMPAPER_B5},
+        {"COM10", DMPAPER_ENV_10},  {"DL", DMPAPER_ENV_DL},       {"C5", DMPAPER_ENV_C5},
+        {"MONARCH", DMPAPER_ENV_MONARCH},
+    };
+    for (const auto& e : kNames)
+        if (name == e.name) return e.code;
+    return 0;
+}
+
+void SetPaper(const std::string& name, core::ContentFacts& facts) {
+    if (name.empty()) return;
+    facts.paperName.Set(util::FromUtf8(name));
+    if (const core::PaperInfo* p = core::FindPaper(PaperCode(name))) {
+        facts.paperWidth.Set(p->width);
+        facts.paperLength.Set(p->length);
+    }
+}
+
+void AppendRaw(core::ContentFacts& facts, const std::string& text) {
+    if (!facts.rawSettings.empty()) facts.rawSettings += L" ";
+    facts.rawSettings += util::FromUtf8(text);
+}
+
+void ParsePjl(const std::vector<std::string>& lines, core::ContentFacts& facts) {
+    std::uint32_t copies = 0, qty = 0;
+    std::string duplex, binding;
+    bool any = false;
+    for (const auto& line : lines) {
+        if (line.rfind("@PJL SET ", 0) != 0) continue;
+        std::string rest = line.substr(9);
+        size_t eq = rest.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = TrimAscii(rest.substr(0, eq));
+        std::string value = TrimAscii(rest.substr(eq + 1));
+        if (key.find(':') != std::string::npos) continue;  // LPARM:PCL ... (específicas del lenguaje)
+        any = true;
+        AppendRaw(facts, key + "=" + value);
+        if (key == "COPIES") copies = static_cast<std::uint32_t>(std::max(0, atoi(value.c_str())));
+        else if (key == "QTY") qty = static_cast<std::uint32_t>(std::max(0, atoi(value.c_str())));
+        else if (key == "DUPLEX") duplex = value;
+        else if (key == "BINDING") binding = value;
+        else if (key == "PAPER") SetPaper(value, facts);
+        else if (key == "ORIENTATION") {
+            if (value == "PORTRAIT") facts.orientation.Set(DMORIENT_PORTRAIT);
+            else if (value == "LANDSCAPE") facts.orientation.Set(DMORIENT_LANDSCAPE);
+        } else if (key == "RENDERMODE") {
+            if (value == "COLOR") facts.color.Set(DMCOLOR_COLOR);
+            else if (value == "GRAYSCALE") facts.color.Set(DMCOLOR_MONOCHROME);
+        } else if (key == "PLANESINUSE" && value == "1") {
+            facts.color.Set(DMCOLOR_MONOCHROME);
+        }
+    }
+    if (!any) return;
+    facts.settingsSource = core::ContentFacts::SettingsSource::Pjl;
+    facts.settingsDocumented = true;
+    // QTY = copias intercaladas del trabajo; COPIES = copias sin intercalar de cada página.
+    if (copies > 0 || qty > 0) {
+        facts.copies.Set(std::max(copies, 1u) * std::max(qty, 1u));
+        if (qty > 1) facts.collate.Set(DMCOLLATE_TRUE);
+        else if (copies > 1) facts.collate.Set(DMCOLLATE_FALSE);
+    }
+    if (duplex == "OFF") facts.duplex.Set(DMDUP_SIMPLEX);
+    else if (duplex == "ON") facts.duplex.Set(binding == "SHORTEDGE" ? DMDUP_HORIZONTAL : DMDUP_VERTICAL);
+}
+
+void ParseEjl(const std::vector<std::string>& header, const std::vector<std::string>& trailer,
+              core::ContentFacts& facts) {
+    std::string dx, bd;
+    bool any = false;
+    for (const auto& line : header) {
+        if (line.rfind("@EJL SET ", 0) != 0) continue;
+        any = true;
+        std::string rest = line.substr(9);
+        AppendRaw(facts, TrimAscii(rest));
+        size_t pos = 0;
+        while (pos < rest.size()) {
+            size_t end = rest.find(' ', pos);
+            if (end == std::string::npos) end = rest.size();
+            std::string token = rest.substr(pos, end - pos);
+            pos = end + 1;
+            size_t eq = token.find('=');
+            if (eq == std::string::npos) continue;
+            std::string key = token.substr(0, eq), value = TrimAscii(token.substr(eq + 1));
+            if (key == "PS") SetPaper(value, facts);
+            else if (key == "DX") dx = value;
+            else if (key == "BD") bd = value;
+        }
+    }
+    if (any) {
+        facts.settingsSource = core::ContentFacts::SettingsSource::Ejl;
+        facts.settingsDocumented = false;
+        if (dx == "OFF") facts.duplex.Set(DMDUP_SIMPLEX);
+        else if (dx == "ON") facts.duplex.Set(bd == "SE" ? DMDUP_HORIZONTAL : DMDUP_VERTICAL);
+    }
+    // "@EJL JI PAGES="2"" al final: páginas que generó el controlador.
+    for (const auto& line : trailer) {
+        size_t at = line.find("PAGES=");
+        if (line.rfind("@EJL JI", 0) != 0 || at == std::string::npos) continue;
+        int pages = atoi(TrimAscii(line.substr(at + 6)).c_str());
+        if (pages > 0 && facts.pageSource == core::ContentFacts::PageSource::None) {
+            facts.pageSource = core::ContentFacts::PageSource::PdlCounter;
+            facts.pages = static_cast<std::uint32_t>(pages);
+        }
+    }
+}
+
+// Valor de un comentario DSC: "%%Pages: 2" -> "2".
+std::string DscValue(const std::string& line, size_t prefix) { return TrimAscii(line.substr(prefix)); }
+
+// Comentarios DSC (Adobe Document Structuring Conventions 3.0) y funciones PPD
+// que escriben los controladores PostScript (PSCRIPT5) y las aplicaciones que
+// generan PostScript (Acrobat): sintaxis documentada.
+void ParseDsc(const std::uint8_t* data, size_t size, bool complete, core::ContentFacts& facts) {
+    // Las opciones van en el prólogo / setup, antes de la primera página ("%%Page:").
+    const size_t window = std::min<size_t>(size, 8 * 1024 * 1024);
+    std::string text(reinterpret_cast<const char*>(data), window);
+    size_t firstPage = text.find("\n%%Page: ");
+    if (firstPage != std::string::npos) text.resize(firstPage);
+    bool any = false;
+    std::string duplex;
+    size_t pos = 0;
+    while ((pos = text.find("%%", pos)) != std::string::npos) {
+        size_t end = text.find_first_of("\r\n", pos);
+        std::string line = text.substr(pos, (end == std::string::npos ? text.size() : end) - pos);
+        pos = end == std::string::npos ? text.size() : end;
+        auto feature = [&](const char* name) -> std::string {
+            for (const char* prefix : {"%%BeginFeature: *", "%%BeginNonPPDFeature: "}) {
+                std::string key = std::string(prefix) + name + " ";
+                if (line.rfind(key, 0) == 0) return DscValue(line, key.size());
+            }
+            return "";
+        };
+        bool matched = true;
+        if (line.rfind("%%Orientation:", 0) == 0) {
+            std::string v = DscValue(line, 14);
+            if (v == "Portrait") facts.orientation.Set(DMORIENT_PORTRAIT);
+            else if (v == "Landscape") facts.orientation.Set(DMORIENT_LANDSCAPE);
+        } else if (std::string v = feature("PageSize"); !v.empty()) {
+            SetPaper(Upper(v), facts);
+            if (!facts.paperName.valid) facts.paperName.Set(util::FromUtf8(v));
+        } else if (std::string c = feature("NumCopies"); !c.empty()) {
+            int copies = atoi(c.c_str());
+            if (copies > 0) facts.copies.Set(static_cast<std::uint32_t>(copies));
+        } else if (std::string d = feature("Duplex"); !d.empty()) {
+            duplex = d;
+        } else if (std::string k = feature("Collate"); !k.empty()) {
+            facts.collate.Set(k == "True" ? DMCOLLATE_TRUE : DMCOLLATE_FALSE);
+        } else {
+            matched = false;
+        }
+        if (matched) {
+            any = true;
+            AppendRaw(facts, line.substr(2));
+        }
+    }
+    if (duplex == "None") facts.duplex.Set(DMDUP_SIMPLEX);
+    else if (duplex == "DuplexNoTumble") facts.duplex.Set(DMDUP_VERTICAL);
+    else if (duplex == "DuplexTumble") facts.duplex.Set(DMDUP_HORIZONTAL);
+
+    // "%%Pages: N" (en el encabezado o, con "(atend)", en el final).
+    std::string_view all(reinterpret_cast<const char*>(data), size);
+    std::uint32_t pages = 0;
+    for (size_t at = all.find("%%Pages:"); at != std::string::npos; at = all.find("%%Pages:", at + 8)) {
+        int value = atoi(std::string(all.substr(at + 8, 12)).c_str());
+        if (value > 0) pages = static_cast<std::uint32_t>(value);  // el último válido (el del final manda)
+    }
+    if (pages > 0 && (complete || all.find("(atend)") == std::string::npos)) {
+        facts.pageSource = core::ContentFacts::PageSource::PostScriptDsc;
+        facts.pages = pages;
+    }
+    if (any || pages) {
+        facts.settingsSource = core::ContentFacts::SettingsSource::PostScriptDsc;
+        facts.settingsDocumented = true;
+    }
+}
+
+}  // namespace
+
+void ParsePdlSettings(const std::uint8_t* data, size_t size, bool complete, core::ContentFacts& facts) {
+    if (!data || size == 0) return;
+    auto header = CommandLines(data, std::min(size, kHeaderWindow), true);
+    std::vector<std::string> trailer;
+    if (complete) {
+        size_t start = size > kTrailerWindow ? size - kTrailerWindow : 0;
+        trailer = CommandLines(data + start, size - start, false);
+    }
+    const bool isEjl = std::any_of(header.begin(), header.end(), [](const std::string& l) { return l.rfind("@EJL", 0) == 0; });
+    if (isEjl) ParseEjl(header, trailer, facts);
+    else ParsePjl(header, facts);
+    // PostScript (directo o tras el encabezado PJL): comentarios DSC.
+    const size_t start = SkipPjlHeader(data, size);
+    const std::uint8_t* body = data + start;
+    const size_t bodySize = size - start;
+    if (bodySize >= 2 && (body[0] == '%' && body[1] == '!')) ParseDsc(body, bodySize, complete, facts);
+    else if (bodySize >= 3 && body[0] == 4 && body[1] == '%' && body[2] == '!') ParseDsc(body + 1, bodySize - 1, complete, facts);
+}
+
+}  // namespace cola::preview

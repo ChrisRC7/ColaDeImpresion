@@ -9,6 +9,7 @@
 
 #include "app/MainWindow.h"
 #include "config/Paths.h"
+#include "preview/TempFiles.h"
 #include "ui/DarkMode.h"
 #include "ui/Gfx.h"
 #include "util/Log.h"
@@ -22,6 +23,10 @@ constexpr wchar_t kMutexName[] = L"Local\\ColaDeImpresion.SingleInstance";
 struct Arguments {
     StartupOptions startup;
     bool elevatedRestart = false;
+    // Solo para desarrollo: permite probar una compilación nueva mientras la
+    // versión de producción sigue abierta en el mismo equipo (con otra
+    // configuración, p. ej. modo portable en la carpeta de compilación).
+    bool additionalInstance = false;
 };
 
 Arguments ParseArguments() {
@@ -32,6 +37,7 @@ Arguments ParseArguments() {
         std::wstring a = argv[i];
         if (a == L"--tray") args.startup.startInTray = true;
         else if (a == L"--elevated-restart") args.elevatedRestart = true;
+        else if (a == L"--instancia-adicional") args.additionalInstance = true;
         else if (a == L"--server" && i + 1 < argc) {
             args.startup.server = argv[++i];
             args.startup.hasServer = true;
@@ -48,7 +54,7 @@ int RunApplication() {
 
     // Instancia única: si ya hay una, se le pide que se muestre y salimos.
     HANDLE mutex = CreateMutexW(nullptr, TRUE, kMutexName);
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    if (GetLastError() == ERROR_ALREADY_EXISTS && !args.additionalInstance) {
         if (args.elevatedRestart) {
             // Reinicio como administrador: esperar a que la instancia anterior cierre.
             DWORD wait = WaitForSingleObject(mutex, 15000);
@@ -66,6 +72,8 @@ int RunApplication() {
 
     util::LogInit(config::LogFile());
     util::LogInfo(L"Inicio de ColaDeImpresion %ls", COLA_VERSION_STRING);
+    // Copias temporales de documentos que hayan quedado de una ejecución anterior.
+    preview::CleanupStaleTempFiles();
 
     INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES};
     InitCommonControlsEx(&icc);
@@ -90,6 +98,8 @@ int RunApplication() {
         }
     }
 
+    // La ventana (y sus hilos de vista previa) ya se destruyó: nada usa la carpeta temporal.
+    preview::RemovePrivateTempDir();
     ui::gfx::StopGdiPlus();
     if (SUCCEEDED(com)) CoUninitialize();
     util::LogInfo(L"Fin de ColaDeImpresion");

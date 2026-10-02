@@ -92,6 +92,8 @@ const wchar_t* DataFormatName(DataFormat format) {
         case DataFormat::PclXl: return L"PCL XL";
         case DataFormat::Image: return L"Imagen";
         case DataFormat::Text: return L"Texto";
+        case DataFormat::EscPage: return L"ESC/Page (Epson)";
+        case DataFormat::EscPr: return L"ESC/P-R (Epson)";
         default: return L"RAW";
     }
 }

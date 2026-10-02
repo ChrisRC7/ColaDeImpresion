@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "core/PrintTypes.h"
 #include "preview/PreviewTypes.h"
 
 namespace cola::preview {
@@ -21,8 +22,14 @@ struct SpoolSearch {
     std::wstring overrideDir;  // carpeta alternativa configurada por el usuario
 };
 
+// Cómo se obtuvieron los datos del trabajo.
+enum class SpoolOrigin { None, SpoolerApi, File };
+
 struct SpoolData {
-    std::wstring path;               // archivo leído
+    SpoolOrigin origin = SpoolOrigin::None;
+    unsigned long apiError = 0;      // error de la API del spooler si no se pudo usar
+    bool stillSpooling = false;      // no se leyó: el trabajo todavía se está recibiendo
+    std::wstring path;               // archivo leído (vacío si vino por la API)
     std::vector<std::uint8_t> bytes;
     std::uint64_t fileSize = 0;      // tamaño real (bytes puede estar recortado)
     bool truncated = false;
@@ -63,6 +70,16 @@ std::wstring FindPooledSpoolFile(const std::wstring& dir, std::uint32_t jobId, c
 SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const std::wstring& document,
                         std::uint64_t maxBytes);
 
+// Lee los datos de un trabajo (como máximo maxBytes) y detecta el formato:
+//   1. carpeta alternativa configurada (spoolDirOverrides), si el operador la definió;
+//   2. API del spooler (OpenPrinter "Impresora,Job N" + ReadPrinter): usa los
+//      permisos delegados sobre la cola ("Administrar documentos"), sin ser
+//      administrador del servidor, sin \\SRV\C$ y sin chocar con los bloqueos
+//      que el spooler mantiene sobre los .SHD/.SPL;
+//   3. archivo de spool en la carpeta del servidor (respaldo).
+// Un trabajo que todavía se está recibiendo no se lee (ReadPrinter esperaría).
+SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes);
+
 // Lee un archivo cualquiera (hasta maxBytes) compartiendo lectura/escritura.
 bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vector<std::uint8_t>& out,
                     std::uint64_t* fileSize, unsigned long* error);
@@ -70,6 +87,10 @@ bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vecto
 // Detecta el lenguaje de los datos (EMF spool, XPS, PDF, PostScript, PCL, PCL XL...).
 // Entiende el envoltorio PJL (@PJL ENTER LANGUAGE=...).
 DataFormat DetectFormat(const std::uint8_t* data, size_t size);
+
+// Lenguaje declarado en un encabezado EJL de Epson ("ESC 01 @EJL ... LA=ESC/PAGE").
+// Unknown si los datos no empiezan con EJL.
+DataFormat EjlLanguage(const std::uint8_t* data, size_t size);
 
 // Posición donde empiezan los datos reales tras un encabezado PJL/UEL (0 si no hay).
 size_t SkipPjlHeader(const std::uint8_t* data, size_t size);

@@ -1,14 +1,19 @@
 #include "preview/PreviewBuilder.h"
 
 #include <windows.h>
+#include <winspool.h>
 
 #include <algorithm>
 
 #include "i18n/Strings.h"
 #include "preview/EmfSpool.h"
 #include "preview/ImageLoader.h"
+#include "preview/PdlSettings.h"
 #include "preview/SpoolFile.h"
+#include "preview/TempFiles.h"
+#include "preview/XpsPackage.h"
 #include "preview/ZipReader.h"
+#include "util/Log.h"
 #include "util/Strings.h"
 
 namespace cola::preview {
@@ -17,25 +22,93 @@ using i18n::S;
 using i18n::Tr;
 
 std::wstring PreviewRequest::Key() const {
-    return util::Format(L"%ls|%ls|%u|%llu|%u", server.c_str(), job.printer.c_str(), job.id,
-                        static_cast<unsigned long long>(job.sizeBytes), job.totalPages);
+    // El estado "recibiendo" forma parte de la clave: al terminar la recepción
+    // se vuelve a generar (antes no se leen los datos).
+    const unsigned spooling = (job.rawStatus & JOB_STATUS_SPOOLING) ? 1u : 0u;
+    return util::Format(L"%ls|%ls|%u|%llu|%u|%u", server.c_str(), job.printer.c_str(), job.id,
+                        static_cast<unsigned long long>(job.sizeBytes), job.totalPages, spooling);
 }
 
 namespace {
 
-// Lista de carpetas probadas, acortada para que quepa en el panel.
+// Lista de vías probadas, acortada para que quepa en el panel.
 std::wstring ShortDiagnostics(const std::wstring& diagnostics) {
     std::wstring out;
     for (const auto& line : util::Split(diagnostics, L'\n')) {
         if (line.empty()) continue;
         if (!out.empty()) out += L"\n";
-        out += util::EllipsisMiddle(line, 70);
+        out += util::EllipsisMiddle(line, 90);
     }
     return out;
 }
 
 bool LooksLikePath(const std::wstring& text) {
     return (text.size() > 3 && text[1] == L':' && text[2] == L'\\') || text.rfind(L"\\\\", 0) == 0;
+}
+
+core::DataKind KindOf(DataFormat format) {
+    switch (format) {
+        case DataFormat::EmfSpool: return core::DataKind::Emf;
+        case DataFormat::Xps: return core::DataKind::Xps;
+        case DataFormat::Unknown: return core::DataKind::Unknown;
+        default: return core::DataKind::Pdl;  // PCL, PS, PDF, ESC/Page, texto... ya generados para la impresora
+    }
+}
+
+// Lo que se puede averiguar de los datos sin renderizarlos: páginas,
+// repeticiones y opciones declaradas (PJL/EJL/PrintTicket).
+void AnalyzeContent(const SpoolData& spool, core::ContentFacts& facts) {
+    facts.analyzed = true;
+    facts.complete = !spool.truncated;
+    facts.kind = KindOf(spool.format);
+    facts.language = DataFormatName(spool.format);
+    const std::uint8_t* data = spool.bytes.data();
+    const size_t size = spool.bytes.size();
+    switch (spool.format) {
+        case DataFormat::EmfSpool: {
+            size_t found = 0;
+            std::vector<std::uint64_t> fingerprints;
+            ExtractEmfPages(data, size, 0, &found, &fingerprints);
+            facts.pageSource = core::ContentFacts::PageSource::EmfRecords;
+            facts.pages = static_cast<std::uint32_t>(found);
+            // DEVMODE efectivo dentro del spool (el que aplica el procesador de impresión).
+            EmfSpoolDevMode spoolDevMode = ReadEmfSpoolDevMode(data, size);
+            if (!spoolDevMode.firstPage.empty())
+                facts.spoolDevMode = core::ParseDevMode(
+                    reinterpret_cast<const DEVMODEW*>(spoolDevMode.firstPage.data()), spoolDevMode.firstPage.size());
+            facts.spoolDevModeChanges = spoolDevMode.changesBetweenPages;
+            if (facts.complete) {
+                facts.repeatChecked = true;
+                facts.repeatPeriod = core::RepeatPeriod(fingerprints);
+            }
+            break;
+        }
+        case DataFormat::Xps: {
+            std::wstring error;
+            if (!AnalyzeXpsPackage(data, size, facts, &error)) {
+                // Paquete que el XPS OM no abre (incompleto, piezas...): al menos las páginas.
+                util::LogError(L"No se pudo analizar el paquete XPS: %ls", error.c_str());
+                facts.pageSource = core::ContentFacts::PageSource::XpsFixedPages;
+                facts.pages = CountXpsPages(data, size);
+            }
+            if (facts.complete) {
+                auto fingerprints = XpsPageFingerprints(data, size);
+                if (!fingerprints.empty() && fingerprints.size() == facts.pages) {
+                    facts.repeatChecked = true;
+                    facts.repeatPeriod = core::RepeatPeriod(fingerprints);
+                }
+            }
+            break;
+        }
+        case DataFormat::Pcl:
+        case DataFormat::PclXl:
+        case DataFormat::PostScript:
+        case DataFormat::Pdf:
+        case DataFormat::EscPage:
+        case DataFormat::EscPr:
+        case DataFormat::Unknown: ParsePdlSettings(data, size, facts.complete, facts); break;
+        default: break;
+    }
 }
 
 void FromEmf(const SpoolData& spool, const PreviewOptions& opt, PreviewDocument& doc) {
@@ -59,9 +132,9 @@ void FromExternal(const SpoolData& spool, const PreviewOptions& opt, PreviewDocu
 
 // XPS sin GhostXPS: intentamos la miniatura del Shell sobre una copia temporal.
 void FromShellTemp(const SpoolData& spool, const wchar_t* extension, PreviewDocument& doc) {
-    wchar_t temp[MAX_PATH] = {};
-    GetTempPathW(MAX_PATH, temp);
-    std::wstring path = util::Format(L"%lsColaDeImpresion_thumb_%lu%ls", temp, GetTickCount(), extension);
+    // Copia temporal en la carpeta privada del proceso; se borra enseguida.
+    std::wstring path = NewTempPath(extension);
+    if (path.empty()) return;
     HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
     if (file == INVALID_HANDLE_VALUE) return;
     DWORD written = 0;
@@ -101,18 +174,24 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
     doc->totalPages = request.job.totalPages;
 
     SpoolSearch search{request.server, request.job.printer, opt.spoolOverrideDir};
-    SpoolData spool = ReadSpoolFile(search, request.job.id, request.job.document, opt.maxSpoolBytes);
-    if (spool.error == 0 && spool.bytes.empty()) {
-        // El archivo existe pero todavía está vacío: el trabajo sigue llegando.
+    SpoolData spool = ReadJobSpool(search, request.job, opt.maxSpoolBytes);
+    if (spool.stillSpooling) {
+        doc->message = Tr(S::PreviewStillSpooling);
+    } else if (spool.error == 0 && spool.bytes.empty()) {
+        // Los datos existen pero todavía están vacíos: el trabajo sigue llegando.
         doc->message = Tr(S::PreviewSpoolEmpty);
     } else if (spool.error == 0) {
         doc->format = spool.format;
         doc->dataBytes = spool.fileSize;
-        doc->source = util::Format(Tr(S::PreviewSourceSpool), DataFormatName(spool.format));
+        doc->dataOrigin = spool.origin == SpoolOrigin::SpoolerApi ? L"api" : spool.path;
+        doc->source = util::Format(spool.origin == SpoolOrigin::SpoolerApi ? Tr(S::PreviewSourceApi)
+                                                                            : Tr(S::PreviewSourceSpool),
+                                   DataFormatName(spool.format));
+        AnalyzeContent(spool, doc->facts);
         switch (spool.format) {
             case DataFormat::EmfSpool: FromEmf(spool, opt, *doc); break;
             case DataFormat::Xps:
-                doc->totalPages = std::max(doc->totalPages, CountXpsPages(spool.bytes.data(), spool.bytes.size()));
+                doc->totalPages = std::max(doc->totalPages, doc->facts.pages);
                 FromExternal(spool, opt, *doc);
                 if (doc->pages.empty()) FromShellTemp(spool, L".xps", *doc);
                 break;
@@ -130,20 +209,21 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
                 doc->totalPages = std::max(doc->totalPages, frames);
                 break;
             }
+            case DataFormat::EscPage:
+            case DataFormat::EscPr:
+                // Lenguajes propios de Epson: no hay intérprete; no se intenta "adivinar".
+                doc->message = util::Format(Tr(S::PreviewNotAvailableFormat), DataFormatName(spool.format));
+                break;
+            case DataFormat::Unknown: doc->message = Tr(S::PreviewNotAvailableUnknown); break;
             default:
                 doc->message = util::Format(Tr(S::PreviewUnsupported), DataFormatName(spool.format));
                 break;
         }
         if (spool.truncated) doc->truncated = true;
-    } else if (spool.error == ERROR_ACCESS_DENIED) {
-        doc->message = Tr(S::PreviewAccessDenied);
-        if (!spool.diagnostics.empty())
-            doc->message += L"\n\n" + std::wstring(Tr(S::PreviewSearchedIn)) + L"\n" +
-                            ShortDiagnostics(spool.diagnostics);
     } else {
-        // Se indica dónde se buscó: en un servidor real casi siempre es un
-        // problema de carpeta o de permisos, no un trabajo que ya terminó.
-        doc->message = util::Format(Tr(S::PreviewSpoolMissing), request.job.id);
+        doc->message = spool.error == ERROR_ACCESS_DENIED ? std::wstring(Tr(S::PreviewAccessDenied))
+                                                          : util::Format(Tr(S::PreviewSpoolMissing), request.job.id);
+        // Se indica qué se intentó y por qué falló cada vía.
         if (!spool.diagnostics.empty())
             doc->message += L"\n\n" + std::wstring(Tr(S::PreviewSearchedIn)) + L"\n" +
                             ShortDiagnostics(spool.diagnostics);

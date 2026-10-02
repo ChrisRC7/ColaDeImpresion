@@ -4,7 +4,7 @@
 > contexto para cualquier IA o persona que continúe el trabajo. El modelo de
 > trabajo está en [GUIA_IA.md](GUIA_IA.md); las tareas en [TODO.md](../TODO.md).
 
-**Última actualización:** 2026-09-22
+**Última actualización:** 2026-10-02
 
 ---
 
@@ -39,6 +39,12 @@
 | D19 | **Acceso rápido a impresoras**: barra de chips bajo la cabecera con las impresoras que el operador fija (`favoritePrinters` en config.json), con cuenta de trabajos y estado; `Ctrl+1`…`Ctrl+9` como teclas fijas (no reasignables) | En el LAIMI hay varias impresoras y el operador trabaja casi siempre con dos o tres; abrir el menú para cambiar de cola era lento. Las teclas numéricas son fijas porque su significado depende de la posición en la barra, no de un comando concreto. |
 | D20 | **Orden de la cola configurable** (`SortBy` en `app/RowBuilder`): orden real de impresión (predeterminado), equipo, hora, usuario, documento, estado o tamaño, con orden inverso; a igualdad de criterio se conserva el orden de impresión | Pedido del usuario: ubicar rápido de qué equipo o de qué hora es un trabajo. Se mantiene como una *vista*: no cambia la prioridad real en el spooler (eso sigue siendo `Ctrl+↑/↓`). |
 | D21 | **Diagnóstico visible en vez de mensajes genéricos**: la búsqueda del spool devuelve las carpetas probadas y el error de cada una (`SpoolData::diagnostics`), y el monitor compara `PRINTER_INFO_2.cJobs` con los trabajos enumerados y publica la diferencia | En el servidor del LAIMI no hay depurador: "el archivo de spool ya no existe" y una cola incompleta no daban ninguna pista. Ahora el panel y `app.log` dicen dónde se buscó y qué falló, y la barra de estado avisa si faltan trabajos. |
+| D22 | **Datos del trabajo por la API del spooler**: `OpenPrinter("Cola,Job N", JOB_READ)` + `ReadPrinter` (`core::spooler::ReadJobData`); el archivo de spool queda como respaldo | Usa el permiso ya delegado ("Administrar documentos" incluye `JOB_ACCESS_READ`), funciona en remoto sin `C$` ni administrador del servidor y evita los bloqueos del spooler sobre `.SHD` (error *"being used by another process"* en el servidor). Verificado contra `vtec-laimiprint` el 2026-10-02. No se lee un trabajo que todavía se recibe (`ReadPrinter` esperaría). |
+| D23 | **DEVMODE efectivo en EMF = el del spool** (`EMRI_DEVMODE` vigente para la primera página; va entre `EMRI_METAFILE_DATA` y `EMRI_*_METAFILE_EXT`) | Word cambia el DEVMODE con `ResetDC` tras `StartDoc`: `JOB_INFO_2.pDevMode` mostraba las copias del trabajo anterior. La salida PostScript real confirmó que se aplica el del spool. La ficha muestra la diferencia. |
+| D24 | **Páginas / copias / caras / hojas con fiabilidad** (`core/PageAccounting`): nunca `TotalPages × dmCopies` a ciegas; cada valor es Fiable, Estimado o No determinable con su motivo; la repetición de páginas hecha por la aplicación se detecta comparando huellas de páginas EMF/XPS | Pedido del LAIMI. Las pruebas con Word mostraron los tres casos (copias en el DEVMODE, dentro del spool, o páginas repetidas). |
+| D25 | **Opciones declaradas en los datos**: PrintTicket XPS (XPS Object Model de Windows, `IXpsOMObjectFactory1`, porque los drivers v4 generan OpenXPS), DSC de PostScript y PJL se consideran documentados y confirman; EJL de Epson es solo **indicio** (sin documentación pública) | Son lo que la impresora obedece en RAW; no se interpreta lo que no está documentado (`CO`/`QT` del EJL se muestran crudos). |
+| D26 | **ESC/Page como formato propio** (antes se detectaba como PCL) y "vista previa no disponible" con el motivo | Las colas Epson del LAIMI reciben ESC/Page-Color por Client Side Rendering; no hay intérprete libre. La configuración sí se muestra. Para una vista previa universal se propone renderizar en el servidor (EMF), ver `DATOS_DE_IMPRESION.md` §11. |
+| D27 | **Temporales privados**: carpeta por proceso con DACL protegida solo para el usuario actual, borrado inmediato y limpieza al iniciar y al salir (`preview/TempFiles`) | Las copias para Ghostscript y las miniaturas pueden contener documentos confidenciales de estudiantes. |
 | D16 | **Idioma**: UI en español por defecto, inglés disponible (X-macro en `StringTable.inl`) | Público del TEC; el cambio es inmediato desde el menú. |
 
 ## 3. Arquitectura
@@ -50,14 +56,16 @@
 | `util` | `Strings`, `Format`, `Log`, `WorkQueue`, `ComPtr` | UTF-8/16, formato de tamaños y fechas, log a archivo con rotación, hilo de trabajo con cola, puntero COM. |
 | `i18n` | `Strings.h`, `StringTable.inl` | Todos los textos de UI (es/en). |
 | `config` | `Json`, `Settings`, `History`, `Paths`, `Autostart` | Configuración persistente, historial + estadísticas, rutas (normal/portable), clave Run. |
-| `core` | `PrintTypes`, `Spooler`, `JobStatus`, `QueueMonitor`, `JobTracker`, `AutoHold` | Tipos del dominio, envoltorio de winspool (incluye `IsLocalServer` y la carpeta de spool por cola), mapeo de estados, monitor en tiempo real (hilo propio, sondeo con vencimiento propio y detección de trabajos no enumerados), detección de eventos entre instantáneas, retención automática de trabajos nuevos. |
-| `preview` | `SpoolFile`, `EmfSpool`, `ZipReader`, `ImageLoader`, `ExternalRenderer`, `PreviewBuilder`, `PreviewService`, `Reprint`, `PreviewTypes` | Ubicar/leer el spool (incl. pooling `FPnnnnn`), detectar formato (EMF/XPS/PDF/PS/PCL/PCL XL/imagen/texto, PJL), extraer páginas EMF, contar páginas XPS, WIC, miniaturas del Shell, Ghostscript, caché LRU asíncrona, impresión GDI/RAW para reenvío. |
+| `core` | `PrintTypes`, `Spooler`, `JobStatus`, `QueueMonitor`, `JobTracker`, `AutoHold`, `PrintSettings`, `PageAccounting` | Tipos del dominio, envoltorio de winspool (incluye `IsLocalServer`, la carpeta de spool por cola y `ReadJobData`), DEVMODE validado del trabajo, cálculo de páginas/copias/caras/hojas con fiabilidad, mapeo de estados, monitor en tiempo real (hilo propio, sondeo con vencimiento propio y detección de trabajos no enumerados), detección de eventos entre instantáneas, retención automática de trabajos nuevos. |
+| `preview` | `SpoolFile`, `EmfSpool`, `ZipReader`, `ImageLoader`, `ExternalRenderer`, `PreviewBuilder`, `PreviewService`, `Reprint`, `PreviewTypes`, `PdlSettings`, `XpsPackage`, `TempFiles` | Leer los datos del trabajo (API del spooler; archivo con pooling `FPnnnnn` como respaldo), detectar formato (EMF/XPS/PDF/PS/PCL/PCL XL/ESC/Page/imagen/texto, PJL/EJL), extraer páginas EMF y su `EMRI_DEVMODE`, opciones PJL/EJL/DSC, PrintTicket XPS, huellas de páginas, temporales privados, WIC, miniaturas del Shell, Ghostscript, caché LRU asíncrona, impresión GDI/RAW para reenvío. |
 | `input` | `Commands`, `Shortcuts` | Enum de comandos con id estable, atajos configurables (parseo/formato "Ctrl+Shift+P"). |
 | `ui` | `Window`, `Style`, `Theme`, `Gfx`, `DarkMode`, `HeaderBar`, `PrinterBar`, `JobListView`, `PreviewPane`, `StatusBar`, `HelpOverlay`, `TrayIcon` | Controles propios, paletas claro/oscuro, DPI, dibujo, bandeja del sistema. `PrinterBar` es la barra de acceso rápido a impresoras. |
-| `app` | `Application`, `MainWindow`, `JobActions`, `RowBuilder` | Arranque (instancia única, COM, GDI+), bucle de mensajes con atajos, ventana principal que orquesta todo, acciones en segundo plano, filas y textos. |
+| `app` | `Application`, `MainWindow`, `JobActions`, `RowBuilder`, `JobSheet` | Arranque (instancia única, COM, GDI+), bucle de mensajes con atajos, ventana principal que orquesta todo, acciones en segundo plano, filas y textos, ficha "Configuración" del trabajo (origen y fiabilidad de cada dato). |
 
 Otros: `tests/` (pruebas unitarias, framework mínimo propio), `tools/testjob.cpp`
-(genera trabajos de prueba), `res/` (ícono, manifiesto, versión), `installer/`
+(genera trabajos de prueba), `tools/jobinspect.cpp` (`cola_jobinspect`: ficha de
+cada trabajo en consola, vigilancia `--hold` y matriz CSV), `tools/pruebas/`
+(serie de Word por COM y página HTML de prueba), `res/` (ícono, manifiesto, versión), `installer/`
 (Inno Setup), `scripts/` (build, generación del ícono).
 
 ### 3.2 Flujo de datos
@@ -82,23 +90,30 @@ puntero que el receptor libera.
 
 ## 4. Estado actual
 
-**Versión 0.2.0** — funcional de punta a punta en local. Verificado en la PC de
-desarrollo (Windows 11, sin permisos de administrador) con trabajos reales en
-"Microsoft Print to PDF": lista en tiempo real, pausar/reanudar/cancelar,
-confirmaciones, filtro, vista previa EMF con navegación, vista rápida, tema
-claro/oscuro, panel de atajos con reasignación persistente, historial, manejo
-de servidor inaccesible, barra de acceso rápido a impresoras y ordenamiento de
-la cola. 44 pruebas unitarias en verde (Debug y Release).
+**Versión 0.3.0** — configuración de impresión y vista previa por trabajo
+(pestaña `F7`), lectura de datos por la API del spooler, DEVMODE efectivo del
+spool EMF, PrintTicket/DSC/PJL/EJL, separación páginas/copias/caras/hojas con
+fiabilidad y temporales privados. 62 pruebas unitarias en verde (Debug y
+Release), sin warnings. Verificado en LAIMI1-CTRL1 con Word, Acrobat, Chrome,
+Edge y datos RAW (14/14 predicciones de caras coinciden con la salida real) y
+con la lectura remota de un trabajo real en `vtec-laimiprint` sin ser
+administrador. Toolchain en este equipo: WinLibs GCC 16.2 en
+`C:\Users\chrodriguez\Desktop\Programacion\Herramientas\winlibs` (`build.ps1` la
+encuentra sola).
 
-**Pendiente de verificar en el LAIMI** (no se puede en la PC de desarrollo):
-conexión al servidor real, lectura del spool por `C$`/`ADMIN$` como
-administrador, trabajos de otros usuarios, reordenamiento, pausa de impresora,
-formatos RAW reales (PCL/PS) con Ghostscript, reenvío entre impresoras físicas,
-impresoras desconectadas. Ver `docs/PRUEBAS.md`.
+**Pendiente de verificar en el LAIMI**: pruebas P1–P8 de
+`docs/DATOS_DE_IMPRESION.md` §12 (qué refleja el DEVMODE del servidor en los
+trabajos RAW de las Epson: copias, doble cara, papel; significado de `CO`/`QT`
+del EJL; formato de `LAIMI1_BN` y de la cola de etiquetas), además de lo que ya
+estaba pendiente: reordenamiento, pausa de impresora, reenvío entre impresoras
+físicas e impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 
 ## 5. Limitaciones conocidas
 
-- Sin permisos de administración en el servidor no hay vista previa del spool (se muestra un mensaje explicativo con las carpetas probadas) ni se pueden gestionar trabajos ajenos.
+- Sin "Administrar documentos" en la cola no se pueden leer los datos de trabajos ajenos (ni la vista previa ni las opciones declaradas en los datos) ni gestionarlos; el panel lo explica.
+- Los trabajos ESC/Page de las Epson del LAIMI no tienen vista previa (no hay intérprete); sus copias se muestran como *Estimado* hasta confirmar en el LAIMI qué refleja el DEVMODE del servidor.
+- Las páginas por cara (N-up) no son determinables en EMF/RAW (opción privada del controlador): con varias páginas lógicas las caras quedan como estimadas.
+- La vista previa EMF no usa las fuentes incrustadas en el spool: si falta una fuente en el equipo del operador, Windows la sustituye.
 - El ejecutable no está firmado digitalmente: SmartScreen puede advertir la primera vez (la información de versión completa y `Desbloquear archivos.bat` reducen el problema, pero solo un certificado lo elimina).
 - El ordenamiento de la cola es una vista: no cambia la prioridad real del spooler.
 - El acceso rápido guarda nombres completos de impresora, así que las impresoras fijadas de un servidor no aparecen al conectarse a otro (es intencional).
@@ -135,3 +150,4 @@ impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 | 2026-09-22 | **Trabajos que faltaban respecto a la cola de Windows**: el sondeo de respaldo pasa a tener vencimiento propio (antes cada notificación lo reiniciaba y una impresora "ruidosa" dejaba a las demás sin refrescar); la enumeración de impresoras de un servidor suma sus colas locales y las conexiones a ese servidor (`PRINTER_ENUM_NAME` solo devuelve las compartidas); si `cJobs` supera lo enumerado se reintenta y se avisa en la barra de estado. |
 | 2026-09-22 | **Vista previa en el servidor** (D21): rutas locales si la app corre en el propio servidor (`IsLocalServer`), carpeta de spool propia de cada cola, segunda pasada en los `.SHD` solo por id, errores de lectura ya no se ignoran y el panel/`app.log` muestran dónde se buscó y por qué falló. |
 | 2026-09-22 | Versión 0.2.0. Información de versión completa del ejecutable con empresa **ChrisCorp** (descripción, copyright, comentarios, bloques es/en) y manifiesto con Windows 7–11/Server; `Desbloquear archivos.bat` en el paquete portable. |
+| 2026-10-02 | **Configuración de impresión por trabajo** (D22–D27): pestaña "Configuración" (`F7`) y resumen en el encabezado; datos por `ReadPrinter` (resuelve el *"being used by another process"* del servidor); `EMRI_DEVMODE` como DEVMODE efectivo en EMF; PrintTicket XPS, DSC, PJL y EJL; ESC/Page detectado; páginas/copias/caras/hojas con fiabilidad; temporales privados; `cola_jobinspect`; `--instancia-adicional` para probar junto a la versión de producción. Matriz de pruebas con Word, Acrobat, Chrome, Edge y RAW en `docs/DATOS_DE_IMPRESION.md`. Versión 0.3.0. |

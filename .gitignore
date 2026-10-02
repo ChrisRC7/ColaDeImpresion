@@ -11,3 +11,6 @@ dist/
 .vscode/
 CMakeUserPresets.json
 third_party/
+
+# Copias del servidor (spool, logs, historial): contienen datos de usuarios
+ArchivosUtiles/

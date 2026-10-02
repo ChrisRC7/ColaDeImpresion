@@ -119,28 +119,63 @@ El criterio se guarda entre sesiones (`sortBy` / `sortDescending` en `config.jso
 - `AvPág`/`→` y `RePág`/`←`: cambiar de página. Rueda del mouse: páginas.
 - `Ctrl+rueda`, `Ctrl++`, `Ctrl+-`: zoom; `Ctrl+0`: ajustar. Con zoom, arrastrar para mover; doble clic alterna 100 %/200 %.
 
-De dónde sale la vista previa:
+### 4.1 Pestaña «Configuración» (`F7`)
 
-| Datos del trabajo | Qué se necesita |
+Arriba del panel hay dos pestañas: **Vista previa** y **Configuración**. `F7`
+(o un clic) alterna entre ellas; en la ficha, `AvPág`/`RePág` y la rueda la
+desplazan. El encabezado del panel muestra además un resumen de una línea:
+papel · orientación · doble cara · copias · caras previstas (`≈` = estimado).
+
+La ficha muestra, para el trabajo seleccionado:
+
+- **Configuración solicitada**: tamaño de papel (nombre y medidas en mm),
+  orientación, doble cara (una cara / borde largo / borde corto), copias,
+  intercalado, color, origen del papel, calidad, escala, tipo de medio y
+  páginas por cara.
+- **Páginas, caras y hojas**: páginas en los datos, páginas lógicas (una copia),
+  copias hechas por la aplicación (si se detectan), caras y hojas físicas
+  previstas, y el progreso del spooler.
+- **Datos y vista previa**: formato real de los datos, cómo se leyeron y si hay
+  vista previa (o por qué no).
+- **Trabajo**: los datos de `JOB_INFO_2` (id, usuario, equipo, estado, fecha,
+  tamaño, tipo de datos, controlador, procesador).
+
+Cada valor dice **de dónde sale** y lleva una insignia:
+
+| Insignia | Significado |
 |---|---|
-| EMF (drivers GDI, impresión en el servidor) | Nada extra |
-| PostScript / PDF | Ghostscript |
-| PCL 5 / PCL XL (PCL 6) | GhostPCL |
-| XPS (drivers v4) | GhostXPS (o, sin él, miniatura de la primera página si Windows tiene visor XPS) |
+| **Fiable** | Confirmado por la fuente que realmente aplica el spooler o por los propios datos del trabajo. |
+| **Estimado** | Supuesto o sin confirmar; debajo se explica el motivo (p. ej. "trabajo RAW: el controlador ya aplicó las opciones en el equipo del usuario"). |
+| **No determinable** | Falta información; se explica cuál. |
 
-Siempre hace falta poder **leer la carpeta de spool del servidor**. Esto no
-depende de la PC del estudiante ni de la aplicación que imprimió: el archivo lo
-guarda el servidor mientras el trabajo está en la cola, y la app solo lo lee.
+Las caras y hojas **nunca** se calculan multiplicando a ciegas páginas × copias:
+algunas aplicaciones repiten las páginas para hacer las copias y otras dejan que
+lo haga el controlador. Detalle técnico y pruebas en
+[DATOS_DE_IMPRESION.md](DATOS_DE_IMPRESION.md).
 
-- Si la app corre **en el propio servidor**, se usa la ruta local
-  (`C:\Windows\System32\spool\PRINTERS`) y basta con ser administrador de ese
-  equipo (Menú → *Reiniciar como administrador*).
-- Desde **otra PC** se usa `\\SERVIDOR\C$\…` (o `ADMIN$`), que exige ser
-  administrador del servidor; la alternativa es compartir la carpeta y ponerla
-  en `spoolDirOverrides`.
-- Si una cola tiene su **propia carpeta de spool**, también se busca ahí.
-- Cuando no se encuentra el archivo, el panel muestra **en qué carpetas se buscó
-  y el motivo de cada fallo**; lo mismo queda en `app.log`.
+### 4.2 De dónde sale la vista previa
+
+Los datos del trabajo se leen con la **API del spooler** (como lo hace el propio
+Windows): basta con tener **"Administrar documentos"** en la cola (o ser el
+dueño del trabajo). No hace falta ser administrador del servidor ni acceder a
+`\\SERVIDOR\C$`. Si la API falla, se intenta el archivo de spool como en
+versiones anteriores (eso sí exige ser administrador del servidor).
+
+| Datos del trabajo | Vista previa |
+|---|---|
+| EMF (drivers GDI, impresión en el servidor) | Sí, sin nada extra |
+| PostScript / PDF | Sí, con Ghostscript (incluido en la carpeta `renderers`) |
+| PCL 5 / PCL XL (PCL 6) | Sí, con GhostPCL |
+| XPS (drivers v4) | Sí, con GhostXPS (o miniatura de la primera página) |
+| **ESC/Page de Epson (colas LAIMI 1/2 - INK)** | **No disponible**: es el lenguaje propio de la impresora, generado en la PC del estudiante, y no hay intérprete. La pestaña Configuración sí funciona. |
+
+Si no se pueden leer los datos, el panel muestra **qué se intentó y por qué
+falló** cada vía; lo mismo queda en `app.log`. Un trabajo que todavía se está
+recibiendo se analiza al terminar de llegar.
+
+Las copias temporales que necesitan Ghostscript y la miniatura de Windows se
+crean en una carpeta privada (solo accesible para el usuario que ejecuta la app)
+y se borran enseguida; al salir se borra la carpeta.
 
 Las vistas previas se guardan en caché mientras la app está abierta.
 

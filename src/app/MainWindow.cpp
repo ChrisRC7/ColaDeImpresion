@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <climits>
 
+#include "app/JobSheet.h"
 #include "app/RowBuilder.h"
 #include "config/Autostart.h"
 #include "config/Paths.h"
@@ -771,6 +772,8 @@ std::vector<std::wstring> MainWindow::JobDetails(const core::JobInfo& job, const
     copy.totalPages = pages;
     lines.push_back(PagesText(copy) + L" · " + util::FormatBytes(job.sizeBytes) + L" · " +
                     util::Format(Tr(S::DetailSubmitted), util::FormatTimeShort(job.submitted).c_str()));
+    // Papel, orientación, doble cara, copias y caras previstas ("≈" = estimado; detalle en F7).
+    lines.push_back(SettingsSummary(job, doc));
 
     std::wstring state = JobStatusText(job);
     if (!job.statusText.empty()) state += L" — " + job.statusText;
@@ -809,9 +812,11 @@ void MainWindow::UpdatePreview() {
     auto request = MakePreviewRequest(*job);
     std::wstring key = request.Key();
     auto doc = previews_->Find(key);
+    const core::PrinterInfo* printer = snapshot_ ? snapshot_->FindPrinter(job->printer) : nullptr;
     if (doc) {
         currentPreviewKey_ = key;
         preview_.ShowDocument(job->document, JobDetails(*job, doc.get()), doc);
+        preview_.SetSheet(BuildJobSheet(*job, printer, doc.get()));
         return;
     }
     // Mientras se genera, si había una versión anterior del mismo trabajo se sigue mostrando.
@@ -819,8 +824,10 @@ void MainWindow::UpdatePreview() {
     currentPreviewKey_ = key;
     if (sameJob && preview_.mode() == ui::PreviewPane::Mode::Document) {
         preview_.SetInfo(job->document, JobDetails(*job, preview_.document().get()));
+        preview_.SetSheet(BuildJobSheet(*job, printer, preview_.document().get()));
     } else {
         preview_.ShowLoading(job->document, JobDetails(*job, nullptr));
+        preview_.SetSheet(BuildJobSheet(*job, printer, nullptr));
     }
     previews_->Request(request, true);
 }
@@ -889,6 +896,18 @@ void MainWindow::Execute(Command command) {
             settings_.showPreviewPane = !settings_.showPreviewPane;
             SaveSettings();
             Layout();
+            UpdatePreview();
+            break;
+        case Command::ToggleSheet:
+            // Alterna entre la vista previa y la configuración de impresión del trabajo.
+            if (!settings_.showPreviewPane) {
+                settings_.showPreviewPane = true;
+                SaveSettings();
+                Layout();
+                preview_.SetTab(ui::PreviewPane::Tab::Sheet);
+            } else {
+                preview_.ToggleTab();
+            }
             UpdatePreview();
             break;
         case Command::ToggleAutoHold:

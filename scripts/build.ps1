@@ -27,7 +27,9 @@ $buildDir = Join-Path $root ("build-" + $Config.ToLower())
 
 # --- Toolchain ---------------------------------------------------------------
 if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
-    $candidates = @($env:COLA_MINGW, "D:\Programacion\Herramientas\winlibs\mingw64", "C:\mingw64", "C:\msys64\ucrt64")
+    # Además de las rutas habituales, "Herramientas\winlibs" junto a la carpeta del proyecto.
+    $sibling = Join-Path (Split-Path -Parent $root) "Herramientas\winlibs\mingw64"
+    $candidates = @($env:COLA_MINGW, "D:\Programacion\Herramientas\winlibs\mingw64", $sibling, "C:\mingw64", "C:\msys64\ucrt64")
     foreach ($c in $candidates) {
         if ($c -and (Test-Path (Join-Path $c "bin\cmake.exe"))) {
             $env:PATH = (Join-Path $c "bin") + ";" + $env:PATH
@@ -102,10 +104,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 pause
 "@
     Copy-Item (Join-Path $root "docs\PRUEBAS.md") $dist -ErrorAction SilentlyContinue
-    $testjob = Get-ChildItem -Path $buildDir -Recurse -Filter cola_testjob.exe | Select-Object -First 1
-    if ($testjob) {
-        New-Item -ItemType Directory (Join-Path $dist "herramientas") | Out-Null
-        Copy-Item $testjob.FullName (Join-Path $dist "herramientas")
+    Copy-Item (Join-Path $root "docs\DATOS_DE_IMPRESION.md") $dist -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory (Join-Path $dist "herramientas") -Force | Out-Null
+    foreach ($tool in @("cola_testjob.exe", "cola_jobinspect.exe")) {
+        $found = Get-ChildItem -Path $buildDir -Recurse -Filter $tool | Select-Object -First 1
+        if ($found) { Copy-Item $found.FullName (Join-Path $dist "herramientas") }
     }
     Set-Content -Path (Join-Path $dist "LEEME - PRUEBA EN EL LAIMI.txt") -Encoding utf8 -Value @"
 COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
@@ -158,22 +161,27 @@ VISTA PREVIA
 - La carpeta "renderers" trae Ghostscript, GhostPCL y GhostXPS para ver los
   trabajos PCL, PostScript, PDF y XPS (ver renderers\LEEME.txt). No la separe
   del .exe. Si falta, esos trabajos se listan igual pero sin vista previa.
-- La vista previa lee el archivo de spool que guarda EL SERVIDOR; no depende de
-  la PC donde se imprimió. Para leerlo hace falta permiso sobre la carpeta de
-  spool: ejecutando la app EN el servidor basta con ser administrador local ahí
-  (Menú > Reiniciar como administrador); desde otra PC hay que ser
-  administrador de vtec-laimiprint (se usa \\vtec-laimiprint\C$).
-- Si no encuentra el archivo, el panel ahora dice exactamente en qué carpetas
-  buscó y por qué falló cada una. Si el motivo es "acceso denegado", es
-  permisos; si dice que no existe, anote el texto y tráigalo junto con app.log.
-- También se puede indicar una carpeta de spool alternativa en config.json
-  ("spoolDirOverrides").
+- La vista previa lee los datos del trabajo CON LA API DEL SPOOLER (como lo
+  hace el propio Windows): basta con tener "Administrar documentos" en la cola;
+  ya no hace falta ser administrador del servidor ni acceder a \\SERVIDOR\C$.
+  Si eso falla, se intenta el archivo de spool como antes.
+- Los trabajos de las Epson del LAIMI llegan en ESC/Page (lenguaje propio de
+  Epson, generado en la PC del estudiante): para ellos la vista previa dice
+  "no disponible" y explica por qué. Lo que sí se ve siempre es la pestaña
+  CONFIGURACIÓN (F7): papel, orientación, doble cara, copias, páginas, caras y
+  hojas previstas, cada dato con su origen y su fiabilidad
+  (Fiable / Estimado / No determinable). Detalle en DATOS_DE_IMPRESION.md.
+- Si no se pueden leer los datos, el panel dice qué se intentó y por qué falló.
 
 OPCIONAL
 - herramientas\cola_testjob.exe crea trabajos de prueba que quedan en cola
   sin imprimir (se abortan solos). Ejemplo, en una consola:
     herramientas\cola_testjob.exe "\\vtec-laimiprint\NOMBRE-IMPRESORA" --jobs 2 --pages 3 --seconds 120 --pause
   ¡Sin --pause y con --finish SÍ se imprimen de verdad!
+- herramientas\cola_jobinspect.exe muestra en consola la misma ficha
+  "Configuración" para cada trabajo (y con --csv arma la matriz de pruebas):
+    herramientas\cola_jobinspect.exe "\\vtec-laimiprint\NOMBRE-IMPRESORA" --data --csv pruebas.csv --label "1 pag x 10 copias"
+  Ver la sección "Pruebas pendientes en el LAIMI" de DATOS_DE_IMPRESION.md.
 "@
     Write-Host "Distribución lista en $dist"
 }

@@ -40,6 +40,7 @@ enum class Command {
     ZoomOut,
     ZoomReset,
     TogglePane,
+    ToggleSheet,
     // Buscar, impresoras y servidor
     Find,
     History,

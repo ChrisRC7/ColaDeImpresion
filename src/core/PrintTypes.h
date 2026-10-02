@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "core/PrintSettings.h"
+
 namespace cola::core {
 
 // Estado simplificado de un trabajo (derivado de los flags JOB_STATUS_*).
@@ -55,6 +57,11 @@ struct PrinterInfo {
     std::uint32_t rawStatus = 0;  // PRINTER_STATUS_*
     std::uint32_t problems = ProblemNone;
     std::uint32_t jobCount = 0;
+    std::wstring printProcessor;  // procesador de impresión de la cola ("winprint"...)
+    std::wstring datatype;        // tipo de datos predeterminado de la cola
+    // DEVMODE predeterminado de la cola (PRINTER_INFO_2.pDevMode): solo para
+    // compararlo con el del trabajo, nunca para sustituirlo.
+    PrintSettings defaults;
     bool isDefault = false;
     bool isShared = false;
 
@@ -70,6 +77,8 @@ struct JobInfo {
     std::wstring machine;
     std::wstring datatype;    // "RAW", "NT EMF 1.008", "XPS_PASS"...
     std::wstring driver;
+    std::wstring printProcessor;  // pPrintProcessor ("winprint", "MS_XPS_PROC"...)
+    std::wstring parameters;      // pParameters
     std::wstring statusText;  // texto de estado proporcionado por el monitor de puerto (pStatus)
     std::uint32_t rawStatus = 0;  // JOB_STATUS_*
     std::uint32_t priority = 1;   // 1..99
@@ -78,6 +87,8 @@ struct JobInfo {
     std::uint32_t pagesPrinted = 0;
     std::uint64_t sizeBytes = 0;
     SYSTEMTIME submitted{};  // UTC
+    // Configuración pedida al imprimir: DEVMODE DEL TRABAJO (JOB_INFO_2.pDevMode).
+    PrintSettings settings;
     JobState state = JobState::Unknown;
     bool heldByApp = false;  // pausado automáticamente por la retención de la app
 

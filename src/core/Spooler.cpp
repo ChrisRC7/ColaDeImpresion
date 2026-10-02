@@ -75,6 +75,9 @@ void FillPrinterInfo(const PRINTER_INFO_2W& src, const std::wstring& server, con
     out.rawStatus = src.Status;
     out.problems = PrinterProblemsFromFlags(src.Status, src.Attributes);
     out.jobCount = src.cJobs;
+    out.printProcessor = Str(src.pPrintProcessor);
+    out.datatype = Str(src.pDatatype);
+    out.defaults = ParseDevMode(src.pDevMode);
     out.isShared = (src.Attributes & PRINTER_ATTRIBUTE_SHARED) != 0;
     out.isDefault = !defaultName.empty() && _wcsicmp(out.name.c_str(), defaultName.c_str()) == 0;
 }
@@ -233,6 +236,8 @@ std::vector<JobInfo> EnumerateJobs(HANDLE printer, const std::wstring& printerNa
         j.machine = Str(src.pMachineName);
         j.datatype = Str(src.pDatatype);
         j.driver = Str(src.pDriverName);
+        j.printProcessor = Str(src.pPrintProcessor);
+        j.parameters = Str(src.pParameters);
         j.statusText = Str(src.pStatus);
         j.rawStatus = src.Status;
         j.priority = src.Priority;
@@ -241,6 +246,8 @@ std::vector<JobInfo> EnumerateJobs(HANDLE printer, const std::wstring& printerNa
         j.pagesPrinted = src.PagesPrinted;
         j.sizeBytes = src.Size;
         j.submitted = src.Submitted;
+        // El DEVMODE del trabajo (no el de la impresora): lo que se pidió al imprimir.
+        j.settings = ParseDevMode(src.pDevMode);
         j.state = JobStateFromFlags(src.Status, problems);
         jobs.push_back(std::move(j));
     }
@@ -281,6 +288,47 @@ OpResult PurgePrinter(const std::wstring& printer) { return ControlPrinter(print
 bool CanAdminister(const std::wstring& printer) {
     PrinterHandle h;
     return h.Open(printer, true);
+}
+
+OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint64_t maxBytes,
+                     std::vector<std::uint8_t>& out, bool* truncated) {
+    out.clear();
+    if (truncated) *truncated = false;
+    // "Impresora,Job N" abre el trabajo (no la impresora) para leer sus datos.
+    std::wstring name = printer + L",Job " + std::to_wstring(jobId);
+    PRINTER_DEFAULTSW defaults{};
+    defaults.DesiredAccess = JOB_READ;
+    HANDLE h = nullptr;
+    if (!OpenPrinterW(name.data(), &h, &defaults)) {
+        DWORD err = GetLastError();
+        // Sin derechos pedidos explícitamente algunos servidores dan el acceso que corresponde.
+        if (err != ERROR_ACCESS_DENIED || !OpenPrinterW(name.data(), &h, nullptr)) return OpResult::Fail(err);
+    }
+    PrinterHandle handle(h);
+    std::vector<std::uint8_t> chunk(256 * 1024);
+    DWORD error = ERROR_SUCCESS;
+    for (;;) {
+        if (out.size() >= maxBytes) {
+            // Comprueba si quedaba algo más sin leerlo entero.
+            BYTE probe = 0;
+            DWORD got = 0;
+            if (truncated && ReadPrinter(handle.get(), &probe, 1, &got) && got > 0) *truncated = true;
+            break;
+        }
+        DWORD want = static_cast<DWORD>(std::min<std::uint64_t>(chunk.size(), maxBytes - out.size()));
+        DWORD got = 0;
+        if (!ReadPrinter(handle.get(), chunk.data(), want, &got)) {
+            error = GetLastError();
+            break;
+        }
+        if (got == 0) break;  // fin de los datos
+        out.insert(out.end(), chunk.begin(), chunk.begin() + got);
+    }
+    if (error != ERROR_SUCCESS) {
+        if (out.empty()) return OpResult::Fail(error);
+        if (truncated) *truncated = true;  // se cortó a mitad: lo leído sirve, pero está incompleto
+    }
+    return OpResult::Success();
 }
 
 std::wstring GetSpoolDirectory(const std::wstring& serverIn) {

@@ -8,15 +8,36 @@
 #include <vector>
 
 #include "preview/PreviewTypes.h"
+#include "ui/Theme.h"
 #include "ui/Window.h"
 
 namespace cola::ui {
+
+// Fila de la ficha "Configuración": sección o campo con su valor, de dónde
+// sale (detail) y una insignia de fiabilidad opcional.
+struct InfoRow {
+    enum class Kind { Section, Field };
+    Kind kind = Kind::Field;
+    std::wstring label;
+    std::wstring value;
+    std::wstring detail;     // origen del dato y, si no es fiable, el motivo
+    std::wstring badge;      // "Fiable", "Estimado", "No determinable" (vacío = sin insignia)
+    Tone badgeTone = Tone::Neutral;
+};
 
 class PreviewPane : public Window {
 public:
     bool Create(HWND parent);
 
     enum class Mode { Empty, Loading, Document };
+    // Pestañas del panel: la vista previa de las páginas o la ficha con la
+    // configuración de impresión del trabajo.
+    enum class Tab { Preview, Sheet };
+
+    void SetSheet(std::vector<InfoRow> rows);
+    void SetTab(Tab tab);
+    void ToggleTab() { SetTab(tab_ == Tab::Preview ? Tab::Sheet : Tab::Preview); }
+    Tab tab() const { return tab_; }
 
     void ShowEmpty(const std::wstring& message);
     void ShowLoading(const std::wstring& title, const std::vector<std::wstring>& details);
@@ -45,6 +66,9 @@ private:
     int PaintHeader(HDC dc, const RECT& client);  // devuelve el alto usado
     void PaintFooter(HDC dc, const RECT& footer);
     void PaintMessage(HDC dc, const RECT& area, wchar_t glyph, const std::wstring& text);
+    int PaintTabs(HDC dc, const RECT& client, int top);  // devuelve el alto usado
+    void PaintSheet(HDC dc, const RECT& area);
+    void ScrollSheet(int delta);
     RECT PageArea() const;
     RECT PageRect(const RECT& area) const;
     void SetZoom(double zoom);
@@ -66,6 +90,11 @@ private:
     bool quickLook_ = false;
     int headerHeight_ = 0;
     RECT prevButton_{}, nextButton_{};
+    Tab tab_ = Tab::Preview;
+    RECT tabPreview_{}, tabSheet_{};
+    std::vector<InfoRow> sheet_;
+    int sheetScroll_ = 0;      // desplazamiento vertical de la ficha (px)
+    int sheetContent_ = 0;     // alto total de la ficha (px), calculado al pintar
 };
 
 }  // namespace cola::ui
