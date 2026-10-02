@@ -34,10 +34,18 @@ struct ListSettings {
     std::wstring duplex;       // "Una cara" / "Borde largo" / "Borde corto"
     std::wstring source;       // origen del papel
 };
-ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* facts);
+// printer (puede ser nullptr) aporta los nombres de bandejas y papeles del controlador.
+ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* facts,
+                                 const core::PrinterInfo* printer = nullptr);
+
+// Nombre de una bandeja. En las Epson AM-C6000 del LAIMI: "Auto selección",
+// "Bandeja 1", "Bandeja 2" o "Alimentador de papel"; en otras, el que le da el
+// controlador (printer->bins) o uno genérico. driver = controlador del trabajo.
+std::wstring BinName(short bin, const std::wstring& driver, const core::PrinterInfo* printer);
+bool IsVerifiedEpsonDriver(const std::wstring& driver);
 
 // Textos de valores (también para la herramienta de inspección).
-std::wstring PaperText(const core::PrintSettings& settings);
+std::wstring PaperText(const core::PrintSettings& settings, const core::PrinterInfo* printer = nullptr);
 std::wstring OrientationText(short orientation);
 std::wstring DuplexText(short duplex);
 std::wstring ReliabilityText(core::Reliability reliability);

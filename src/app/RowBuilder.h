@@ -78,7 +78,9 @@ std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapsho
 std::wstring MachineName(const std::wstring& machine);
 
 // Celdas en el orden de JobColumns(showPrinter).
-ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts = nullptr);
+// printer (puede ser nullptr) aporta los nombres de bandejas y papeles del controlador.
+ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts = nullptr,
+                       const core::PrinterInfo* printer = nullptr);
 ui::ListRow MakeHistoryRow(const config::HistoryEntry& entry, size_t index);
 std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index);
 

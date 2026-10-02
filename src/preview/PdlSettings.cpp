@@ -76,6 +76,13 @@ short PaperCode(const std::string& name) {
 
 void SetPaper(const std::string& name, core::ContentFacts& facts) {
     if (name.empty()) return;
+    if (name == "ARCHB") {
+        // 12 x 18 pulgadas (ANSI Arch B): así lo escribe el controlador Epson AM-C6000.
+        facts.paperName.Set(L"ARCHB");
+        facts.paperWidth.Set(3048);
+        facts.paperLength.Set(4572);
+        return;
+    }
     facts.paperName.Set(util::FromUtf8(name));
     if (const core::PaperInfo* p = core::FindPaper(PaperCode(name))) {
         facts.paperWidth.Set(p->width);
@@ -134,21 +141,36 @@ void ParsePjl(const std::vector<std::string>& lines, core::ContentFacts& facts) 
 // (generando sus datos "a archivo" con distintas opciones, 2026-10-02):
 //   QT = copias (CO no cambia), PS = papel (LT/A4/LGL), DX/BD = doble cara y
 //   borde, "JI PAGES" = hojas físicas (ya incluye copias y doble cara), y en
-//   ESC/Page "GS n poE" = orientación (0 vertical, 1 horizontal).
+//   ESC/Page "GS n poE" = orientación (0 vertical, 1 horizontal), "GS n;m iuE" =
+//   bandeja, y PS=ARCHB = 12 x 18 pulgadas.
 bool VerifiedEpsonDriver(const std::string& driverUpper) {
     return driverUpper.find("EPSON AM-C6000") != std::string::npos;
 }
 
-// "GS <n> poE" (orientación de página de ESC/Page) en el comienzo del documento.
-int EscPageOrientation(const std::uint8_t* data, size_t size) {
+// Primer parámetro de un comando ESC/Page "GS <n>[;<m>...] <cmd>" al comienzo
+// del documento (-1 si no está).
+int EscPageParam(const std::uint8_t* data, size_t size, const char* command) {
     std::string_view text(reinterpret_cast<const char*>(data), std::min<size_t>(size, 64 * 1024));
     size_t lang = text.find("LA=ESC/PAGE");
-    size_t at = text.find("poE", lang == std::string_view::npos ? 0 : lang);
+    size_t at = text.find(command, lang == std::string_view::npos ? 0 : lang);
     if (at == std::string_view::npos || at < 2) return -1;
     size_t start = at;
-    while (start > 0 && text[start - 1] >= '0' && text[start - 1] <= '9') --start;
+    while (start > 0 && ((text[start - 1] >= '0' && text[start - 1] <= '9') || text[start - 1] == ';')) --start;
     if (start == at || start == 0 || text[start - 1] != 0x1d) return -1;
     return atoi(std::string(text.substr(start, at - start)).c_str());
+}
+
+// Bandeja de "GS n;m iuE" como el código DMBIN que usa el controlador AM-C6000
+// (verificado imprimiendo a archivo con cada bandeja): 0 = Auto selección (7),
+// 1 = Bandeja de papel 1 (258), 2 = Bandeja de papel 2 (259), 15 = Alimentador de papel (261).
+short EpsonBin(int unit) {
+    switch (unit) {
+        case 0: return DMBIN_AUTO;
+        case 1: return 258;
+        case 2: return 259;
+        case 15: return 261;
+        default: return 0;
+    }
 }
 
 void ParseEjl(const std::uint8_t* data, size_t size, const std::vector<std::string>& header,
@@ -189,7 +211,8 @@ void ParseEjl(const std::uint8_t* data, size_t size, const std::vector<std::stri
         if (dx == "OFF") facts.duplex.Set(DMDUP_SIMPLEX);
         else if (dx == "ON") facts.duplex.Set(bd == "SE" ? DMDUP_HORIZONTAL : DMDUP_VERTICAL);
         if (quantity > 0) facts.copies.Set(quantity);
-        int orientation = EscPageOrientation(data, size);
+        int orientation = EscPageParam(data, size, "poE");
+        if (short bin = EpsonBin(EscPageParam(data, size, "iuE")); bin != 0) facts.sourceBin.Set(bin);
         if (orientation == 0) facts.orientation.Set(DMORIENT_PORTRAIT);
         else if (orientation == 1) facts.orientation.Set(DMORIENT_LANDSCAPE);
     }

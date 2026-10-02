@@ -94,6 +94,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] (LAIMI) Pruebas P6–P8 (Lexmark, etiquetas, operador sin permisos)
 - [x] Columna "Páginas" = páginas × copias para todos los trabajos (análisis en segundo plano de sus datos)
 - [x] Columnas de papel, orientación, doble cara y origen del papel
+- [x] Origen del papel y papel con nombres en vez de códigos: Auto selección / Alimentador de papel / Bandeja 1 / Bandeja 2 y Carta / A3 / 12 × 18 (bandeja leída del ESC/Page `iuE` de las Epson, nombres del controlador con `DeviceCapabilities` para otras impresoras)
+- [ ] (LAIMI) Confirmar con trabajos reales de estudiantes que el origen del papel coincide con la bandeja elegida (incluido el alimentador)
 
 ---
 
@@ -156,7 +158,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 62 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 68 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

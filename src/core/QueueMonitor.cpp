@@ -36,6 +36,10 @@ struct QueueMonitor::Watched {
     bool directResolved = false;
     ULONGLONG directRetryAt = 0;  // si no se pudo abrir, cuándo reintentar (GetTickCount64)
     size_t lastCacheDiff = 0;     // para no repetir el mismo aviso en el log
+    // Nombres de bandejas y papeles del controlador (se leen una vez).
+    bool formsLoaded = false;
+    std::vector<std::pair<short, std::wstring>> bins;
+    std::vector<DriverPaper> papers;
     HANDLE change = INVALID_HANDLE_VALUE;
     std::vector<JobInfo> jobs;
     bool dirty = true;
@@ -122,6 +126,12 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
         }
     }
     spooler::QueryPrinter(w.handle.get(), server_, w.info);
+    if (!w.formsLoaded) {
+        w.formsLoaded = true;
+        spooler::GetDriverForms(w.info.name, w.bins, w.papers);
+    }
+    w.info.bins = w.bins;
+    w.info.papers = w.papers;
     DWORD err = ERROR_SUCCESS;
     std::vector<JobInfo> cached = spooler::EnumerateJobs(w.handle.get(), w.info.name, w.info.problems, &err);
     w.jobs = cached;

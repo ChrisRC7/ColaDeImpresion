@@ -88,6 +88,12 @@ std::wstring ReplacePrinterServer(const std::wstring& printerName, const std::ws
 // si el servidor es este mismo equipo, también sus colas locales no compartidas.
 std::vector<PrinterInfo> EnumeratePrinters(const std::wstring& server, DWORD* error = nullptr);
 
+// Bandejas y papeles que declara el controlador de la cola (DeviceCapabilities).
+// Necesita el controlador instalado en este equipo (lo está en las conexiones a
+// impresoras compartidas). Puede tardar la primera vez: llamar en segundo plano.
+bool GetDriverForms(const std::wstring& printer, std::vector<std::pair<short, std::wstring>>& bins,
+                    std::vector<DriverPaper>& papers);
+
 // Datos actualizados de una impresora a partir de un handle abierto.
 bool QueryPrinter(HANDLE printer, const std::wstring& server, PrinterInfo& out);
 

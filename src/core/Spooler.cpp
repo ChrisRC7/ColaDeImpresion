@@ -257,6 +257,46 @@ std::vector<PrinterInfo> EnumeratePrinters(const std::wstring& serverIn, DWORD* 
     return printers;
 }
 
+bool GetDriverForms(const std::wstring& printer, std::vector<std::pair<short, std::wstring>>& bins,
+                    std::vector<DriverPaper>& papers) {
+    bins.clear();
+    papers.clear();
+    const wchar_t* device = printer.c_str();
+    const int binCount = DeviceCapabilitiesW(device, nullptr, DC_BINS, nullptr, nullptr);
+    if (binCount > 0) {
+        std::vector<WORD> codes(static_cast<size_t>(binCount));
+        std::vector<wchar_t> names(static_cast<size_t>(binCount) * 24 + 1, L'\0');
+        if (DeviceCapabilitiesW(device, nullptr, DC_BINS, reinterpret_cast<LPWSTR>(codes.data()), nullptr) == binCount &&
+            DeviceCapabilitiesW(device, nullptr, DC_BINNAMES, names.data(), nullptr) == binCount) {
+            for (int i = 0; i < binCount; ++i) {
+                const wchar_t* name = &names[static_cast<size_t>(i) * 24];
+                bins.emplace_back(static_cast<short>(codes[static_cast<size_t>(i)]), std::wstring(name, wcsnlen(name, 24)));
+            }
+        }
+    }
+    const int paperCount = DeviceCapabilitiesW(device, nullptr, DC_PAPERS, nullptr, nullptr);
+    if (paperCount > 0) {
+        std::vector<WORD> codes(static_cast<size_t>(paperCount));
+        std::vector<wchar_t> names(static_cast<size_t>(paperCount) * 64 + 1, L'\0');
+        std::vector<POINT> sizes(static_cast<size_t>(paperCount));
+        if (DeviceCapabilitiesW(device, nullptr, DC_PAPERS, reinterpret_cast<LPWSTR>(codes.data()), nullptr) == paperCount &&
+            DeviceCapabilitiesW(device, nullptr, DC_PAPERNAMES, names.data(), nullptr) == paperCount &&
+            DeviceCapabilitiesW(device, nullptr, DC_PAPERSIZE, reinterpret_cast<LPWSTR>(sizes.data()), nullptr) ==
+                paperCount) {
+            for (int i = 0; i < paperCount; ++i) {
+                const wchar_t* name = &names[static_cast<size_t>(i) * 64];
+                DriverPaper p;
+                p.code = static_cast<short>(codes[static_cast<size_t>(i)]);
+                p.name.assign(name, wcsnlen(name, 64));
+                p.width = static_cast<short>(sizes[static_cast<size_t>(i)].x);
+                p.length = static_cast<short>(sizes[static_cast<size_t>(i)].y);
+                papers.push_back(std::move(p));
+            }
+        }
+    }
+    return !bins.empty() || !papers.empty();
+}
+
 bool QueryPrinter(HANDLE printer, const std::wstring& server, PrinterInfo& out) {
     std::vector<BYTE> buffer;
     bool ok = FillBuffer(buffer, [&](BYTE* data, DWORD size, DWORD* needed) {

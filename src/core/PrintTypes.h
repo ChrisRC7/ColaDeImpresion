@@ -46,6 +46,14 @@ enum PrinterProblem : std::uint32_t {
     ProblemOutOfMemory = 1u << 12,
 };
 
+// Papel que ofrece el controlador (DeviceCapabilities DC_PAPERS / DC_PAPERNAMES / DC_PAPERSIZE).
+struct DriverPaper {
+    short code = 0;       // DMPAPER_* o código propio del controlador (>= 256)
+    std::wstring name;    // "12 x 18 pulg. (305 x 457 mm)"
+    short width = 0;      // décimas de mm
+    short length = 0;
+};
+
 struct PrinterInfo {
     std::wstring name;      // nombre completo usable con OpenPrinter ("\\\\SRV\\HP-Lab1" o "HP-Lab1")
     std::wstring server;    // "" = local
@@ -62,6 +70,10 @@ struct PrinterInfo {
     // DEVMODE predeterminado de la cola (PRINTER_INFO_2.pDevMode): solo para
     // compararlo con el del trabajo, nunca para sustituirlo.
     PrintSettings defaults;
+    // Nombres que da el controlador a sus bandejas y papeles (en el idioma de
+    // Windows): "Auto selección", "Bandeja de papel 1"... Vacío si no se pudieron leer.
+    std::vector<std::pair<short, std::wstring>> bins;
+    std::vector<DriverPaper> papers;
     bool isDefault = false;
     bool isShared = false;
 

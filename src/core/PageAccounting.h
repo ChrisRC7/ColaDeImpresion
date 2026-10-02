@@ -63,6 +63,8 @@ struct ContentFacts {
     Field<short> orientation;  // mismos valores que dmOrientation
     Field<short> color;        // mismos valores que dmColor
     Field<short> collate;      // mismos valores que dmCollate
+    // Bandeja, como el código DMBIN equivalente del controlador (ESC/Page: "GS n;m iuE").
+    Field<short> sourceBin;
     Field<std::uint32_t> pagesPerSheet;
     Field<std::wstring> paperName;  // nombre tal como viene en los datos
     Field<short> paperWidth;        // décimas de mm

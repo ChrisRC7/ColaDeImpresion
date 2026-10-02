@@ -50,6 +50,9 @@ const PaperInfo kPapers[] = {
     {DMPAPER_A3_EXTRA, L"A3 extra", L"A3 Extra", 3220, 4450},
     {DMPAPER_A2, L"A2", L"A2", 4200, 5940},
     {DMPAPER_A6, L"A6", L"A6", 1050, 1480},
+    // Sin código DMPAPER estándar (cada controlador le da el suyo; en el Epson
+    // AM-C6000 es 625): código 0, solo se reconoce por las medidas.
+    {0, L"12 × 18", L"12 × 18 in", 3048, 4572},
 };
 
 // true si el campo [offset, offset+size) cabe en los bytes que declara dmSize.
@@ -119,7 +122,7 @@ PrintSettings ParseDevMode(const DEVMODEW* dm, size_t available) {
 
 const PaperInfo* FindPaper(short code) {
     for (const auto& p : kPapers)
-        if (p.code == code) return &p;
+        if (p.code != 0 && p.code == code) return &p;
     return nullptr;
 }
 

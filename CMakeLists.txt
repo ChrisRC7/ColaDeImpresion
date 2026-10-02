@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ColaDeImpresion VERSION 0.4.3 LANGUAGES CXX RC)
+project(ColaDeImpresion VERSION 0.4.4 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -60,6 +60,14 @@ target_link_libraries(ColaDeImpresion PRIVATE cola_core)
 if(MSVC)
     # El manifiesto ya se incluye desde app.rc
     target_link_options(ColaDeImpresion PRIVATE /MANIFEST:NO)
+else()
+    # MinGW enlaza su manifiesto predeterminado (default-manifest.o) y, con el
+    # de app.rc, el .exe quedaba con dos manifiestos ("multiple non-default
+    # manifests"). Un default-manifest.o vacío en una carpeta de -B lo reemplaza
+    # (ld lo lee como un script de enlazador sin instrucciones).
+    set(COLA_NO_MANIFEST_DIR ${CMAKE_BINARY_DIR}/sin-manifiesto)
+    file(WRITE ${COLA_NO_MANIFEST_DIR}/default-manifest.o "/* sin manifiesto predeterminado */\n")
+    target_link_options(ColaDeImpresion PRIVATE "-B${COLA_NO_MANIFEST_DIR}/")
 endif()
 
 # ---------------------------------------------------------------------------

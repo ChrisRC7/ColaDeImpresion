@@ -120,6 +120,7 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **`JOB_INFO_2.pDevMode` no siempre es lo aplicado**: en EMF manda el `EMRI_DEVMODE` del spool (Word lo cambia tras `StartDoc`). Usar `core::EffectiveDevMode`.
 - **`pDatatype` no dice el formato real**: un driver v4 declara `RAW` y envía OpenXPS; detectar siempre por contenido (`DetectFormat`).
 - **Pruebas con "imprimir a archivo"** (`lpszOutput`): si el trabajo queda pausado, `EndDoc` de la aplicación se bloquea hasta que se reanude. Con `cola_jobinspect --hold` usar `--release`.
+- **Manifiesto con MinGW**: GCC enlaza `default-manifest.o` y el .exe quedaba con dos `RT_MANIFEST` (aviso `.rsrc merge failure: multiple non-default manifests`). `CMakeLists.txt` lo reemplaza por uno vacío con `-B`; si reaparece el aviso, revisar eso.
 - **Macro `near`** de `windows.h`: no usar ese nombre para variables o lambdas.
 - **Word por COM desde PowerShell 5.1**: los métodos exigen `[ref]` y los valores llegan envueltos en `PSObject`; usar `InvokeMember` con valores desenvueltos (ver `tools/pruebas/word_jobs.ps1`) y guardar los `.ps1` con BOM UTF-8.
 - **Probar una compilación con la versión de producción abierta**: la app es de instancia única; usar `--instancia-adicional` con `build\portable.txt` y un `config.json` propio (escribirlo con una biblioteca JSON: las barras invertidas de las rutas se rompen fácilmente). Con la configuración por defecto la app activa la retención y pausa impresoras al iniciar.

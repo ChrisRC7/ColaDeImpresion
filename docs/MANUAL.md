@@ -31,7 +31,10 @@ bajo su título.
   valor es estimado (por ejemplo, todavía no se leyeron los datos), la pestaña
   Configuración lo indica con la insignia *Estimado* y el motivo.
 - Papel, orientación, doble cara y origen siguen el mismo criterio que la
-  pestaña Configuración (sección 4.1).
+  pestaña Configuración (sección 4.1). El papel se muestra por nombre
+  (Carta, A3, 12 × 18) y el origen con el nombre de la bandeja: en las Epson
+  del LAIMI, *Auto selección*, *Alimentador de papel*, *Bandeja 1* o
+  *Bandeja 2* (nunca un número de código).
 - En ventanas angostas se ocultan primero `#`, Impresora, Tamaño, Enviado,
   Origen y Orientación; Usuario, Equipo y Páginas se mantienen.
 

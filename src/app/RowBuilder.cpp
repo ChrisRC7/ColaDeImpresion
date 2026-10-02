@@ -189,7 +189,8 @@ bool BeforeInQueue(const core::JobInfo& a, const core::JobInfo& b) {
 }
 
 // Compara por el criterio elegido. 0 = empate (se desempata con la cola).
-int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const FactsLookup& facts) {
+int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const FactsLookup& facts,
+              const core::QueueSnapshot& snapshot) {
     auto text = [](const std::wstring& x, const std::wstring& y) { return _wcsicmp(x.c_str(), y.c_str()); };
     auto number = [](std::uint64_t x, std::uint64_t y) { return x < y ? -1 : (x > y ? 1 : 0); };
     switch (sort) {
@@ -203,7 +204,7 @@ int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const
         case SortBy::Source: {
             // Por el valor mostrado.
             auto value = [&](const core::JobInfo& job) {
-                ListSettings s = ResolveListSettings(job, facts ? facts(job) : nullptr);
+                ListSettings s = ResolveListSettings(job, facts ? facts(job) : nullptr, snapshot.FindPrinter(job.printer));
                 std::wstring v = sort == SortBy::Paper ? s.paper
                                  : sort == SortBy::Orientation ? s.orientation
                                  : sort == SortBy::Duplex ? s.duplex
@@ -236,7 +237,7 @@ std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapsho
         jobs.push_back(&job);
     }
     std::stable_sort(jobs.begin(), jobs.end(), [&](const core::JobInfo* a, const core::JobInfo* b) {
-        int cmp = CompareBy(sort, *a, *b, facts);
+        int cmp = CompareBy(sort, *a, *b, facts, snapshot);
         if (descending) cmp = -cmp;
         if (cmp != 0) return cmp < 0;
         // A igualdad de criterio (y siempre en "Cola"), el orden real de impresión.
@@ -313,7 +314,8 @@ std::pair<SortBy, bool> NextSort(SortBy current, bool descending, SortBy clicked
     return {clicked, false};
 }
 
-ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts) {
+ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts,
+                       const core::PrinterInfo* printer) {
     ui::ListRow row;
     row.key = job.Key();
     row.cells.push_back(job.position ? std::to_wstring(job.position) : L"");
@@ -323,7 +325,7 @@ ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::C
     row.cells.push_back(MachineName(job.machine));
     if (showPrinter) row.cells.push_back(PrinterShortName(job.printer));
     row.cells.push_back(TotalPagesText(TotalPrintPages(job, facts)));
-    const ListSettings settings = ResolveListSettings(job, facts);
+    const ListSettings settings = ResolveListSettings(job, facts, printer);
     row.cells.push_back(settings.paper);
     row.cells.push_back(settings.orientation);
     row.cells.push_back(settings.duplex);

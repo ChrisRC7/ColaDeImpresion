@@ -639,7 +639,7 @@ void MainWindow::RebuildRows() {
             };
             for (const auto* job : VisibleJobs(*snapshot_, settings_.activePrinter, filter_,
                                                CurrentSort(settings_), settings_.sortDescending, lookup))
-                rows.push_back(MakeJobRow(*job, showPrinter, lookup(*job)));
+                rows.push_back(MakeJobRow(*job, showPrinter, lookup(*job), snapshot_->FindPrinter(job->printer)));
         }
         if (connecting_) list_.SetEmptyText(Tr(S::StatusConnecting), ServerDisplayName(), ui::glyph::Server);
         else if (snapshot_ && !snapshot_->error.empty())

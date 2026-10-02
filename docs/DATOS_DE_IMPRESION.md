@@ -51,7 +51,7 @@ sin permisos de administrador del servidor) · **Servidor:** `\\vtec-laimiprint`
 | 3b | XPS / OpenXPS | XPS Object Model de Windows (`IXpsOMObjectFactory1`) + Print Schema | Páginas y PrintTicket (copias, papel, orientación, doble cara, N-up, color) |
 | 3c | PostScript | Comentarios DSC 3.0 / PPD (documentados) | `%%Pages`, `NumCopies`, `*PageSize`, `%%Orientation`, `*Duplex` |
 | 3d | PCL / PCL XL | PJL (documentado por HP) | `COPIES`, `QTY`, `DUPLEX`, `BINDING`, `PAPER`, `ORIENTATION` |
-| 3e | ESC/Page (Epson) | EJL (`ESC 01 @EJL`, sin documentación pública) y comandos ESC/Page | Con el controlador EPSON AM-C6000 (verificado): `QT` copias, `PS` papel, `DX`/`BD` doble cara, `GS n poE` orientación, `JI PAGES` hojas físicas. Con otros controladores: solo indicio |
+| 3e | ESC/Page (Epson) | EJL (`ESC 01 @EJL`, sin documentación pública) y comandos ESC/Page | Con el controlador EPSON AM-C6000 (verificado): `QT` copias, `PS` papel, `DX`/`BD` doble cara, `GS n poE` orientación, `GS n iuE` bandeja, `JI PAGES` hojas físicas. Con otros controladores: solo indicio |
 | 4 | Archivo de spool | `\\SRV\C$\...\PRINTERS` o ruta local | Respaldo si la API falla (requiere administrador del servidor) |
 
 El formato se detecta **por el contenido**, no por `pDatatype`: un driver v4
@@ -78,7 +78,7 @@ Fiabilidad: **F** = fiable, **E** = estimado, **N** = no determinable.
 | Copias | `dmCopies` (solo con `DM_COPIES`) | F | F con PrintTicket | F con PJL/DSC o EJL verificado (`QT`); E si solo hay DEVMODE | En RAW el controlador ya aplicó las copias en el cliente; los datos mandan sobre el DEVMODE del servidor. |
 | Intercalar | `dmCollate` | F | F/E | F/E | |
 | Color | `dmColor` | F | F/E | F/E | |
-| Origen del papel, calidad, escala, tipo de medio | `dmDefaultSource`, `dmPrintQuality`, `dmScale`, `dmMediaType` | informativo | informativo | informativo | Valores ≥ 256 son propios del controlador. |
+| Origen del papel, calidad, escala, tipo de medio | `dmDefaultSource`, `dmPrintQuality`, `dmScale`, `dmMediaType` | informativo | informativo | informativo | Valores ≥ 256 son propios del controlador: se muestran con el nombre que les da (`DeviceCapabilities`); en las Epson AM-C6000, Auto selección / Bandeja 1 / Bandeja 2 / Alimentador de papel. En RAW la bandeja de los datos (`iuE`) manda. |
 | Páginas por cara (N-up) | PrintTicket (`PagesPerSheet`) | **N** (opción privada) | F si el ticket lo trae; N si no | N | `dmNup` solo dice *quién* compone, no cuántas. |
 | Caras físicas previstas | Cálculo | F con 1 página lógica; E con varias (N-up desconocido) | F con N-up en el ticket | E | Hereda la peor fiabilidad de sus datos. |
 | Hojas físicas previstas | Cálculo con la doble cara, o `JI PAGES` del controlador Epson | igual que caras y doble cara | | F con EJL verificado | Cada copia empieza en hoja nueva. `JI PAGES` ya incluye copias, doble cara y N-up. |
@@ -139,6 +139,8 @@ Hallazgos, con la prueba que los respalda (sección 8):
     | Doble cara borde largo / corto (2 págs.) | `DX=ON BD=LE` / `DX=ON BD=SE`, `JI PAGES="1"` |
     | A4 / Oficio / Carta | `PS=A4` / `PS=LGL` / `PS=LT` y `GS 14/32/30 psE` |
     | Horizontal | `GS 1 poE` (vertical: `GS 0 poE`) |
+    | 12 × 18 pulg. | `PS=ARCHB` (código DMPAPER del controlador: 625) |
+    | Auto selección / Bandeja 1 / Bandeja 2 / Alimentador de papel | `GS 0 iuE` / `GS 1;… iuE` / `GS 2;… iuE` / `GS 15;… iuE` (DMBIN del controlador: 7 / 258 / 259 / 261) |
 
     `CO` no cambia nunca; las copias van en `QT`; `JI PAGES` son **hojas
     físicas** (no páginas). El intercalado no se pudo variar: el controlador lo

@@ -134,6 +134,20 @@ std::wstring SourceText(short bin) {
     }
 }
 
+// Papel propio del controlador (código >= 257, p. ej. 625 = 12 x 18 en el Epson AM-C6000).
+const core::DriverPaper* DriverPaperFor(short code, const core::PrinterInfo* printer) {
+    if (!printer || code <= DMPAPER_USER) return nullptr;
+    for (const auto& p : printer->papers)
+        if (p.code == code) return &p;
+    return nullptr;
+}
+
+// "12 x 18 pulg. (305 x 457 mm)" -> "12 x 18 pulg."
+std::wstring ShortDriverName(const std::wstring& name) {
+    size_t paren = name.find(L" (");
+    return paren == std::wstring::npos ? name : name.substr(0, paren);
+}
+
 std::wstring QualityText(short quality) {
     switch (quality) {
         case DMRES_DRAFT: return Tr(S::QualityDraft);
@@ -191,8 +205,20 @@ std::wstring Marked(core::Reliability reliability, const std::wstring& text) {
     return text;
 }
 
-// Nombre corto de un papel: el del tamaño estándar o las medidas.
-std::wstring ShortPaper(short code, bool custom, short width, short length, const std::wstring& fallback) {
+// Controlador del trabajo: el que declaran los datos (EJL) o el de JOB_INFO_2.
+std::wstring JobDriver(const core::JobInfo& job, const core::ContentFacts* facts) {
+    return facts && !facts->verifiedDriver.empty() ? facts->verifiedDriver : job.driver;
+}
+
+// Nombre corto de un papel: el del tamaño estándar, el del controlador o las medidas.
+std::wstring ShortPaper(short code, bool custom, short width, short length, const std::wstring& fallback,
+                        const core::PrinterInfo* printer = nullptr) {
+    if (const core::DriverPaper* driver = DriverPaperFor(code, printer)) {
+        // Con medidas conocidas, el mismo nombre que en el resto de la lista ("12 × 18").
+        if (const core::PaperInfo* known = core::FindPaperBySize(driver->width, driver->length))
+            return i18n::GetLanguage() == i18n::Language::Spanish ? known->nameEs : known->nameEn;
+        return ShortDriverName(driver->name);
+    }
     const core::PaperInfo* info = !custom && code ? core::FindPaper(code) : nullptr;
     if (!info && width > 0 && length > 0 && !custom) info = core::FindPaperBySize(width, length);
     if (info) return i18n::GetLanguage() == i18n::Language::Spanish ? info->nameEs : info->nameEn;
@@ -202,7 +228,32 @@ std::wstring ShortPaper(short code, bool custom, short width, short length, cons
 
 }  // namespace
 
-ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* factsIn) {
+bool IsVerifiedEpsonDriver(const std::wstring& driver) {
+    std::wstring upper = driver;
+    for (auto& c : upper) c = static_cast<wchar_t>(towupper(c));
+    return upper.find(L"EPSON AM-C6000") != std::wstring::npos;
+}
+
+std::wstring BinName(short bin, const std::wstring& driver, const core::PrinterInfo* printer) {
+    // Bandejas de las Epson del LAIMI con los nombres que usa el personal
+    // (códigos verificados imprimiendo a archivo con cada bandeja).
+    if (IsVerifiedEpsonDriver(driver) || (printer && IsVerifiedEpsonDriver(printer->driver))) {
+        switch (bin) {
+            case DMBIN_AUTO: return Tr(S::BinAuto);
+            case 258: return Tr(S::BinTray1);
+            case 259: return Tr(S::BinTray2);
+            case 261: return Tr(S::BinFeeder);
+            default: break;
+        }
+    }
+    if (printer)
+        for (const auto& [code, name] : printer->bins)
+            if (code == bin && !name.empty()) return name;
+    return SourceText(bin);
+}
+
+ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* factsIn,
+                                 const core::PrinterInfo* printer) {
     ListSettings out;
     const core::ContentFacts* facts = factsIn && factsIn->analyzed ? factsIn : nullptr;
     const core::PrintSettings& dm = core::EffectiveDevMode(job, facts);
@@ -224,7 +275,7 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
                               facts->paperName.valid ? facts->paperName.value : L"");
         else if (inDm)
             text = ShortPaper(dm.paperSize.valid ? dm.paperSize.value : 0, size.custom, size.width, size.length,
-                              dm.formName.valid ? dm.formName.value : L"");
+                              dm.formName.valid ? dm.formName.value : L"", printer);
         out.paper = Marked(a.reliability, text);
     }
     // Orientación.
@@ -246,17 +297,24 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
                                                                      : Tr(S::ValueSimplex);
         out.duplex = Marked(acc.duplex.reliability, text);
     }
-    // Origen del papel: solo en el DEVMODE (en RAW puede ser el predeterminado de la cola).
-    if (dm.defaultSource.valid) {
-        auto a = core::AssessSetting(acc.kind, true, false, false, false, dataRead);
-        out.source = Marked(a.reliability, SourceText(dm.defaultSource.value));
-    } else {
-        out.source = L"—";
+    // Origen del papel: en los datos (ESC/Page "iuE") o en el DEVMODE (en RAW
+    // este puede ser el predeterminado de la cola). Con el nombre del controlador.
+    {
+        const bool inDm = dm.defaultSource.valid;
+        const bool inContent = facts && facts->sourceBin.valid;
+        const bool agree = inDm && inContent && dm.defaultSource.value == facts->sourceBin.value;
+        auto a = core::AssessSetting(acc.kind, inDm, inContent, documented, agree, dataRead);
+        short bin = inContent && (documented || !inDm) ? facts->sourceBin.value : dm.defaultSource.value;
+        out.source = Marked(a.reliability, inDm || inContent ? BinName(bin, JobDriver(job, facts), printer) : L"");
     }
     return out;
 }
 
-std::wstring PaperText(const core::PrintSettings& s) {
+std::wstring PaperText(const core::PrintSettings& s, const core::PrinterInfo* printer) {
+    // Papel propio del controlador: su nombre y sus medidas.
+    if (s.paperSize.valid)
+        if (const core::DriverPaper* driver = DriverPaperFor(s.paperSize.value, printer))
+            return ShortDriverName(driver->name) + L" — " + SizeText(driver->width, driver->length);
     core::PaperSize size = core::EffectivePaper(s);
     const core::PaperInfo* info = s.paperSize.valid ? core::FindPaper(s.paperSize.value) : nullptr;
     std::wstring name;
@@ -380,7 +438,7 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
                 contentText += (contentText.empty() ? L"" : L" — ") +
                                SizeText(facts->paperWidth.value, facts->paperLength.value);
         }
-        std::wstring value = inDm ? PaperText(dm) : std::wstring(Tr(S::ValueNotDeclared));
+        std::wstring value = inDm ? PaperText(dm, printer) : std::wstring(Tr(S::ValueNotDeclared));
         std::wstring extra;
         if (inContent && !inDm) {
             value = contentText;
@@ -435,9 +493,22 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
     }
     optionRow(S::SheetCollate, dm.collate, facts ? facts->collate : kNone, L"dmCollate", &CollateText);
     optionRow(S::SheetColor, dm.color, facts ? facts->color : kNone, L"dmColor", &ColorText);
-    if (dm.defaultSource.valid)
-        rows.push_back(Field(S::SheetSource, SourceText(dm.defaultSource.value),
-                             devModeOrigin(util::Format(L"dmDefaultSource=%d", dm.defaultSource.value))));
+    {
+        // Origen del papel: datos (ESC/Page "iuE") o DEVMODE, con el nombre del controlador.
+        const bool inDm = dm.defaultSource.valid;
+        const bool inContent = facts && facts->sourceBin.valid;
+        const bool agree = inDm && inContent && dm.defaultSource.value == facts->sourceBin.value;
+        auto a = fixBasis(core::AssessSetting(acc.kind, inDm, inContent, documented, agree, facts != nullptr));
+        if (inDm || inContent) {
+            short bin = inContent && (documented || !inDm) ? facts->sourceBin.value : dm.defaultSource.value;
+            std::wstring extra;
+            if (inDm && inContent && !agree)
+                extra = util::Format(Tr(S::NoteDevModeSays),
+                                     BinName(dm.defaultSource.value, JobDriver(job, facts), printer).c_str());
+            rows.push_back(SettingRow(S::SheetSource, BinName(bin, JobDriver(job, facts), printer), a,
+                                      util::Format(L"dmDefaultSource=%d", dm.defaultSource.value), facts, extra));
+        }
+    }
     if (dm.printQuality.valid)
         rows.push_back(Field(S::SheetQuality, QualityText(dm.printQuality.value),
                              devModeOrigin(util::Format(L"dmPrintQuality=%d", dm.printQuality.value))));

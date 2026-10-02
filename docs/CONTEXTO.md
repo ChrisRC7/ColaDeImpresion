@@ -51,6 +51,7 @@
 | D31 | **"Páginas" = páginas × copias** (`PageAccounting::printPages`), con los datos de TODOS los trabajos analizados en segundo plano (`preview::JobFactsService`: lee hasta 16 MB por trabajo con la API, una vez, y guarda solo los `ContentFacts`) | Las copias de los trabajos de otras PCs solo están en sus datos (EJL). En EMF, sin leer los datos, el DEVMODE de `JOB_INFO_2` puede estar desactualizado: se muestra como estimado. |
 | D32 | **Lecturas `ReadPrinter` serializadas** en el proceso (y reintento si llegan 0 bytes de un trabajo con datos) | Comprobado: dos lecturas simultáneas del mismo trabajo hacen que la segunda reciba 0 bytes (la vista previa salía "vacía" mientras el análisis de la lista leía el mismo trabajo). |
 | D33 | **Panel de detalles oculto al iniciar**, con botón en la cabecera (además de `Ctrl+B` / `F7`) | Pedido del usuario: más espacio para la tabla. |
+| D34 | **Bandejas y papeles por nombre**: la bandeja sale de los datos (ESC/Page `GS n iuE`, verificado con el AM-C6000) o del DEVMODE; en las Epson AM-C6000 se muestran los nombres del personal (Auto selección, Bandeja 1, Bandeja 2, Alimentador de papel) y en otras el nombre que da el controlador (`spooler::GetDriverForms` → `DeviceCapabilities`, una vez por cola en el hilo del monitor). Los papeles propios del controlador (12 × 18 = 625) se nombran por sus medidas para que coincidan con los de los datos (`PS=ARCHB`) | Pedido del usuario: en la columna "Origen del papel" aparecían códigos ("Bandeja propia del controlador (258)"). Los códigos ≥ 256 son privados de cada controlador, así que sin el nombre no significan nada. |
 | D16 | **Idioma**: UI en español por defecto, inglés disponible (X-macro en `StringTable.inl`) | Público del TEC; el cambio es inmediato desde el menú. |
 
 ## 3. Arquitectura
@@ -96,10 +97,10 @@ puntero que el receptor libera.
 
 ## 4. Estado actual
 
-**Versión 0.3.0** — configuración de impresión y vista previa por trabajo
+**Versión 0.4.4** (base 0.3.0) — configuración de impresión y vista previa por trabajo
 (pestaña `F7`), lectura de datos por la API del spooler, DEVMODE efectivo del
 spool EMF, PrintTicket/DSC/PJL/EJL, separación páginas/copias/caras/hojas con
-fiabilidad y temporales privados. 62 pruebas unitarias en verde (Debug y
+fiabilidad y temporales privados. 68 pruebas unitarias en verde (Debug y
 Release), sin warnings. Verificado en LAIMI1-CTRL1 con Word, Acrobat, Chrome,
 Edge y datos RAW (14/14 predicciones de caras coinciden con la salida real) y
 con la lectura remota de un trabajo real en `vtec-laimiprint` sin ser
@@ -156,6 +157,7 @@ físicas e impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 | 2026-09-22 | **Trabajos que faltaban respecto a la cola de Windows**: el sondeo de respaldo pasa a tener vencimiento propio (antes cada notificación lo reiniciaba y una impresora "ruidosa" dejaba a las demás sin refrescar); la enumeración de impresoras de un servidor suma sus colas locales y las conexiones a ese servidor (`PRINTER_ENUM_NAME` solo devuelve las compartidas); si `cJobs` supera lo enumerado se reintenta y se avisa en la barra de estado. |
 | 2026-09-22 | **Vista previa en el servidor** (D21): rutas locales si la app corre en el propio servidor (`IsLocalServer`), carpeta de spool propia de cada cola, segunda pasada en los `.SHD` solo por id, errores de lectura ya no se ignoran y el panel/`app.log` muestran dónde se buscó y por qué falló. |
 | 2026-09-22 | Versión 0.2.0. Información de versión completa del ejecutable con empresa **ChrisCorp** (descripción, copyright, comentarios, bloques es/en) y manifiesto con Windows 7–11/Server; `Desbloquear archivos.bat` en el paquete portable. |
+| 2026-10-02 | 0.4.4: origen del papel y papel por nombre (D34): Auto selección / Alimentador de papel / Bandeja 1 / Bandeja 2 y Carta / A3 / 12 × 18, verificado contra el controlador real de `LAIMI 1 - INK`. El .exe tenía dos manifiestos con WinLibs (el de `app.rc` y el predeterminado de MinGW); ahora solo el propio. Toolchain reinstalada en el equipo nuevo (`..\Herramientas\winlibs`). 68 pruebas. |
 | 2026-10-02 | 0.4.3: sin el símbolo "≈" en la interfaz (lista y resumen); la fiabilidad se ve solo con las insignias de la pestaña Configuración. |
 | 2026-10-02 | 0.4.2: valores y títulos centrados desde la columna Estado; "Enviado" con fecha y hora (dd/mm/aaaa hh:mm). |
 | 2026-10-02 | 0.4.1: la tabla ya no dibuja el ícono de estado a la izquierda (repetía la columna Estado). |

@@ -397,6 +397,65 @@ TEST(EpsonAmC6000OnePageTenCopies) {
     CHECK(acc.sheets.basis == core::Basis::DriverSheets);
 }
 
+TEST(EpsonPaperSourceShowsNames) {
+    i18n::SetLanguage(i18n::Language::Spanish);
+    // Datos del controlador AM-C6000: bandeja en "GS n;m iuE" y papel en PS.
+    auto parse = [](const std::string& ps, const std::string& unit) {
+        std::string data =
+            "\x1b\x01@EJL \n@EJL JI USER=\"x\" MACHINE=\"\\\\PC\" DOCUMENT=\"d\" DRIVER=\"EPSON AM-C6000 Series\"\n"
+            "@EJL SE LA=ESC/PAGE\n@EJL SET PS=" + ps + " DX=OFF BD=LE CO=1 QT=1\n@EJL EN LA=ESC/PAGE-COLOR\n"
+            "\x1d" "0poE\x1d" + unit + "iuE\x1d" "0bdE";
+        data += std::string(64, '\0');
+        data += "\x1b\x01@EJL \n@EJL JI PAGES=\"1\"\n\x1b\x01@EJL \n@EJL EJ \n";
+        auto bytes = Bytes(data);
+        core::ContentFacts f;
+        f.analyzed = f.complete = true;
+        f.kind = core::DataKind::Pdl;
+        preview::ParsePdlSettings(bytes.data(), bytes.size(), true, f);
+        return f;
+    };
+    core::JobInfo job;
+    job.datatype = L"RAW";
+    job.totalPages = 1;
+    struct Case { const char* ps; const char* unit; const wchar_t* paper; const wchar_t* source; };
+    const Case cases[] = {
+        {"LT", "0", L"Carta", L"Auto selección"},
+        {"A3", "1;0", L"A3", L"Bandeja 1"},
+        {"ARCHB", "2;0", L"12 × 18", L"Bandeja 2"},
+        {"LT", "15;0", L"Carta", L"Alimentador de papel"},
+    };
+    for (const auto& c : cases) {
+        auto f = parse(c.ps, c.unit);
+        CHECK(f.sourceBin.valid);
+        auto s = app::ResolveListSettings(job, &f);
+        CHECK_EQ(s.paper, std::wstring(c.paper));
+        CHECK_EQ(s.source, std::wstring(c.source));
+    }
+
+    // Sin datos: el DEVMODE del trabajo con el código propio del controlador.
+    DEVMODEW dm = MakeDevMode();
+    dm.dmFields = DM_DEFAULTSOURCE;
+    dm.dmDefaultSource = 259;
+    core::JobInfo emf = EmfJob(1, dm);
+    emf.driver = L"EPSON AM-C6000 Series";
+    CHECK_EQ(app::ResolveListSettings(emf, nullptr).source, std::wstring(L"Bandeja 2"));
+    // Otro controlador: el nombre que declara (DeviceCapabilities) o uno genérico.
+    core::PrinterInfo other;
+    other.driver = L"Lexmark Universal v2";
+    CHECK_EQ(app::BinName(259, L"Lexmark Universal v2", &other), std::wstring(L"Bandeja propia del controlador (259)"));
+    other.bins.push_back({259, L"Bandeja MP"});
+    CHECK_EQ(app::BinName(259, L"Lexmark Universal v2", &other), std::wstring(L"Bandeja MP"));
+    // Papel propio del controlador (625) con las medidas de 12 × 18: el nombre de la lista.
+    core::PrinterInfo epson;
+    epson.papers.push_back({625, L"12 x 18 pulg. (305 x 457 mm)", 3048, 4572});
+    DEVMODEW big = MakeDevMode();
+    big.dmFields = DM_PAPERSIZE;
+    big.dmPaperSize = 625;
+    core::JobInfo bigJob = EmfJob(1, big);
+    CHECK_EQ(app::ResolveListSettings(bigJob, nullptr, &epson).paper, std::wstring(L"12 × 18"));
+    CHECK(core::FindPaper(0) == nullptr);
+}
+
 TEST(PostScriptDscIsParsed) {
     // Fragmentos reales de PSCRIPT5 (Word -> CutePDF) y de Acrobat ("%%Pages: (atend)").
     std::string ps =
