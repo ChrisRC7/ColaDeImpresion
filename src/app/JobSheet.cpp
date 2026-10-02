@@ -185,9 +185,10 @@ const core::ContentFacts* FactsOf(const preview::PreviewDocument* doc) {
 
 namespace {
 
+// Valor para la lista: sin marcas (la fiabilidad se ve en la pestaña Configuración).
 std::wstring Marked(core::Reliability reliability, const std::wstring& text) {
     if (text.empty() || reliability == Reliability::Unknown) return L"—";
-    return reliability == Reliability::Reliable ? text : L"≈" + text;
+    return text;
 }
 
 // Nombre corto de un papel: el del tamaño estándar o las medidas.
@@ -554,7 +555,8 @@ std::wstring SettingsSummary(const core::JobInfo& job, const preview::PreviewDoc
     const core::ContentFacts* facts = FactsOf(doc);
     const core::PageAccounting acc = core::ComputePageAccounting(job, facts);
     const core::PrintSettings& dm = core::EffectiveDevMode(job, facts);
-    auto mark = [](const core::Quantity& q) { return q.reliability == Reliability::Reliable ? L"" : L"≈"; };
+    // Sin marcas de estimado: la fiabilidad se ve en la pestaña Configuración.
+    auto mark = [](const core::Quantity&) { return L""; };
     std::vector<std::wstring> parts;
     // Si los datos declaran el papel con una sintaxis documentada y no coincide, mandan los datos
     // (igual que en la ficha).

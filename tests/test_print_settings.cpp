@@ -519,7 +519,8 @@ TEST(TotalPrintPagesIsPagesTimesCopies) {
     // Sin los datos del trabajo: la misma cuenta, pero marcada como estimada.
     auto estimate = app::TotalPrintPages(job, nullptr);
     CHECK_EQ(estimate.value, 9u);
-    CHECK_EQ(app::TotalPagesText(estimate), std::wstring(L"≈9"));
+    CHECK(estimate.reliability == core::Reliability::Estimated);
+    CHECK_EQ(app::TotalPagesText(estimate), std::wstring(L"9"));  // sin marcas en la lista
     // 1 página x 10 copias del ejemplo del LAIMI.
     DEVMODEW ten = MakeDevMode();
     ten.dmFields = DM_COPIES;

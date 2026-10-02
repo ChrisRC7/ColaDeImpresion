@@ -21,12 +21,13 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
                                        const preview::PreviewDocument* doc);
 
 // Resumen de una línea para el encabezado del panel:
-// "Carta · Vertical · Una cara · 10 copias · 10 caras" ("≈" = estimado).
+// "Carta · Vertical · Una cara · 10 copias · 10 págs. a imprimir".
 std::wstring SettingsSummary(const core::JobInfo& job, const preview::PreviewDocument* doc);
 
 // Opciones del trabajo en forma corta para las columnas de la lista, con el
 // mismo criterio que la ficha (datos documentados o verificados mandan sobre
-// el DEVMODE; "≈" = estimado; "—" = no declarado).
+// el DEVMODE; "—" = no declarado). Sin marcas de estimado: la fiabilidad se
+// ve en la pestaña Configuración.
 struct ListSettings {
     std::wstring paper;        // "Carta", "A4", "100 × 150 mm"
     std::wstring orientation;  // "Vertical" / "Horizontal"

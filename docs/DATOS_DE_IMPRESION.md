@@ -17,8 +17,9 @@ sin permisos de administrador del servidor) · **Servidor:** `\\vtec-laimiprint`
 - La app muestra, en la pestaña **Configuración** del panel derecho (`F7`), cada
   dato del trabajo con **su origen** y una insignia de **fiabilidad**: *Fiable*,
   *Estimado* (con el motivo) o *No determinable* (con el motivo). El encabezado
-  del panel resume papel · orientación · doble cara · copias · caras (con `≈`
-  si es estimado).
+  del panel resume papel · orientación · doble cara · copias · páginas a
+  imprimir. La lista y el resumen no llevan marcas; la fiabilidad está en la
+  pestaña Configuración.
 - Los datos del trabajo se leen con la **API del spooler**:
   `OpenPrinter("Cola,Job N")` + `ReadPrinter`. No se usa la carpeta de spool
   ni `\\SRV\C$`, no hace falta ser administrador del servidor y no choca con los
@@ -170,7 +171,7 @@ caras / hojas totales = por copia × copias
 El caso del enunciado, **1 página × 10 copias**, da **10 caras fiables**
 únicamente cuando la página lógica y las copias son fiables (1 página: el N-up
 no influye). Si las copias son estimadas (RAW sin confirmar) el resultado se
-muestra como `≈10` con el motivo.
+muestra como *Estimado* en la pestaña Configuración, con el motivo.
 
 ## 6. Vista previa por formato
 

@@ -794,7 +794,7 @@ std::vector<std::wstring> MainWindow::JobDetails(const core::JobInfo& job, const
     copy.totalPages = pages;
     lines.push_back(PagesText(copy) + L" · " + util::FormatBytes(job.sizeBytes) + L" · " +
                     util::Format(Tr(S::DetailSubmitted), util::FormatTimeShort(job.submitted).c_str()));
-    // Papel, orientación, doble cara, copias y caras previstas ("≈" = estimado; detalle en F7).
+    // Papel, orientación, doble cara, copias y páginas a imprimir (fiabilidad en F7).
     lines.push_back(SettingsSummary(job, doc));
 
     std::wstring state = JobStatusText(job);

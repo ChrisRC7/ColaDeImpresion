@@ -27,10 +27,11 @@ bajo su título.
 - **Páginas** es lo que se va a imprimir en total: **páginas × copias**
   (3 páginas con 3 copias = 9). Para los trabajos enviados desde otras PCs las
   copias se leen de los datos del trabajo (en las Epson del LAIMI, del
-  encabezado EJL), porque Windows no las informa. `≈` = estimado (por ejemplo,
-  todavía no se leyeron los datos); `—` = no se sabe.
+  encabezado EJL), porque Windows no las informa. `—` = no se sabe. Si un
+  valor es estimado (por ejemplo, todavía no se leyeron los datos), la pestaña
+  Configuración lo indica con la insignia *Estimado* y el motivo.
 - Papel, orientación, doble cara y origen siguen el mismo criterio que la
-  pestaña Configuración (sección 4.1); `≈` = estimado.
+  pestaña Configuración (sección 4.1).
 - En ventanas angostas se ocultan primero `#`, Impresora, Tamaño, Enviado,
   Origen y Orientación; Usuario, Equipo y Páginas se mantienen.
 
@@ -142,7 +143,7 @@ El criterio se guarda entre sesiones (`sortBy` / `sortDescending` en `config.jso
 Arriba del panel hay dos pestañas: **Vista previa** y **Configuración**. `F7`
 (o un clic) alterna entre ellas; en la ficha, `AvPág`/`RePág` y la rueda la
 desplazan. El encabezado del panel muestra además un resumen de una línea:
-papel · orientación · doble cara · copias · caras previstas (`≈` = estimado).
+papel · orientación · doble cara · copias · páginas a imprimir.
 
 La ficha muestra, para el trabajo seleccionado:
 

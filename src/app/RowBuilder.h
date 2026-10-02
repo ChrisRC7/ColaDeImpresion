@@ -49,7 +49,7 @@ struct PrintTotal {
     core::Reliability reliability = core::Reliability::Unknown;
 };
 PrintTotal TotalPrintPages(const core::JobInfo& job, const core::ContentFacts* facts);
-// "9", "≈9" (estimado) o "—" (no determinable).
+// "9" o "—" (no determinable). La fiabilidad se ve en la pestaña Configuración.
 std::wstring TotalPagesText(const PrintTotal& total);
 
 // Datos analizados de un trabajo (puede devolver nullptr).

@@ -201,14 +201,13 @@ int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const
         case SortBy::Orientation:
         case SortBy::Duplex:
         case SortBy::Source: {
-            // Por el valor mostrado, sin la marca de estimado.
+            // Por el valor mostrado.
             auto value = [&](const core::JobInfo& job) {
                 ListSettings s = ResolveListSettings(job, facts ? facts(job) : nullptr);
                 std::wstring v = sort == SortBy::Paper ? s.paper
                                  : sort == SortBy::Orientation ? s.orientation
                                  : sort == SortBy::Duplex ? s.duplex
                                                           : s.source;
-                if (!v.empty() && v[0] == L'≈') v.erase(0, 1);
                 return v;
             };
             return text(value(a), value(b));
@@ -267,8 +266,7 @@ PrintTotal TotalPrintPages(const core::JobInfo& job, const core::ContentFacts* f
 
 std::wstring TotalPagesText(const PrintTotal& total) {
     if (total.reliability == core::Reliability::Unknown || total.value == 0) return L"—";
-    std::wstring text = std::to_wstring(total.value);
-    return total.reliability == core::Reliability::Reliable ? text : L"≈" + text;
+    return std::to_wstring(total.value);  // sin marcas: la fiabilidad se ve en la pestaña Configuración
 }
 
 std::vector<ui::ListColumn> JobColumns(bool showPrinter) {
