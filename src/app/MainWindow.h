@@ -15,6 +15,7 @@
 #include "config/History.h"
 #include "config/Settings.h"
 #include "core/JobTracker.h"
+#include "core/PrintRelease.h"
 #include "core/QueueMonitor.h"
 #include "input/Shortcuts.h"
 #include "preview/JobFacts.h"
@@ -97,6 +98,10 @@ private:
     void RunOnSelection(JobAction action);
     // Pausa o reanuda los trabajos seleccionados (y opcionalmente la impresora).
     void TogglePauseSelection(bool alsoPrinter);
+    // Reanuda los trabajos seleccionados y sus impresoras; cada impresora se
+    // vuelve a pausar sola cuando todos sus trabajos liberados se enviaron.
+    void PrintSelectionAndRepause();
+    void RepauseReleasedPrinters();
     void CancelSelection(const std::vector<core::JobInfo>& jobs);
     void MoveFocused(int direction);
     void StartRedirect(POINT screen);
@@ -146,6 +151,7 @@ private:
     std::unique_ptr<preview::JobFactsService> facts_;
     std::unique_ptr<JobActionRunner> actions_;
     core::JobTracker tracker_;
+    core::PrintReleaseTracker release_;  // trabajos de "imprimir y volver a pausar"
 
     // Controles
     ui::HeaderBar header_;

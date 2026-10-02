@@ -34,6 +34,7 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 | `Ctrl+P` / `Ctrl+R` | Pausar (alterna) / reanudar el trabajo |
 | `Ctrl+Shift+P` o `F9` | Pausar / reanudar la impresora |
 | `Ctrl+Alt+P` o `F8` | Pausar / reanudar el trabajo **y** su impresora |
+| `Ctrl+Enter` o `F11` | Imprimir los seleccionados y volver a pausar la impresora al terminar |
 | `Supr` | Cancelar |
 | `Ctrl+↑` / `Ctrl+↓` | Subir / bajar en la cola |
 | `Espacio` o `Enter` | Vista previa rápida |

@@ -143,6 +143,11 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - IMPRIMIR Y VOLVER A PAUSAR: seleccione uno o varios trabajos retenidos
+     y presione F11 (o Ctrl+Enter). Se reanudan esos trabajos y su impresora;
+     cuando todos terminaron de enviarse, la impresora vuelve a quedar en
+     pausa sola. La barra inferior lo indica mientras tanto. También en el
+     clic derecho y en el menú.
    - ACCESO RÁPIDO: la barra bajo la cabecera. Con el botón "+" elija qué
      impresoras aparecen ahí; un clic filtra la cola por esa impresora y
      Ctrl+1…Ctrl+9 hacen lo mismo con el teclado. Clic derecho sobre una:

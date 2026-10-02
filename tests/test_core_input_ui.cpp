@@ -10,6 +10,7 @@
 #include "core/AutoHold.h"
 #include "core/JobStatus.h"
 #include "core/JobTracker.h"
+#include "core/PrintRelease.h"
 #include "core/Spooler.h"
 #include "input/Shortcuts.h"
 #include "ui/Theme.h"
@@ -278,6 +279,75 @@ TEST(AutoHoldExistingJobsOnStart) {
     ids = hold.Process(printer, {MakeJob(1, core::JobState::Queued), MakeJob(4, core::JobState::Queued)}, true, true);
     CHECK_EQ(ids.size(), size_t(1));
     CHECK_EQ(ids[0], 4u);
+}
+
+TEST(PrintReleaseRepausesWhenAllSent) {
+    core::PrintReleaseTracker release;
+    const std::wstring p1 = L"\\\\S\\P1";
+    core::JobInfo other = MakeJob(9, core::JobState::Paused);
+    other.printer = L"\\\\S\\P2";
+    auto snap = [&](std::vector<core::JobInfo> jobs, std::uint32_t p1Count) {
+        core::QueueSnapshot s;
+        core::PrinterInfo a;
+        a.name = p1;
+        a.jobCount = p1Count;
+        core::PrinterInfo b;
+        b.name = other.printer;
+        b.jobCount = 1;
+        s.printers = {a, b};
+        s.jobs = std::move(jobs);
+        return s;
+    };
+    // Se liberan 1 y 2 de P1 y el 9 de P2; uno ya impreso no se sigue.
+    CHECK_EQ(release.Start({MakeJob(1, core::JobState::Paused), MakeJob(2, core::JobState::Paused), other,
+                            MakeJob(3, core::JobState::Printed)},
+                           0),
+             size_t(3));
+    // Instantánea anterior a la reanudación: siguen en pausa, no se decide nada.
+    CHECK(release.Update(snap({MakeJob(1, core::JobState::Paused), MakeJob(2, core::JobState::Paused), other}, 2), 1000)
+              .empty());
+    // Imprimiendo el 1, el 2 en cola; el 9 sigue en pausa.
+    CHECK(release.Update(snap({MakeJob(1, core::JobState::Printing), MakeJob(2, core::JobState::Queued), other}, 2), 2000)
+              .empty());
+    // El 1 salió de la cola, pero el spooler cuenta 2 trabajos: el ausente podría seguir ahí.
+    CHECK(release.Update(snap({MakeJob(2, core::JobState::Queued), other}, 2), 3000).empty());
+    CHECK_EQ(release.PendingJobs(), size_t(3));  // 1 y 2 de P1, 9 de P2
+    // El 2 queda "enviado a la impresora": P1 ya se puede volver a pausar.
+    core::JobInfo sent = MakeJob(2, core::JobState::Printing);
+    sent.rawStatus = JOB_STATUS_COMPLETE;
+    auto done = release.Update(snap({sent, other}, 1), 4000);
+    CHECK_EQ(done.size(), size_t(1));
+    CHECK(done[0] == p1);
+    // El 9 nunca se reanudó (sin permisos): pasado el plazo se deja de esperar.
+    done = release.Update(snap({other}, 0), core::PrintReleaseTracker::kResumeGraceMs);
+    CHECK_EQ(done.size(), size_t(1));
+    CHECK(done[0] == other.printer);
+    CHECK(!release.Active());
+}
+
+TEST(PrintReleaseJobPausedAgainOrSnapshotError) {
+    core::PrintReleaseTracker release;
+    release.Start({MakeJob(1, core::JobState::Paused)}, 0);
+    core::QueueSnapshot s;
+    core::PrinterInfo p;
+    p.name = L"\\\\S\\P1";
+    p.jobCount = 1;
+    s.printers = {p};
+    s.jobs = {MakeJob(1, core::JobState::Queued)};
+    CHECK(release.Update(s, 100).empty());
+    // Con un error global o la impresora no disponible no se decide nada.
+    s.jobs.clear();
+    s.error = L"sin conexión";
+    CHECK(release.Update(s, 200).empty());
+    s.error.clear();
+    s.printers[0].problems = core::ProblemNotAvailable;
+    s.printers[0].jobCount = 0;
+    CHECK(release.Update(s, 300).empty());
+    // Un operador lo vuelve a pausar después de verlo correr: se vuelve a pausar la impresora.
+    s.printers[0].problems = core::ProblemNone;
+    s.printers[0].jobCount = 1;
+    s.jobs = {MakeJob(1, core::JobState::Paused)};
+    CHECK_EQ(release.Update(s, 400).size(), size_t(1));
 }
 
 TEST(SettingsHoldDefaults) {

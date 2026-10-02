@@ -45,6 +45,7 @@ bajo su título.
 | Quitar la selección | `Esc` o `Ctrl+Shift+A` | clic en una zona vacía de la lista |
 | Pausar / reanudar | `Ctrl+P` (alterna) o `Ctrl+R` | clic derecho |
 | Pausar / reanudar **el trabajo y su impresora** | `Ctrl+Alt+P` o **`F8`** | clic derecho |
+| **Imprimir los seleccionados y volver a pausar** la impresora | `Ctrl+Enter` o **`F11`** | clic derecho |
 | Reiniciar | `Ctrl+I` | clic derecho |
 | Cancelar | `Supr` (pide confirmación) | clic derecho |
 | Cancelar todos los de un usuario | — | clic derecho → *Cancelar todos los trabajos de…* |
@@ -93,6 +94,25 @@ alcanza; también hay que reanudar la impresora (`F9`), o usar `F8`, que libera
 el trabajo y la impresora de una vez.
 Pausar una impresora requiere el permiso "Administrar esta impresora"; si no se
 tiene, la barra de estado lo avisa y la retención de trabajos sigue funcionando.
+
+**`Ctrl+Enter` o `F11`** imprime solo lo elegido sin dejar la impresora
+abierta: reanuda los trabajos seleccionados (uno o varios) y, si su impresora
+está en pausa, también la reanuda. Cuando **todos** esos trabajos ya se
+enviaron a la impresora (salen de la cola o quedan como "enviado/impreso"),
+la app **vuelve a pausar la impresora sola**. Mientras tanto la barra inferior
+muestra "Imprimiendo N liberado(s): la impresora se pausará al terminar".
+Detalles:
+
+- Con trabajos de varias impresoras, cada impresora se vuelve a pausar en
+  cuanto terminan *sus* trabajos.
+- Si alguien vuelve a pausar o cancela uno de esos trabajos, deja de
+  esperarse; si un trabajo no se pudo reanudar (p. ej. por permisos), se deja
+  de esperar a los 15 s. Así la impresora nunca queda abierta indefinidamente.
+- Mientras la impresora está reanudada también podría imprimirse otro trabajo
+  de esa cola que **no** esté en pausa; con la retención automática y la pausa
+  de inicio activadas (lo predeterminado) todos los demás están retenidos.
+- La app tiene que seguir abierta (puede estar en la bandeja) hasta que
+  terminen de enviarse.
 
 Los problemas (sin papel, atasco, puerta abierta, sin tóner, fuera de línea…)
 aparecen en el botón de impresora, en la barra de estado y como notificación.

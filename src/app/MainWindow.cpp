@@ -67,6 +67,7 @@ enum MenuId : UINT {
     ID_AUTO_HOLD,
     ID_PAUSE_ON_START,
     ID_PAUSE_BOTH,
+    ID_PRINT_REPAUSE,
     ID_SORT_DESC,
     ID_SHOW_PRINTER_BAR,
     ID_PIN_CURRENT,
@@ -76,6 +77,7 @@ enum MenuId : UINT {
     ID_CHIP_PURGE,
     ID_CTX_PAUSE = 2101,
     ID_CTX_PAUSE_BOTH,
+    ID_CTX_PRINT_REPAUSE,
     ID_CTX_RESUME,
     ID_CTX_RESTART,
     ID_CTX_CANCEL,
@@ -334,6 +336,7 @@ void MainWindow::ConnectTo(const std::wstring& serverIn) {
     if (changed) {
         snapshot_.reset();
         tracker_.Reset();
+        release_.Reset();
         previews_->Clear();
         facts_->Clear();
         adminRights_.clear();
@@ -483,6 +486,7 @@ void MainWindow::OnSnapshot(core::SnapshotPtr snapshot) {
 
     ProcessEvents(tracker_.Update(*snapshot_));
     CheckPrinterProblems();
+    RepauseReleasedPrinters();
     // Copias reales de cada trabajo (lectura del inicio de sus datos, una vez por trabajo).
     facts_->Request(snapshot_->jobs, settings_.activeServer, SpoolOverrideDir());
 
@@ -750,6 +754,10 @@ void MainWindow::UpdateStatus() {
                                           SortName(CurrentSort(settings_)).c_str()),
                              ui::Tone::Info});
         }
+        if (release_.Active())
+            items.push_back({ui::glyph::Pause,
+                             util::Format(Tr(S::StatusPrintAndRepause), static_cast<unsigned>(release_.PendingJobs())),
+                             ui::Tone::Info});
         if (settings_.autoHoldNewJobs) items.push_back({ui::glyph::Pause, Tr(S::StatusAutoHold), ui::Tone::Info});
         items.push_back({snapshot_->notificationsActive ? ui::glyph::Live : ui::glyph::Refresh,
                          snapshot_->notificationsActive ? Tr(S::StatusLive) : Tr(S::StatusPolling), ui::Tone::Neutral});
@@ -864,6 +872,7 @@ void MainWindow::Execute(Command command) {
     switch (command) {
         case Command::Pause: TogglePauseSelection(false); break;
         case Command::TogglePauseBoth: TogglePauseSelection(true); break;
+        case Command::PrintAndRepause: PrintSelectionAndRepause(); break;
         case Command::ClearSelection: list_.ClearSelection(); break;
         case Command::Resume: RunOnSelection(JobAction::Resume); break;
         case Command::Cancel: CancelSelection(SelectedJobs()); break;
@@ -957,6 +966,42 @@ void MainWindow::TogglePauseSelection(bool alsoPrinter) {
     actions_->Run(pause ? JobAction::Pause : JobAction::Resume, jobs);
     // El combinado deja la(s) impresora(s) de esos trabajos en el mismo estado.
     if (alsoPrinter) SetPrintersPaused(pause, PrintersOf(jobs));
+}
+
+void MainWindow::PrintSelectionAndRepause() {
+    auto jobs = SelectedJobs();
+    if (jobs.empty()) {
+        ShowTransient(Tr(S::NoJobSelected), ui::Tone::Warning);
+        return;
+    }
+    const auto count = static_cast<unsigned>(release_.Start(jobs, GetTickCount64()));
+    if (count == 0) {
+        ShowTransient(Tr(S::PrintAndRepauseNothing), ui::Tone::Warning);
+        return;
+    }
+    // El mismo hilo de acciones reanuda primero los trabajos y después las
+    // impresoras: así no se cuela otro trabajo de la cola entre ambos pasos.
+    actions_->Run(JobAction::Resume, jobs);
+    std::vector<std::wstring> paused;
+    for (const auto& name : PrintersOf(jobs))
+        if (const auto* p = snapshot_->FindPrinter(name); p && (p->problems & core::ProblemPaused)) paused.push_back(name);
+    if (!paused.empty()) actions_->RunOnPrinters(JobAction::ResumePrinter, std::move(paused));
+    util::LogInfo(L"Imprimir y volver a pausar: %u trabajo(s) liberado(s)", count);
+    ShowTransient(util::Format(Tr(S::PrintAndRepauseStarted), count), ui::Tone::Success);
+}
+
+void MainWindow::RepauseReleasedPrinters() {
+    if (!release_.Active()) return;
+    auto done = release_.Update(*snapshot_, GetTickCount64());
+    if (done.empty()) return;
+    std::wstring names;
+    for (const auto& name : done) {
+        if (!names.empty()) names += L", ";
+        names += PrinterDisplay(name);
+        util::LogInfo(L"Imprimir y volver a pausar: %ls terminó, se pausa la impresora", name.c_str());
+    }
+    actions_->RunOnPrinters(JobAction::PausePrinter, std::move(done));
+    ShowTransient(util::Format(Tr(S::PrintAndRepauseDone), names.c_str()), ui::Tone::Success);
 }
 
 void MainWindow::RunOnSelection(JobAction action) {
@@ -1272,6 +1317,7 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(pinMenu), Tr(S::MenuQuickAccess));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_PAUSE_BOTH, keyed(S::MenuPauseBoth, Command::TogglePauseBoth).c_str());
+    AppendMenuW(menu, MF_STRING, ID_PRINT_REPAUSE, keyed(S::CmdPrintAndRepause, Command::PrintAndRepause).c_str());
     AppendMenuW(menu, MF_STRING, ID_PAUSE_PRINTER, keyed(S::MenuPausePrinter, Command::PausePrinter).c_str());
     AppendMenuW(menu, MF_STRING, ID_RESUME_PRINTER, keyed(S::MenuResumePrinter, Command::ResumePrinter).c_str());
     AppendMenuW(menu, MF_STRING, ID_PURGE, Tr(S::MenuPurge));
@@ -1325,6 +1371,8 @@ void MainWindow::ShowJobContextMenu(POINT screen) {
     };
     AppendMenuW(menu, MF_STRING, ID_CTX_PAUSE, keyed(S::CtxPause, Command::Pause).c_str());
     AppendMenuW(menu, MF_STRING, ID_CTX_PAUSE_BOTH, keyed(S::CtxPauseBoth, Command::TogglePauseBoth).c_str());
+    AppendMenuW(menu, MF_STRING, ID_CTX_PRINT_REPAUSE,
+                keyed(S::CmdPrintAndRepause, Command::PrintAndRepause).c_str());
     AppendMenuW(menu, MF_STRING, ID_CTX_RESUME, keyed(S::CtxResume, Command::Resume).c_str());
     AppendMenuW(menu, MF_STRING, ID_CTX_RESTART, keyed(S::CtxRestart, Command::Restart).c_str());
     AppendMenuW(menu, MF_STRING, ID_CTX_CANCEL, keyed(S::CtxCancel, Command::Cancel).c_str());
@@ -1344,6 +1392,7 @@ void MainWindow::ShowJobContextMenu(POINT screen) {
     switch (id) {
         case ID_CTX_PAUSE: Execute(Command::Pause); break;
         case ID_CTX_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;
+        case ID_CTX_PRINT_REPAUSE: Execute(Command::PrintAndRepause); break;
         case ID_CTX_RESUME: Execute(Command::Resume); break;
         case ID_CTX_RESTART: Execute(Command::Restart); break;
         case ID_CTX_CANCEL: Execute(Command::Cancel); break;
@@ -1424,6 +1473,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
         case ID_REFRESH: Execute(Command::Refresh); break;
         case ID_HISTORY: ToggleHistory(); break;
         case ID_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;
+        case ID_PRINT_REPAUSE: Execute(Command::PrintAndRepause); break;
         case ID_PAUSE_PRINTER: TogglePrinterPause(); break;
         case ID_RESUME_PRINTER: SetPrintersPaused(false); break;
         case ID_PAUSE_ON_START:

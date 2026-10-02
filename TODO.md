@@ -45,6 +45,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] **Retención automática**: todo trabajo nuevo queda en pausa ("Retenido") hasta que un operador lo libere (`Ctrl+Shift+H` para activar/desactivar; activada por defecto)
 - [x] Al iniciar / conectar: pausar las impresoras y retener los trabajos que ya estaban en cola (opción del menú, activada por defecto)
 - [x] Atajos: `Ctrl+P` alterna pausa del trabajo, `Ctrl+Shift+P` o `F9` alternan la impresora, `Ctrl+Alt+P` o `F8` el trabajo y su impresora (verificados con impresoras reales)
+- [x] **Imprimir y volver a pausar** (`Ctrl+Enter` o `F11`): reanuda los trabajos seleccionados y su impresora, y vuelve a pausar cada impresora sola cuando todos sus trabajos liberados se enviaron (`core/PrintRelease`)
+- [ ] (LAIMI) Verificar `F11` con impresoras reales en pausa y permiso "Administrar esta impresora" (en la PC de desarrollo no se pudo pausar la impresora local sin ser administrador)
 - [x] **Cola completa**: se enumeran también las colas locales del servidor y las conexiones a ese servidor (antes `PRINTER_ENUM_NAME` solo devolvía las compartidas), el sondeo de respaldo ya no se pospone cuando llegan notificaciones seguidas, y si el spooler reporta más trabajos de los que se pudieron enumerar se reintenta y se avisa en la barra de estado
 - [ ] (LAIMI) Verificar la retención con trabajos de estudiantes en `vtec-laimiprint` (requiere "Administrar documentos")
 - [x] Trabajos enviados desde otras PCs que no aparecían hasta que llegaba otro documento: la lista se consulta por el nombre DNS completo del servidor, que evita la caché de la conexión (0.3.2; `PRINTER_OPTION_NO_CACHE` no bastaba)
@@ -117,6 +119,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Panel de atajos agrupado por temas y con barra de desplazamiento (todos los comandos, incluidos los de pausa de impresora, se pueden reasignar ahí)
 - [x] Selección múltiple arrastrando con el botón izquierdo (rectángulo como en el Explorador) y poder quedarse sin selección (`Esc`, `Ctrl+Shift+A` o clic en el vacío)
 - [x] `F7`: alternar vista previa / configuración de impresión del trabajo
+- [x] `Ctrl+Enter` / `F11`: imprimir los seleccionados y volver a pausar la impresora al terminar
 - [x] `F6` / `Shift+F6`: cambiar e invertir el orden de la cola; `Ctrl+Shift+F`: fijar/quitar la impresora del acceso rápido; `Ctrl+1`…`Ctrl+9`: impresoras del acceso rápido (teclas fijas)
 
 ---
@@ -158,7 +161,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 68 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 70 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

@@ -15,6 +15,7 @@ enum class Command {
     Pause,
     Resume,
     TogglePauseBoth,
+    PrintAndRepause,
     Cancel,
     Restart,
     MoveUp,

@@ -58,6 +58,7 @@ PDF", trabajos generados con `cola_testjob` y spool EMF simulado.
 | Selección por arrastre (rectángulo) y clic en el vacío para no seleccionar nada | OK |
 | `F9`: alterna pausa/reanudación de la impresora (4 ciclos seguidos) | OK |
 | `F8`: reanuda el trabajo retenido seleccionado y su impresora | OK |
+| `F11` con 2 trabajos pausados seleccionados: los reanuda y, cuando salen de la cola, intenta volver a pausar la impresora (en esta PC sin administrador: error 5 en la barra, esperado) | OK |
 | Panel F1: reasignar "Pausar / reanudar impresora" con clic y restaurar con R | OK |
 | Vista previa PCL / PostScript / XPS con los renderizadores incluidos | OK |
 
@@ -80,6 +81,7 @@ Anotar resultado, fecha y versión en la tabla final.
 - [ ] `Ctrl+Shift+H` desactiva la retención: los trabajos nuevos se imprimen normalmente.
 - [ ] Al abrir la app: las impresoras del servidor quedan en pausa (requiere "Administrar esta impresora"; si no, solo avisa) y los trabajos ya encolados quedan retenidos.
 - [ ] `F9` (o `Ctrl+Shift+P`) alterna la pausa de la impresora y `F8` (o `Ctrl+Alt+P`) libera trabajo + impresora de una vez.
+- [ ] `F11` (o `Ctrl+Enter`) con 1 y con varios trabajos retenidos seleccionados (impresora en pausa): se imprimen solo esos y, al terminar de enviarse, la impresora vuelve a quedar **en pausa** sola. Probar también con trabajos de dos impresoras distintas y cancelando uno a mitad de camino.
 
 ### 3.2 Múltiples impresoras simultáneas
 - [ ] Estudiantes imprimen a 3+ impresoras a la vez; la vista "Todas" las muestra ordenadas por impresora y posición.

@@ -4,7 +4,7 @@
 > contexto para cualquier IA o persona que continúe el trabajo. El modelo de
 > trabajo está en [GUIA_IA.md](GUIA_IA.md); las tareas en [TODO.md](../TODO.md).
 
-**Última actualización:** 2026-10-02
+**Última actualización:** 2026-10-02 (0.4.5)
 
 ---
 
@@ -52,6 +52,7 @@
 | D32 | **Lecturas `ReadPrinter` serializadas** en el proceso (y reintento si llegan 0 bytes de un trabajo con datos) | Comprobado: dos lecturas simultáneas del mismo trabajo hacen que la segunda reciba 0 bytes (la vista previa salía "vacía" mientras el análisis de la lista leía el mismo trabajo). |
 | D33 | **Panel de detalles oculto al iniciar**, con botón en la cabecera (además de `Ctrl+B` / `F7`) | Pedido del usuario: más espacio para la tabla. |
 | D34 | **Bandejas y papeles por nombre**: la bandeja sale de los datos (ESC/Page `GS n iuE`, verificado con el AM-C6000) o del DEVMODE; en las Epson AM-C6000 se muestran los nombres del personal (Auto selección, Bandeja 1, Bandeja 2, Alimentador de papel) y en otras el nombre que da el controlador (`spooler::GetDriverForms` → `DeviceCapabilities`, una vez por cola en el hilo del monitor). Los papeles propios del controlador (12 × 18 = 625) se nombran por sus medidas para que coincidan con los de los datos (`PS=ARCHB`) | Pedido del usuario: en la columna "Origen del papel" aparecían códigos ("Bandeja propia del controlador (258)"). Los códigos ≥ 256 son privados de cada controlador, así que sin el nombre no significan nada. |
+| D35 | **Imprimir y volver a pausar** (`Ctrl+Enter` / `F11`, `core/PrintRelease`): reanuda los trabajos seleccionados y, si está en pausa, su impresora (en el mismo hilo de acciones, en ese orden); con cada instantánea `PrintReleaseTracker` decide qué impresoras ya terminaron y se vuelven a pausar **siempre** (aunque antes no lo estuvieran). Un trabajo termina si sale de la cola (solo si la lista de esa impresora está completa: sin error global, impresora disponible y `cJobs` ≤ enumerados), si tiene `JOB_STATUS_COMPLETE/PRINTED/DELETING/DELETED`, si alguien lo vuelve a pausar después de verlo correr, o si sigue en pausa 15 s después de liberarlo (la reanudación falló). | Pedido del usuario: liberar uno o varios trabajos sin tener que acordarse de volver a pausar la impresora. Los criterios evitan pausar la impresora antes de tiempo (una instantánea incompleta haría "desaparecer" trabajos) y que quede abierta para siempre (reanudación fallida o trabajo re-pausado). Mientras está reanudada también saldría otro trabajo de la cola que no esté en pausa; con la retención y la pausa de inicio (predeterminadas) no los hay. |
 | D16 | **Idioma**: UI en español por defecto, inglés disponible (X-macro en `StringTable.inl`) | Público del TEC; el cambio es inmediato desde el menú. |
 
 ## 3. Arquitectura
@@ -63,7 +64,7 @@
 | `util` | `Strings`, `Format`, `Log`, `WorkQueue`, `ComPtr` | UTF-8/16, formato de tamaños y fechas, log a archivo con rotación, hilo de trabajo con cola, puntero COM. |
 | `i18n` | `Strings.h`, `StringTable.inl` | Todos los textos de UI (es/en). |
 | `config` | `Json`, `Settings`, `History`, `Paths`, `Autostart` | Configuración persistente, historial + estadísticas, rutas (normal/portable), clave Run. |
-| `core` | `PrintTypes`, `Spooler`, `JobStatus`, `QueueMonitor`, `JobTracker`, `AutoHold`, `PrintSettings`, `PageAccounting` | Tipos del dominio, envoltorio de winspool (incluye `IsLocalServer`, la carpeta de spool por cola y `ReadJobData`), DEVMODE validado del trabajo, cálculo de páginas/copias/caras/hojas con fiabilidad, mapeo de estados, monitor en tiempo real (hilo propio, sondeo con vencimiento propio y detección de trabajos no enumerados), detección de eventos entre instantáneas, retención automática de trabajos nuevos. |
+| `core` | `PrintTypes`, `Spooler`, `JobStatus`, `QueueMonitor`, `JobTracker`, `AutoHold`, `PrintRelease`, `PrintSettings`, `PageAccounting` | Tipos del dominio, envoltorio de winspool (incluye `IsLocalServer`, la carpeta de spool por cola y `ReadJobData`), DEVMODE validado del trabajo, cálculo de páginas/copias/caras/hojas con fiabilidad, mapeo de estados, monitor en tiempo real (hilo propio, sondeo con vencimiento propio y detección de trabajos no enumerados), detección de eventos entre instantáneas, retención automática de trabajos nuevos, seguimiento de "imprimir y volver a pausar". |
 | `preview` | `SpoolFile`, `EmfSpool`, `ZipReader`, `ImageLoader`, `ExternalRenderer`, `PreviewBuilder`, `PreviewService`, `Reprint`, `PreviewTypes`, `PdlSettings`, `XpsPackage`, `TempFiles` | Leer los datos del trabajo (API del spooler; archivo con pooling `FPnnnnn` como respaldo), detectar formato (EMF/XPS/PDF/PS/PCL/PCL XL/ESC/Page/imagen/texto, PJL/EJL), extraer páginas EMF y su `EMRI_DEVMODE`, opciones PJL/EJL/DSC, PrintTicket XPS, huellas de páginas, temporales privados, WIC, miniaturas del Shell, Ghostscript, caché LRU asíncrona, impresión GDI/RAW para reenvío. |
 | `input` | `Commands`, `Shortcuts` | Enum de comandos con id estable, atajos configurables (parseo/formato "Ctrl+Shift+P"). |
 | `ui` | `Window`, `Style`, `Theme`, `Gfx`, `DarkMode`, `HeaderBar`, `PrinterBar`, `JobListView`, `PreviewPane`, `StatusBar`, `HelpOverlay`, `TrayIcon` | Controles propios, paletas claro/oscuro, DPI, dibujo, bandeja del sistema. `PrinterBar` es la barra de acceso rápido a impresoras. |
@@ -97,10 +98,10 @@ puntero que el receptor libera.
 
 ## 4. Estado actual
 
-**Versión 0.4.4** (base 0.3.0) — configuración de impresión y vista previa por trabajo
+**Versión 0.4.5** (base 0.3.0) — atajo `Ctrl+Enter`/`F11` "imprimir y volver a pausar" (D35); configuración de impresión y vista previa por trabajo
 (pestaña `F7`), lectura de datos por la API del spooler, DEVMODE efectivo del
 spool EMF, PrintTicket/DSC/PJL/EJL, separación páginas/copias/caras/hojas con
-fiabilidad y temporales privados. 68 pruebas unitarias en verde (Debug y
+fiabilidad y temporales privados. 70 pruebas unitarias en verde (Debug y
 Release), sin warnings. Verificado en LAIMI1-CTRL1 con Word, Acrobat, Chrome,
 Edge y datos RAW (14/14 predicciones de caras coinciden con la salida real) y
 con la lectura remota de un trabajo real en `vtec-laimiprint` sin ser
@@ -157,6 +158,7 @@ físicas e impresoras desconectadas. Ver `docs/PRUEBAS.md`.
 | 2026-09-22 | **Trabajos que faltaban respecto a la cola de Windows**: el sondeo de respaldo pasa a tener vencimiento propio (antes cada notificación lo reiniciaba y una impresora "ruidosa" dejaba a las demás sin refrescar); la enumeración de impresoras de un servidor suma sus colas locales y las conexiones a ese servidor (`PRINTER_ENUM_NAME` solo devuelve las compartidas); si `cJobs` supera lo enumerado se reintenta y se avisa en la barra de estado. |
 | 2026-09-22 | **Vista previa en el servidor** (D21): rutas locales si la app corre en el propio servidor (`IsLocalServer`), carpeta de spool propia de cada cola, segunda pasada en los `.SHD` solo por id, errores de lectura ya no se ignoran y el panel/`app.log` muestran dónde se buscó y por qué falló. |
 | 2026-09-22 | Versión 0.2.0. Información de versión completa del ejecutable con empresa **ChrisCorp** (descripción, copyright, comentarios, bloques es/en) y manifiesto con Windows 7–11/Server; `Desbloquear archivos.bat` en el paquete portable. |
+| 2026-10-02 | 0.4.5: **imprimir y volver a pausar** (D35, `Ctrl+Enter`/`F11`, `core/PrintRelease`, en el menú `⋯` y en el clic derecho). Verificado en la PC de desarrollo con 2 trabajos pausados en "Microsoft Print to PDF": se reanudan y al salir de la cola se intenta pausar la impresora (aquí se niega por no ser administrador; queda pendiente verificarlo en el LAIMI). Equipo nuevo: toolchain WinLibs GCC 16.2 reinstalada en `..\Herramientas\winlibs` y renderizadores descargados con `get-renderers.ps1` usando un 7-Zip portable. 70 pruebas. |
 | 2026-10-02 | 0.4.4: origen del papel y papel por nombre (D34): Auto selección / Alimentador de papel / Bandeja 1 / Bandeja 2 y Carta / A3 / 12 × 18, verificado contra el controlador real de `LAIMI 1 - INK`. El .exe tenía dos manifiestos con WinLibs (el de `app.rc` y el predeterminado de MinGW); ahora solo el propio. Toolchain reinstalada en el equipo nuevo (`..\Herramientas\winlibs`). 68 pruebas. |
 | 2026-10-02 | 0.4.3: sin el símbolo "≈" en la interfaz (lista y resumen); la fiabilidad se ve solo con las insignias de la pestaña Configuración. |
 | 2026-10-02 | 0.4.2: valores y títulos centrados desde la columna Estado; "Enviado" con fecha y hora (dd/mm/aaaa hh:mm). |

@@ -15,6 +15,7 @@ const CommandInfo kCommandTable[] = {
     {Command::Pause, L"pause", S::CmdPause, L"Ctrl+P"},
     {Command::Resume, L"resume", S::CmdResume, L"Ctrl+R"},
     {Command::TogglePauseBoth, L"togglePauseBoth", S::CmdTogglePauseBoth, L"Ctrl+Alt+P, F8"},
+    {Command::PrintAndRepause, L"printAndRepause", S::CmdPrintAndRepause, L"Ctrl+Enter, F11"},
     {Command::Cancel, L"cancel", S::CmdCancel, L"Delete"},
     {Command::Restart, L"restart", S::CmdRestart, L"Ctrl+I"},
     {Command::MoveUp, L"moveUp", S::CmdMoveUp, L"Ctrl+Up"},
