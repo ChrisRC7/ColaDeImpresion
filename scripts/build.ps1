@@ -31,7 +31,8 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
     $sibling = Join-Path (Split-Path -Parent $root) "Herramientas\winlibs\mingw64"
     $candidates = @($env:COLA_MINGW, "D:\Programacion\Herramientas\winlibs\mingw64", $sibling, "C:\mingw64", "C:\msys64\ucrt64")
     foreach ($c in $candidates) {
-        if ($c -and (Test-Path (Join-Path $c "bin\cmake.exe"))) {
+        # Concatenación simple: Join-Path falla si la unidad no existe (p. ej. un USB retirado).
+        if ($c -and (Test-Path "$c\bin\cmake.exe" -ErrorAction SilentlyContinue)) {
             $env:PATH = (Join-Path $c "bin") + ";" + $env:PATH
             Write-Host "Usando toolchain: $c"
             break

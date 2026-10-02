@@ -48,12 +48,6 @@ public:
     bool Open(const std::wstring& name, bool admin);
     // Intenta abrir con permisos de administración y, si no, de uso normal.
     bool OpenBest(const std::wstring& name, bool* gotAdmin = nullptr);
-    // Abre SIN la caché del cliente (OpenPrinter2 + PRINTER_OPTION_NO_CACHE):
-    // cada llamada consulta al servidor. Con una conexión a una impresora
-    // compartida, el handle normal responde EnumJobs desde la caché local de
-    // Client Side Rendering, que a veces no recibe los trabajos de otras PCs
-    // hasta el siguiente evento (el trabajo no aparecía hasta que llegaba otro).
-    bool OpenDirect(const std::wstring& name);
     void Close();
 
     HANDLE get() const { return handle_; }
@@ -72,6 +66,21 @@ std::wstring NormalizeServerName(const std::wstring& server);
 // NetBIOS o el DNS del equipo). Se usa para no pasar por \\\\SRV\\C$ cuando la
 // app corre en el propio servidor de impresión.
 bool IsLocalServer(const std::wstring& server);
+
+// Nombre para consultar una impresora de servidor SIN la caché del cliente.
+//
+// Con una conexión a una impresora compartida ("\\\\vtec-laimiprint\\Cola"),
+// Windows responde EnumJobs/GetPrinter desde la caché local de Client Side
+// Rendering (medido: 0,6 ms, sin ida y vuelta al servidor), y esa caché a veces
+// no recibe los trabajos enviados desde otras PCs hasta el siguiente evento.
+// PRINTER_OPTION_NO_CACHE no lo evita. Abrir la misma cola con el nombre DNS
+// completo del servidor ("\\\\vtec-laimiprint.dominio\\Cola"), que no es la
+// conexión guardada, sí consulta al servidor (17 ms). Devuelve "" si no hay un
+// nombre alternativo (servidor local o la conexión ya usa el nombre completo).
+std::wstring CacheBypassName(const std::wstring& printerName);
+
+// "\\\\srv\\Cola" + "srv.dominio" -> "\\\\srv.dominio\\Cola" ("" si el nombre no es de servidor).
+std::wstring ReplacePrinterServer(const std::wstring& printerName, const std::wstring& newHost);
 
 // Impresoras del servidor (vacío = locales + conexiones del equipo).
 // Con un servidor remoto se combinan tres fuentes para no perder colas:

@@ -13,6 +13,7 @@
 #include "app/JobSheet.h"
 #include "core/PageAccounting.h"
 #include "core/PrintSettings.h"
+#include "core/Spooler.h"
 #include "i18n/Strings.h"
 #include "preview/PdlSettings.h"
 #include "preview/SpoolFile.h"
@@ -499,23 +500,30 @@ TEST(JobSheetShowsReliabilityPerValue) {
 
 // --- Cola: caché del cliente + servidor ---------------------------------------
 
-TEST(MergeJobListsAddsJobsMissingFromClientCache) {
-    auto job = [](std::uint32_t id, std::uint32_t position) {
+TEST(ReconcileJobListsTrustsServer) {
+    auto job = [](std::uint32_t id, std::uint32_t position, std::uint32_t status = 0) {
         core::JobInfo j;
         j.id = id;
         j.position = position;
+        j.rawStatus = status;
         return j;
     };
-    // La caché del cliente no tiene el 85 (llegó desde otra PC) y sí tiene el
-    // 29957 (trabajo local de esta PC que el servidor todavía no conoce).
-    std::vector<core::JobInfo> cached = {job(84, 1), job(29957, 3)};
-    std::vector<core::JobInfo> direct = {job(84, 1), job(85, 2)};
-    auto merged = core::MergeJobLists(cached, direct);
+    // La caché del cliente no tiene el 85 (llegó desde otra PC), conserva el 70
+    // (ya terminó en el servidor) y tiene el 29957, que esta PC todavía procesa.
+    std::vector<core::JobInfo> cached = {job(70, 1), job(84, 2),
+                                         job(29957, 4, core::kJobStatusRenderingLocally | JOB_STATUS_PAUSED)};
+    std::vector<core::JobInfo> server = {job(84, 1), job(85, 2)};
+    auto merged = core::ReconcileJobLists(server, cached);
     CHECK_EQ(merged.size(), static_cast<size_t>(3));
     CHECK_EQ(merged[0].id, 84u);
     CHECK_EQ(merged[1].id, 85u);
-    CHECK_EQ(merged[2].id, 29957u);
-    CHECK_EQ(core::MergeJobLists(direct, direct).size(), static_cast<size_t>(2));  // sin duplicados
+    CHECK_EQ(merged[2].id, 29957u);  // el 70 (resto de la caché) no vuelve
+    CHECK_EQ(core::ReconcileJobLists(server, server).size(), static_cast<size_t>(2));
+
+    CHECK_EQ(core::spooler::ReplacePrinterServer(L"\\\\vtec-laimiprint\\LAIMI 1 - INK", L"vtec-laimiprint.dominio"),
+             std::wstring(L"\\\\vtec-laimiprint.dominio\\LAIMI 1 - INK"));
+    CHECK(core::spooler::ReplacePrinterServer(L"CutePDF Writer", L"x").empty());
+    CHECK(core::spooler::CacheBypassName(L"CutePDF Writer").empty());  // cola local: no hay caché de cliente
 }
 
 // --- Archivos temporales ----------------------------------------------------

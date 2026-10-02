@@ -15,14 +15,15 @@ std::wstring PrinterInfo::DisplayName() const {
 
 std::wstring JobInfo::Key() const { return printer + L"#" + std::to_wstring(id); }
 
-std::vector<JobInfo> MergeJobLists(std::vector<JobInfo> cached, const std::vector<JobInfo>& direct) {
-    for (const auto& job : direct) {
-        bool known = std::any_of(cached.begin(), cached.end(), [&](const JobInfo& j) { return j.id == job.id; });
-        if (!known) cached.push_back(job);
+std::vector<JobInfo> ReconcileJobLists(std::vector<JobInfo> server, const std::vector<JobInfo>& cached) {
+    for (const auto& job : cached) {
+        if (!(job.rawStatus & kJobStatusRenderingLocally)) continue;
+        bool known = std::any_of(server.begin(), server.end(), [&](const JobInfo& j) { return j.id == job.id; });
+        if (!known) server.push_back(job);
     }
-    std::stable_sort(cached.begin(), cached.end(),
+    std::stable_sort(server.begin(), server.end(),
                      [](const JobInfo& a, const JobInfo& b) { return a.position < b.position; });
-    return cached;
+    return server;
 }
 
 const PrinterInfo* QueueSnapshot::FindPrinter(const std::wstring& name) const {

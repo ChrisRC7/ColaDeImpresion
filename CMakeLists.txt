@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ColaDeImpresion VERSION 0.3.1 LANGUAGES CXX RC)
+project(ColaDeImpresion VERSION 0.3.2 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,7 +37,7 @@ target_compile_definitions(cola_core PUBLIC
 )
 target_link_libraries(cola_core PUBLIC
     winspool user32 gdi32 gdiplus comctl32 comdlg32 shell32 shlwapi ole32 oleaut32
-    uuid dwmapi uxtheme windowscodecs advapi32 msimg32
+    uuid dwmapi uxtheme windowscodecs advapi32 msimg32 ws2_32
 )
 
 if(MSVC)

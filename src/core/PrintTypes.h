@@ -118,10 +118,14 @@ struct QueueSnapshot {
 
 using SnapshotPtr = std::shared_ptr<const QueueSnapshot>;
 
-// Une la lista de trabajos de la caché del cliente con la consultada
-// directamente al servidor: conserva todos los de 'cached' (incluidos los que
-// solo existen en esta PC mientras se procesan) y agrega los de 'direct' que
-// faltan. El resultado queda ordenado por posición en la cola.
-std::vector<JobInfo> MergeJobLists(std::vector<JobInfo> cached, const std::vector<JobInfo>& direct);
+// JOB_STATUS_RENDERING_LOCALLY (winspool.h de Windows 7+; falta en MinGW):
+// trabajo que esta PC todavía procesa (Client Side Rendering).
+inline constexpr std::uint32_t kJobStatusRenderingLocally = 0x00004000;
+
+// Concilia la lista consultada al servidor (la verdadera) con la de la caché
+// del cliente: de la caché solo se agregan los trabajos que esta PC todavía
+// procesa localmente y el servidor aún no muestra; los demás que solo estén en
+// la caché son restos viejos y se descartan. Ordenado por posición.
+std::vector<JobInfo> ReconcileJobLists(std::vector<JobInfo> server, const std::vector<JobInfo>& cached);
 
 }  // namespace cola::core

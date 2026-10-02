@@ -47,8 +47,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Atajos: `Ctrl+P` alterna pausa del trabajo, `Ctrl+Shift+P` o `F9` alternan la impresora, `Ctrl+Alt+P` o `F8` el trabajo y su impresora (verificados con impresoras reales)
 - [x] **Cola completa**: se enumeran también las colas locales del servidor y las conexiones a ese servidor (antes `PRINTER_ENUM_NAME` solo devolvía las compartidas), el sondeo de respaldo ya no se pospone cuando llegan notificaciones seguidas, y si el spooler reporta más trabajos de los que se pudieron enumerar se reintenta y se avisa en la barra de estado
 - [ ] (LAIMI) Verificar la retención con trabajos de estudiantes en `vtec-laimiprint` (requiere "Administrar documentos")
-- [x] Trabajos enviados desde otras PCs que no aparecían hasta que llegaba otro documento: se enumera también sin la caché del cliente (`OpenPrinter2` + `PRINTER_OPTION_NO_CACHE`) en cada refresco
-- [ ] (LAIMI) Confirmar con trabajos reales que ya no faltan trabajos (en `app.log` aparece "trabajo(s) del servidor que la caché del cliente no mostraba" cuando la corrección actúa)
+- [x] Trabajos enviados desde otras PCs que no aparecían hasta que llegaba otro documento: la lista se consulta por el nombre DNS completo del servidor, que evita la caché de la conexión (0.3.2; `PRINTER_OPTION_NO_CACHE` no bastaba)
+- [ ] (LAIMI) Confirmar con trabajos reales que ya no faltan trabajos (en `app.log` aparece "los trabajos se consultan en \\…estudiantes.tec.cr\…" al iniciar y "la caché del cliente muestra N trabajo(s) y el servidor M" cuando la corrección actúa)
 - [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
 - [ ] (LAIMI) Verificar reordenamiento y reenvío con impresoras físicas del laboratorio
 

@@ -143,11 +143,17 @@ Hallazgos, con la prueba que los respalda (sección 8):
     físicas** (no páginas). El intercalado no se pudo variar: el controlador lo
     fuerza.
 12. **Lista de trabajos incompleta desde otras PCs:** en una conexión a una
-    impresora compartida, el handle normal responde `EnumJobs` desde la caché
-    del cliente (Client Side Rendering), que a veces no recibe los trabajos
-    enviados desde otras PCs hasta el siguiente evento. La app consulta además
-    con un handle nuevo abierto con `OpenPrinter2` + `PRINTER_OPTION_NO_CACHE`
-    en cada refresco (menos de 1 ms) y une ambas listas.
+    impresora compartida (`\\vtec-laimiprint\Cola`), Windows responde
+    `EnumJobs` y `GetPrinter` desde la caché del cliente (Client Side
+    Rendering), que a veces no recibe los trabajos enviados desde otras PCs
+    hasta el siguiente evento. Medido: por el nombre de la conexión cada
+    consulta tarda 0,6 ms (no hay ida y vuelta al servidor), **también con
+    `OpenPrinter2` + `PRINTER_OPTION_NO_CACHE`** (la 0.3.1 lo usaba y no
+    alcanzaba); por el nombre DNS completo
+    (`\\vtec-laimiprint.estudiantes.tec.cr\Cola`) tarda 17 ms y consulta al
+    servidor; por IP, 3 s. Desde la 0.3.2 la lista que manda es la del nombre
+    completo; de la caché solo se agregan los trabajos que esta PC todavía
+    procesa (`JOB_STATUS_RENDERING_LOCALLY`).
 
 ## 5. Reglas de cálculo
 

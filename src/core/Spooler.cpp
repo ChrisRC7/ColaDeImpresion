@@ -1,11 +1,17 @@
 #include "core/Spooler.h"
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include <algorithm>
 #include <cwchar>
 #include <iterator>
+#include <map>
+#include <mutex>
 
 #include "core/JobStatus.h"
 #include "util/Log.h"
+#include "util/Strings.h"
 
 namespace cola::core {
 
@@ -32,19 +38,6 @@ bool PrinterHandle::OpenBest(const std::wstring& name, bool* gotAdmin) {
     }
     if (gotAdmin) *gotAdmin = false;
     return Open(name, false);
-}
-
-bool PrinterHandle::OpenDirect(const std::wstring& name) {
-    Close();
-    PRINTER_DEFAULTSW defaults{};
-    defaults.DesiredAccess = PRINTER_ACCESS_USE;
-    PRINTER_OPTIONS options{};
-    options.cbSize = sizeof(options);
-    options.dwFlags = PRINTER_OPTION_NO_CACHE;
-    HANDLE h = nullptr;
-    if (!OpenPrinter2W(name.c_str(), &h, &defaults, &options)) return false;
-    handle_ = h;
-    return true;
 }
 
 void PrinterHandle::Close() {
@@ -156,6 +149,59 @@ bool IsLocalServer(const std::wstring& serverIn) {
             return true;
     }
     return false;
+}
+
+std::wstring ReplacePrinterServer(const std::wstring& printerName, const std::wstring& newHost) {
+    if (newHost.empty() || printerName.size() < 3 || printerName.rfind(L"\\\\", 0) != 0) return L"";
+    size_t slash = printerName.find(L'\\', 2);
+    if (slash == std::wstring::npos || slash + 1 >= printerName.size()) return L"";
+    return L"\\\\" + newHost + printerName.substr(slash);
+}
+
+namespace {
+
+// Nombre DNS completo de un equipo ("vtec-laimiprint" -> "vtec-laimiprint.estudiantes.tec.cr").
+std::wstring CanonicalHostName(const std::wstring& host) {
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return L"";
+    ADDRINFOW hints{};
+    hints.ai_flags = AI_CANONNAME;
+    hints.ai_family = AF_UNSPEC;
+    PADDRINFOW result = nullptr;
+    std::wstring canonical;
+    if (GetAddrInfoW(host.c_str(), nullptr, &hints, &result) == 0 && result && result->ai_canonname)
+        canonical = result->ai_canonname;
+    if (result) FreeAddrInfoW(result);
+    WSACleanup();
+    return canonical;
+}
+
+}  // namespace
+
+std::wstring CacheBypassName(const std::wstring& printerName) {
+    if (printerName.size() < 3 || printerName.rfind(L"\\\\", 0) != 0) return L"";
+    const size_t slash = printerName.find(L'\\', 2);
+    if (slash == std::wstring::npos) return L"";
+    const std::wstring host = printerName.substr(2, slash - 2);
+    if (IsLocalServer(L"\\\\" + host)) return L"";  // colas de este equipo: no hay caché de cliente
+
+    // La resolución DNS se hace una vez por servidor.
+    static std::mutex mutex;
+    static std::map<std::wstring, std::wstring> resolved;
+    std::wstring canonical;
+    {
+        std::lock_guard lock(mutex);
+        auto it = resolved.find(util::ToLower(host));
+        if (it != resolved.end()) canonical = it->second;
+    }
+    if (canonical.empty()) {
+        canonical = CanonicalHostName(host);
+        std::lock_guard lock(mutex);
+        resolved[util::ToLower(host)] = canonical;
+    }
+    // Si la conexión ya usa el nombre completo, no hay otro nombre que evite la caché.
+    if (canonical.empty() || util::EqualsInsensitive(canonical, host)) return L"";
+    return ReplacePrinterServer(printerName, canonical);
 }
 
 std::vector<PrinterInfo> EnumeratePrinters(const std::wstring& serverIn, DWORD* error) {
