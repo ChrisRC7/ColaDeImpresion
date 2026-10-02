@@ -10,7 +10,8 @@
 
 namespace cola::ui {
 
-enum class HeaderButton { Printer, History, Help, Theme, Menu, Count_ };
+// Details = mostrar u ocultar el panel de detalles (vista previa y configuración).
+enum class HeaderButton { Printer, History, Help, Theme, Menu, Details, Count_ };
 
 class HeaderBar : public Window {
 public:
@@ -24,6 +25,7 @@ public:
 
     void SetPrinterLabel(const std::wstring& title, const std::wstring& subtitle, bool warning);
     void SetHistoryActive(bool active);
+    void SetDetailsActive(bool active);
 
     void FocusSearch();
     bool IsEditFocused() const { return GetFocus() == edit_; }
@@ -57,6 +59,7 @@ private:
     std::wstring printerSubtitle_;
     bool printerWarning_ = false;
     bool historyActive_ = false;
+    bool detailsActive_ = false;
     bool serverMode_ = false;
     std::wstring savedSearch_;
     int hover_ = -1;

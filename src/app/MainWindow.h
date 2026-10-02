@@ -17,6 +17,7 @@
 #include "core/JobTracker.h"
 #include "core/QueueMonitor.h"
 #include "input/Shortcuts.h"
+#include "preview/JobFacts.h"
 #include "preview/PreviewService.h"
 #include "ui/HeaderBar.h"
 #include "ui/HelpOverlay.h"
@@ -112,7 +113,11 @@ private:
     void SetFilter(const std::wstring& filter);
     // Orden de la cola (equipo, hora, usuario...). delta rota entre criterios.
     void CycleSort(int delta);
-    void SetSort(const std::wstring& sortId, bool descending);
+    void SetSort(const std::wstring& sortId, bool descending, bool announce = true);
+    // Clic en el encabezado de una columna de la lista.
+    void OnColumnClicked(int sortId);
+    // Carpeta de spool alternativa configurada para el servidor activo.
+    std::wstring SpoolOverrideDir() const;
     void ShowTransient(const std::wstring& text, ui::Tone tone);
 
     // --- Menús ---
@@ -137,6 +142,8 @@ private:
     preview::RendererPaths renderers_;
     std::unique_ptr<core::QueueMonitor> monitor_;
     std::unique_ptr<preview::PreviewService> previews_;
+    // Copias y páginas reales de todos los trabajos (para la columna "Páginas").
+    std::unique_ptr<preview::JobFactsService> facts_;
     std::unique_ptr<JobActionRunner> actions_;
     core::JobTracker tracker_;
 

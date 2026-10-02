@@ -24,6 +24,17 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
 // "Carta · Vertical · Una cara · 10 copias · 10 caras" ("≈" = estimado).
 std::wstring SettingsSummary(const core::JobInfo& job, const preview::PreviewDocument* doc);
 
+// Opciones del trabajo en forma corta para las columnas de la lista, con el
+// mismo criterio que la ficha (datos documentados o verificados mandan sobre
+// el DEVMODE; "≈" = estimado; "—" = no declarado).
+struct ListSettings {
+    std::wstring paper;        // "Carta", "A4", "100 × 150 mm"
+    std::wstring orientation;  // "Vertical" / "Horizontal"
+    std::wstring duplex;       // "Una cara" / "Borde largo" / "Borde corto"
+    std::wstring source;       // origen del papel
+};
+ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* facts);
+
 // Textos de valores (también para la herramienta de inspección).
 std::wstring PaperText(const core::PrintSettings& settings);
 std::wstring OrientationText(short orientation);

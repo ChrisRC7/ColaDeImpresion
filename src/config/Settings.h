@@ -58,7 +58,7 @@ struct Settings {
     NotifyMode notifications = NotifyMode::ErrorsOnly;
     bool keepHistory = true;
     int historyLimit = 2000;
-    bool showPreviewPane = true;
+    bool showPreviewPane = false;
     double previewRatio = 0.38;  // ancho del panel de vista previa (0..1)
     int previewDpi = 110;        // resolución al rasterizar PS/PCL/PDF/XPS
     int previewMaxPages = 30;    // páginas máximas que se preparan por documento

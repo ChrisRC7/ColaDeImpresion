@@ -253,7 +253,7 @@ SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const st
     return data;
 }
 
-SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes) {
+SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes, bool allowFile) {
     // 1. Carpeta alternativa configurada a mano: tiene prioridad (pruebas, copias del spool).
     if (!search.overrideDir.empty()) {
         SpoolData data = ReadSpoolFile(search, job.id, job.document, maxBytes);
@@ -274,6 +274,11 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
     // 2. API del spooler.
     bool truncated = false;
     core::OpResult api = core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated);
+    // 0 bytes de un trabajo que sí tiene datos: otro programa lo estaba leyendo a la vez. Se reintenta.
+    for (int attempt = 0; api.ok && data.bytes.empty() && job.sizeBytes > 0 && attempt < 3; ++attempt) {
+        Sleep(250);
+        api = core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated);
+    }
     if (api.ok) {
         data.origin = SpoolOrigin::SpoolerApi;
         data.error = 0;
@@ -285,6 +290,11 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
         return data;
     }
     util::LogError(L"ReadPrinter del trabajo %u en '%ls' falló: %lu", job.id, job.printer.c_str(), api.error);
+    if (!allowFile) {
+        data.error = api.error;
+        data.apiError = api.error;
+        return data;
+    }
 
     // 3. Respaldo: archivo de spool (requiere ser administrador del servidor).
     SpoolData file = ReadSpoolFile(search, job.id, job.document, maxBytes);

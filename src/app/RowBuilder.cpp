@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "app/JobSheet.h"
 #include "core/JobStatus.h"
 #include "i18n/Strings.h"
 #include "ui/Style.h"
@@ -142,6 +143,12 @@ const wchar_t* SortById(SortBy sort) {
         case SortBy::Document: return L"document";
         case SortBy::Status: return L"status";
         case SortBy::Size: return L"size";
+        case SortBy::Pages: return L"pages";
+        case SortBy::Printer: return L"printer";
+        case SortBy::Paper: return L"paper";
+        case SortBy::Orientation: return L"orientation";
+        case SortBy::Duplex: return L"duplex";
+        case SortBy::Source: return L"source";
         default: return L"queue";
     }
 }
@@ -162,6 +169,12 @@ std::wstring SortName(SortBy sort) {
         case SortBy::Document: return Tr(S::SortDocument);
         case SortBy::Status: return Tr(S::SortStatus);
         case SortBy::Size: return Tr(S::SortSize);
+        case SortBy::Pages: return Tr(S::SortPages);
+        case SortBy::Printer: return Tr(S::SortPrinter);
+        case SortBy::Paper: return Tr(S::SortPaper);
+        case SortBy::Orientation: return Tr(S::SortOrientation);
+        case SortBy::Duplex: return Tr(S::SortDuplex);
+        case SortBy::Source: return Tr(S::SortSource);
         default: return Tr(S::SortQueue);
     }
 }
@@ -176,10 +189,30 @@ bool BeforeInQueue(const core::JobInfo& a, const core::JobInfo& b) {
 }
 
 // Compara por el criterio elegido. 0 = empate (se desempata con la cola).
-int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b) {
+int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const FactsLookup& facts) {
     auto text = [](const std::wstring& x, const std::wstring& y) { return _wcsicmp(x.c_str(), y.c_str()); };
     auto number = [](std::uint64_t x, std::uint64_t y) { return x < y ? -1 : (x > y ? 1 : 0); };
     switch (sort) {
+        case SortBy::Pages:
+            return number(TotalPrintPages(a, facts ? facts(a) : nullptr).value,
+                          TotalPrintPages(b, facts ? facts(b) : nullptr).value);
+        case SortBy::Printer: return text(PrinterShortName(a.printer), PrinterShortName(b.printer));
+        case SortBy::Paper:
+        case SortBy::Orientation:
+        case SortBy::Duplex:
+        case SortBy::Source: {
+            // Por el valor mostrado, sin la marca de estimado.
+            auto value = [&](const core::JobInfo& job) {
+                ListSettings s = ResolveListSettings(job, facts ? facts(job) : nullptr);
+                std::wstring v = sort == SortBy::Paper ? s.paper
+                                 : sort == SortBy::Orientation ? s.orientation
+                                 : sort == SortBy::Duplex ? s.duplex
+                                                          : s.source;
+                if (!v.empty() && v[0] == L'≈') v.erase(0, 1);
+                return v;
+            };
+            return text(value(a), value(b));
+        }
         case SortBy::Machine: return text(MachineName(a.machine), MachineName(b.machine));
         case SortBy::Time:
             return number(static_cast<std::uint64_t>(util::ToUnixSeconds(a.submitted)),
@@ -194,7 +227,8 @@ int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b) {
 }  // namespace
 
 std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapshot, const std::wstring& printer,
-                                              const std::wstring& filter, SortBy sort, bool descending) {
+                                              const std::wstring& filter, SortBy sort, bool descending,
+                                              const FactsLookup& facts) {
     std::vector<const core::JobInfo*> jobs;
     const bool all = printer == kAllPrinters || printer.empty();
     for (const auto& job : snapshot.jobs) {
@@ -203,7 +237,7 @@ std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapsho
         jobs.push_back(&job);
     }
     std::stable_sort(jobs.begin(), jobs.end(), [&](const core::JobInfo* a, const core::JobInfo* b) {
-        int cmp = CompareBy(sort, *a, *b);
+        int cmp = CompareBy(sort, *a, *b, facts);
         if (descending) cmp = -cmp;
         if (cmp != 0) return cmp < 0;
         // A igualdad de criterio (y siempre en "Cola"), el orden real de impresión.
@@ -212,20 +246,89 @@ std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapsho
     return jobs;
 }
 
-ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter) {
+PrintTotal TotalPrintPages(const core::JobInfo& job, const core::ContentFacts* facts) {
+    PrintTotal total;
+    const core::PageAccounting acc = core::ComputePageAccounting(job, facts);
+    if (acc.printPages.Known()) {
+        total.value = acc.printPages.value;
+        total.reliability = acc.printPages.reliability;
+    } else if (acc.sides.Known()) {
+        // Sin conteo de páginas pero con las caras que declaró el controlador (EJL "JI PAGES").
+        total.value = acc.sides.value;
+        total.reliability = acc.sides.reliability;
+    } else if (job.totalPages > 0) {
+        // Sin datos suficientes: TotalPages x copias del DEVMODE, siempre como estimación.
+        const std::uint32_t copies = job.settings.copies.valid ? static_cast<std::uint32_t>(job.settings.copies.value) : 1;
+        total.value = job.totalPages * copies;
+        total.reliability = core::Reliability::Estimated;
+    }
+    return total;
+}
+
+std::wstring TotalPagesText(const PrintTotal& total) {
+    if (total.reliability == core::Reliability::Unknown || total.value == 0) return L"—";
+    std::wstring text = std::to_wstring(total.value);
+    return total.reliability == core::Reliability::Reliable ? text : L"≈" + text;
+}
+
+std::vector<ui::ListColumn> JobColumns(bool showPrinter) {
+    auto id = [](SortBy s) { return static_cast<int>(s); };
+    std::vector<ui::ListColumn> columns;
+    //               texto              ancho  derecha pill   énfasis orden                 ocultar
+    // En ventanas angostas se ocultan primero las de número mayor: #, Impresora,
+    // Tamaño, Enviado, Origen, Orientación, Doble cara, Papel. Usuario, Equipo
+    // (de qué PC se envió) y Páginas se mantienen: son las que más usa el operador.
+    columns.push_back({Tr(S::ColNumber), 30, true, false, false, id(SortBy::Queue), 12});
+    columns.push_back({Tr(S::ColDocument), 0, false, false, true, id(SortBy::Document), 0});
+    columns.push_back({Tr(S::ColStatus), 104, false, true, false, id(SortBy::Status), 0});
+    columns.push_back({Tr(S::ColUser), 100, false, false, false, id(SortBy::User), 2});
+    columns.push_back({Tr(S::ColMachine), 100, false, false, false, id(SortBy::Machine), 3});
+    if (showPrinter) columns.push_back({Tr(S::ColPrinter), 120, false, false, false, id(SortBy::Printer), 11});
+    columns.push_back({Tr(S::ColPages), 78, true, false, false, id(SortBy::Pages), 1});
+    columns.push_back({Tr(S::ColPaper), 84, false, false, false, id(SortBy::Paper), 4});
+    columns.push_back({Tr(S::ColOrientation), 96, false, false, false, id(SortBy::Orientation), 6});
+    columns.push_back({Tr(S::ColDuplex), 96, false, false, false, id(SortBy::Duplex), 5});
+    columns.push_back({Tr(S::ColSource), 130, false, false, false, id(SortBy::Source), 7});
+    columns.push_back({Tr(S::ColSize), 70, true, false, false, id(SortBy::Size), 10});
+    columns.push_back({Tr(S::ColSubmitted), 76, false, false, false, id(SortBy::Time), 9});
+    return columns;
+}
+
+std::vector<ui::ListColumn> HistoryColumns() {
+    std::vector<ui::ListColumn> columns;
+    columns.push_back({Tr(S::ColDocument), 0, false, false, true, -1, 0});
+    columns.push_back({Tr(S::ColResult), 118, false, true, false, -1, 0});
+    columns.push_back({Tr(S::ColUser), 118, false, false, false, -1, 3});
+    columns.push_back({Tr(S::ColMachine), 118, false, false, false, -1, 5});
+    columns.push_back({Tr(S::ColPrinter), 130, false, false, false, -1, 4});
+    columns.push_back({Tr(S::ColPages), 64, true, false, false, -1, 1});
+    columns.push_back({Tr(S::ColSize), 74, true, false, false, -1, 2});
+    columns.push_back({Tr(S::ColTime), 136, false, false, false, -1, 2});
+    return columns;
+}
+
+std::pair<SortBy, bool> NextSort(SortBy current, bool descending, SortBy clicked) {
+    if (clicked == current) return {current, !descending};
+    return {clicked, false};
+}
+
+ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts) {
     ui::ListRow row;
     row.key = job.Key();
-    row.title = job.document.empty() ? Tr(S::Unknown) : job.document;
-    std::vector<std::wstring> parts;
-    if (!job.user.empty()) parts.push_back(job.user);
-    if (!job.machine.empty()) parts.push_back(MachineName(job.machine));
-    std::wstring time = util::FormatTimeShort(job.submitted);
-    if (!time.empty()) parts.push_back(time);
-    if (showPrinter) parts.push_back(PrinterShortName(job.printer));
-    for (const auto& p : parts) row.subtitle += (row.subtitle.empty() ? L"" : L" · ") + p;
-    row.pages = PagesText(job);
-    row.size = util::FormatBytes(job.sizeBytes);
-    row.status = JobStatusText(job);
+    row.cells.push_back(job.position ? std::to_wstring(job.position) : L"");
+    row.cells.push_back(job.document.empty() ? Tr(S::Unknown) : job.document);
+    row.cells.push_back(JobStatusText(job));
+    row.cells.push_back(job.user);
+    row.cells.push_back(MachineName(job.machine));
+    if (showPrinter) row.cells.push_back(PrinterShortName(job.printer));
+    row.cells.push_back(TotalPagesText(TotalPrintPages(job, facts)));
+    const ListSettings settings = ResolveListSettings(job, facts);
+    row.cells.push_back(settings.paper);
+    row.cells.push_back(settings.orientation);
+    row.cells.push_back(settings.duplex);
+    row.cells.push_back(settings.source);
+    row.cells.push_back(util::FormatBytes(job.sizeBytes));
+    row.cells.push_back(util::FormatTimeShort(job.submitted));
     row.tone = job.heldByApp ? ui::Tone::Special : ui::ToneForState(job.state);
     row.glyph = GlyphForState(job.state);
     return row;
@@ -238,14 +341,14 @@ std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index) {
 ui::ListRow MakeHistoryRow(const config::HistoryEntry& e, size_t index) {
     ui::ListRow row;
     row.key = HistoryKey(e, index);
-    row.title = e.document.empty() ? Tr(S::Unknown) : e.document;
-    for (const auto& p : {e.user, MachineName(e.machine), PrinterShortName(e.printer), util::FormatTimeIso(util::FromUnixSeconds(e.timeUnix))})
-        if (!p.empty()) row.subtitle += (row.subtitle.empty() ? L"" : L" · ") + p;
-    if (e.pages == 0) row.pages = Tr(S::PagesUnknown);
-    else if (e.pages == 1) row.pages = Tr(S::PagesOne);
-    else row.pages = util::Format(Tr(S::PagesCount), e.pages);
-    row.size = util::FormatBytes(e.sizeBytes);
-    row.status = OutcomeText(e.outcome);
+    row.cells.push_back(e.document.empty() ? Tr(S::Unknown) : e.document);
+    row.cells.push_back(OutcomeText(e.outcome));
+    row.cells.push_back(e.user);
+    row.cells.push_back(MachineName(e.machine));
+    row.cells.push_back(PrinterShortName(e.printer));
+    row.cells.push_back(e.pages ? std::to_wstring(e.pages) : L"—");
+    row.cells.push_back(util::FormatBytes(e.sizeBytes));
+    row.cells.push_back(util::FormatTimeIso(util::FromUnixSeconds(e.timeUnix)));
     row.tone = ToneForOutcome(e.outcome);
     row.glyph = e.outcome == config::JobOutcome::Printed ? ui::glyph::Completed
                 : e.outcome == config::JobOutcome::Failed ? ui::glyph::Error

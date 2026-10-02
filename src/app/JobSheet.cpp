@@ -183,6 +183,78 @@ const core::ContentFacts* FactsOf(const preview::PreviewDocument* doc) {
 
 }  // namespace
 
+namespace {
+
+std::wstring Marked(core::Reliability reliability, const std::wstring& text) {
+    if (text.empty() || reliability == Reliability::Unknown) return L"—";
+    return reliability == Reliability::Reliable ? text : L"≈" + text;
+}
+
+// Nombre corto de un papel: el del tamaño estándar o las medidas.
+std::wstring ShortPaper(short code, bool custom, short width, short length, const std::wstring& fallback) {
+    const core::PaperInfo* info = !custom && code ? core::FindPaper(code) : nullptr;
+    if (!info && width > 0 && length > 0 && !custom) info = core::FindPaperBySize(width, length);
+    if (info) return i18n::GetLanguage() == i18n::Language::Spanish ? info->nameEs : info->nameEn;
+    if (width > 0 && length > 0) return SizeText(width, length);
+    return fallback;
+}
+
+}  // namespace
+
+ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* factsIn) {
+    ListSettings out;
+    const core::ContentFacts* facts = factsIn && factsIn->analyzed ? factsIn : nullptr;
+    const core::PrintSettings& dm = core::EffectiveDevMode(job, facts);
+    const core::PageAccounting acc = core::ComputePageAccounting(job, facts);
+    const bool documented = facts && facts->settingsDocumented;
+    const bool dataRead = facts != nullptr;
+
+    // Papel.
+    {
+        core::PaperSize size = core::EffectivePaper(dm);
+        const bool inDm = dm.paperSize.valid || dm.formName.valid || size.known;
+        const bool inContent = facts && (facts->paperName.valid || facts->paperWidth.valid);
+        const bool agree = inContent && SamePaper(size, *facts);
+        auto a = core::AssessSetting(acc.kind, inDm, inContent, documented, agree, dataRead);
+        std::wstring text;
+        if (inContent && (documented || !inDm))
+            text = ShortPaper(0, false, facts->paperWidth.valid ? facts->paperWidth.value : 0,
+                              facts->paperLength.valid ? facts->paperLength.value : 0,
+                              facts->paperName.valid ? facts->paperName.value : L"");
+        else if (inDm)
+            text = ShortPaper(dm.paperSize.valid ? dm.paperSize.value : 0, size.custom, size.width, size.length,
+                              dm.formName.valid ? dm.formName.value : L"");
+        out.paper = Marked(a.reliability, text);
+    }
+    // Orientación.
+    {
+        const bool inDm = dm.orientation.valid;
+        const bool inContent = facts && facts->orientation.valid;
+        const bool agree = inDm && inContent && dm.orientation.value == facts->orientation.value;
+        auto a = core::AssessSetting(acc.kind, inDm, inContent, documented, agree, dataRead);
+        short value = inContent && (documented || !inDm) ? facts->orientation.value : dm.orientation.value;
+        out.orientation = Marked(a.reliability, inDm || inContent ? std::wstring(value == DMORIENT_LANDSCAPE
+                                                                                     ? Tr(S::ValueLandscapeShort)
+                                                                                     : Tr(S::ValuePortraitShort))
+                                                                 : L"");
+    }
+    // Doble cara (incluye el supuesto "una cara" de la contabilidad).
+    {
+        const wchar_t* text = acc.duplex.value == DMDUP_VERTICAL     ? Tr(S::ValueDuplexLongShort)
+                              : acc.duplex.value == DMDUP_HORIZONTAL ? Tr(S::ValueDuplexShortShort)
+                                                                     : Tr(S::ValueSimplex);
+        out.duplex = Marked(acc.duplex.reliability, text);
+    }
+    // Origen del papel: solo en el DEVMODE (en RAW puede ser el predeterminado de la cola).
+    if (dm.defaultSource.valid) {
+        auto a = core::AssessSetting(acc.kind, true, false, false, false, dataRead);
+        out.source = Marked(a.reliability, SourceText(dm.defaultSource.value));
+    } else {
+        out.source = L"—";
+    }
+    return out;
+}
+
 std::wstring PaperText(const core::PrintSettings& s) {
     core::PaperSize size = core::EffectivePaper(s);
     const core::PaperInfo* info = s.paperSize.valid ? core::FindPaper(s.paperSize.value) : nullptr;
@@ -229,6 +301,7 @@ std::wstring ReasonText(Reason reason) {
         case Reason::Conflict: return Tr(S::ReasonConflict);
         case Reason::UndocumentedHint: return Tr(S::ReasonUndocumentedHint);
         case Reason::HintAgrees: return Tr(S::ReasonHintAgrees);
+        case Reason::DataNotRead: return Tr(S::ReasonDataNotRead);
         case Reason::NupPrivate: return Tr(S::ReasonNupPrivate);
         case Reason::KindUnknown: return Tr(S::ReasonKindUnknown);
         case Reason::DependsOnInputs: return Tr(S::ReasonDependsOnInputs);
@@ -293,7 +366,7 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         const bool inDm = dm.paperSize.valid || dm.formName.valid || size.known;
         const bool inContent = facts && (facts->paperName.valid || facts->paperWidth.valid);
         const bool agree = inContent && SamePaper(size, *facts);
-        auto a = fixBasis(core::AssessSetting(acc.kind, inDm, inContent, documented, agree));
+        auto a = fixBasis(core::AssessSetting(acc.kind, inDm, inContent, documented, agree, facts != nullptr));
         std::wstring contentText;
         if (inContent) {
             // Nombre legible si las medidas son de un tamaño estándar ("LT", "ISOA4" -> Carta, A4).
@@ -326,7 +399,7 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         const bool inDm = dmField.valid;
         const bool inContent = facts && contentField.valid;
         const bool agree = inDm && inContent && dmField.value == contentField.value;
-        auto a = fixBasis(core::AssessSetting(acc.kind, inDm, inContent, documented, agree));
+        auto a = fixBasis(core::AssessSetting(acc.kind, inDm, inContent, documented, agree, facts != nullptr));
         std::wstring value;
         if (inContent && (documented || !inDm)) value = text(contentField.value);
         else if (inDm) value = text(dmField.value);
@@ -413,6 +486,12 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         rows.push_back(QuantityRow(S::SheetDataPages, acc.dataPages, origin));
     }
     rows.push_back(QuantityRow(S::SheetLogical, acc.logicalPages, OriginText(acc.logicalPages.basis, L"", facts)));
+    {
+        std::wstring origin;
+        if (acc.printPages.Known())
+            origin = util::Format(Tr(S::OriginCalcPrintPages), acc.dataPages.value, acc.deviceCopies.value);
+        rows.push_back(QuantityRow(S::SheetPrintPages, acc.printPages, origin));
+    }
     if (acc.appCopies.Known() && acc.appCopies.value > 1)
         rows.push_back(QuantityRow(S::SheetAppCopies, acc.appCopies, OriginText(acc.appCopies.basis, L"", facts)));
     {
@@ -497,7 +576,10 @@ std::wstring SettingsSummary(const core::JobInfo& job, const preview::PreviewDoc
     if (acc.copies.Known())
         parts.push_back(mark(acc.copies) + util::Format(acc.copies.value == 1 ? Tr(S::SummaryCopy) : Tr(S::SummaryCopies),
                                                         acc.copies.value));
-    if (acc.sides.Known())
+    // Lo mismo que la columna "Páginas" de la lista: páginas x copias.
+    if (acc.printPages.Known())
+        parts.push_back(mark(acc.printPages) + util::Format(Tr(S::SummaryPrintPages), acc.printPages.value));
+    else if (acc.sides.Known())
         parts.push_back(mark(acc.sides) + util::Format(acc.sides.value == 1 ? Tr(S::SummarySide) : Tr(S::SummarySides),
                                                        acc.sides.value));
     else

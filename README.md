@@ -17,7 +17,9 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 - **Trabajos**: documento, usuario, equipo, páginas, tamaño, estado, posición, hora. Pausar, reanudar, reiniciar, cancelar (uno, varios o todos los de un usuario), subir/bajar en la cola, **reenviar a otra impresora**.
 - **Impresoras**: pausar/reanudar/vaciar cola; avisos de sin papel, atasco, sin tóner, fuera de línea...
 - **Acceso rápido a impresoras**: barra superior con las impresoras que el operador fija (botón `+`), cada una con su cantidad de trabajos y su estado; un clic o `Ctrl+1`…`Ctrl+9` filtran la cola por esa impresora.
-- **Orden de la cola** por equipo, hora de envío, usuario, documento, estado o tamaño (`F6`, `Shift+F6` para invertir), además del orden real de impresión.
+- **Tabla como la cola de Windows**: un clic en el encabezado ordena por esa columna y otro clic invierte (documento, estado, usuario, equipo, impresora, páginas, papel, orientación, doble cara, origen del papel, tamaño, enviado; `#` = orden real de impresión). También `F6` / `Shift+F6`.
+- **Páginas a imprimir** en la lista: páginas × copias (3 págs. con 3 copias = 9), con las copias leídas de los datos del trabajo también para los enviados desde otras PCs.
+- **Panel de detalles** (vista previa y configuración) oculto al iniciar; se abre con el botón de la cabecera, `Ctrl+B` o `F7`.
 - **Vista previa** de los datos del trabajo, leídos con la API del spooler (`OpenPrinter("Cola,Job N")` + `ReadPrinter`; basta con "Administrar documentos"): EMF nativo; PostScript, PDF, PCL y XPS con Ghostscript/GhostPCL/GhostXPS (opcionales, autodetectados). Zoom, arrastre y paso de páginas. Caché de vistas previas. Los datos ESC/Page de las Epson del LAIMI no tienen vista previa (se explica por qué).
 - **Configuración de impresión por trabajo** (`F7`): papel, orientación, doble cara, copias, intercalado, color, páginas lógicas, caras y hojas previstas, cada valor con su origen y su fiabilidad (*Fiable / Estimado / No determinable*). Ver [docs/DATOS_DE_IMPRESION.md](docs/DATOS_DE_IMPRESION.md).
 - **Atajos de teclado configurables** (F1 muestra y permite reasignarlos).

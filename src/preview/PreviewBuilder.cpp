@@ -55,9 +55,9 @@ core::DataKind KindOf(DataFormat format) {
     }
 }
 
-// Lo que se puede averiguar de los datos sin renderizarlos: páginas,
-// repeticiones y opciones declaradas (PJL/EJL/PrintTicket).
-void AnalyzeContent(const SpoolData& spool, core::ContentFacts& facts) {
+}  // namespace
+
+void AnalyzeSpoolData(const SpoolData& spool, core::ContentFacts& facts) {
     facts.analyzed = true;
     facts.complete = !spool.truncated;
     facts.kind = KindOf(spool.format);
@@ -110,6 +110,8 @@ void AnalyzeContent(const SpoolData& spool, core::ContentFacts& facts) {
         default: break;
     }
 }
+
+namespace {
 
 void FromEmf(const SpoolData& spool, const PreviewOptions& opt, PreviewDocument& doc) {
     size_t found = 0;
@@ -187,7 +189,7 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
         doc->source = util::Format(spool.origin == SpoolOrigin::SpoolerApi ? Tr(S::PreviewSourceApi)
                                                                             : Tr(S::PreviewSourceSpool),
                                    DataFormatName(spool.format));
-        AnalyzeContent(spool, doc->facts);
+        AnalyzeSpoolData(spool, doc->facts);
         switch (spool.format) {
             case DataFormat::EmfSpool: FromEmf(spool, opt, *doc); break;
             case DataFormat::Xps:

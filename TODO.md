@@ -92,7 +92,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Matriz de pruebas con Word, Acrobat, Chrome, Edge y RAW (`docs/DATOS_DE_IMPRESION.md`)
 - [x] Significado del EJL del controlador EPSON AM-C6000 verificado sin papel (`QT` copias, `JI PAGES` hojas, `DX`/`BD`, `PS`, `poE`): copias y hojas de trabajos de otras PCs fiables
 - [ ] (LAIMI) Pruebas P6–P8 (Lexmark, etiquetas, operador sin permisos)
-- [ ] Mostrar copias / caras previstas también como columna de la lista (opcional)
+- [x] Columna "Páginas" = páginas × copias para todos los trabajos (análisis en segundo plano de sus datos)
+- [x] Columnas de papel, orientación, doble cara y origen del papel
 
 ---
 
@@ -126,6 +127,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Selector de impresora activa (y de servidor)
 - [x] **Barra de acceso rápido a impresoras**: el operador fija las impresoras que quiere arriba (botón `+`), cada una con su cantidad de trabajos y su estado; clic para filtrar, `Ctrl+1`…`Ctrl+9`, clic derecho para pausar/reanudar/vaciar
 - [x] **Ordenar la cola** por equipo, hora de envío, usuario, documento, estado o tamaño (además del orden real de impresión), con orden inverso; se guarda entre sesiones
+- [x] **Lista en forma de tabla** como la cola de Windows: clic en el encabezado para ordenar, otro clic para invertir (también páginas, impresora, papel, orientación, doble cara y origen)
+- [x] Panel de detalles (vista previa y configuración) oculto al iniciar, con botón en la cabecera
 - [x] Indicadores visuales claros de estado (colores + íconos por estado)
 - [x] Evitar menús anidados; priorizar acciones directas y atajos (un único menú plano)
 - [x] Soporte de DPI alto (Per-Monitor V2)

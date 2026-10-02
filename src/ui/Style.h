@@ -39,6 +39,8 @@ constexpr wchar_t Live = 0xE9D9;
 constexpr wchar_t Shield = 0xEA18;
 constexpr wchar_t ZoomIn = 0xE8A3;
 constexpr wchar_t ZoomOut = 0xE71F;
+constexpr wchar_t OpenPane = 0xE8A0;
+constexpr wchar_t ClosePane = 0xE89F;
 }  // namespace glyph
 
 struct Fonts {

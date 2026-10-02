@@ -119,7 +119,10 @@ bool CanAdminister(const std::wstring& printer);
 // "Administrar documentos" en la cola. Funciona igual con servidores remotos
 // (RPC). Lee como máximo maxBytes; *truncated indica si quedaron datos.
 // IMPORTANTE: con un trabajo que todavía se está recibiendo (JOB_STATUS_SPOOLING)
-// ReadPrinter espera a que lleguen más datos: no llamarla en ese caso.
+// ReadPrinter espera a que lleguen más datos: no llamarla en ese caso. Las
+// lecturas se serializan dentro del proceso: si dos coinciden en el tiempo, la
+// segunda recibe 0 bytes. Si otro programa lee el mismo trabajo a la vez puede
+// pasar lo mismo (ver el reintento de preview::ReadJobSpool).
 OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint64_t maxBytes,
                      std::vector<std::uint8_t>& out, bool* truncated);
 

@@ -353,6 +353,10 @@ OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint
                      std::vector<std::uint8_t>& out, bool* truncated) {
     out.clear();
     if (truncated) *truncated = false;
+    // Dos lecturas simultáneas del mismo trabajo hacen que la segunda reciba 0
+    // bytes (comprobado): todas las lecturas de la app pasan de a una.
+    static std::mutex readMutex;
+    std::lock_guard readLock(readMutex);
     // "Impresora,Job N" abre el trabajo (no la impresora) para leer sus datos.
     std::wstring name = printer + L",Job " + std::to_wstring(jobId);
     PRINTER_DEFAULTSW defaults{};

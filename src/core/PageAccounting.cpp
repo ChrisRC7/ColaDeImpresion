@@ -45,7 +45,9 @@ Quantity ResolveCopies(DataKind kind, const PrintSettings& dm, bool fromSpool, c
 
     switch (kind) {
         case DataKind::Emf:
-            // El procesador de impresión del servidor reproduce el EMF aplicando el DEVMODE del trabajo.
+            // El procesador de impresión reproduce el EMF aplicando el DEVMODE del spool. Sin leer
+            // los datos solo se tiene el de JOB_INFO_2, que puede estar desactualizado (Word).
+            if (dmValid && !facts) return Make(dmCopies, Reliability::Estimated, Basis::DevMode, Reason::DataNotRead);
             if (dmValid) return Make(dmCopies, Reliability::Reliable, fromSpool ? Basis::SpoolDevMode : Basis::DevMode);
             return Make(1, Reliability::Estimated, Basis::AssumedDefault, Reason::FieldNotDeclared);
         case DataKind::Xps:
@@ -80,7 +82,7 @@ Quantity ResolveDuplex(DataKind kind, const PrintSettings& dm, const ContentFact
     const bool documented = hasContent && facts->settingsDocumented;
     *conflict = dmValid && documented && dm.duplex.value != facts->duplex.value;
     const bool agree = dmValid && hasContent && dm.duplex.value == facts->duplex.value;
-    SettingAssessment a = AssessSetting(kind, dmValid, hasContent, documented, agree);
+    SettingAssessment a = AssessSetting(kind, dmValid, hasContent, documented, agree, facts != nullptr);
     if (a.reliability == Reliability::Unknown && !dmValid && !hasContent) {
         // Sin DM_DUPLEX el controlador normalmente no ofrece doble cara: se supone una cara.
         return Make(DMDUP_SIMPLEX, Reliability::Estimated, Basis::AssumedDefault,
@@ -131,7 +133,8 @@ DataKind KindFromJob(const JobInfo& job) {
     return DataKind::Unknown;
 }
 
-SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, bool contentDocumented, bool agree) {
+SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, bool contentDocumented, bool agree,
+                                bool dataRead) {
     SettingAssessment a;
     if (!inDevMode && !inContent) {
         a.reason = Reason::FieldNotDeclared;
@@ -164,7 +167,10 @@ SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, b
     // Solo el DEVMODE (o el DEVMODE con un indicio no documentado).
     a.basis = Basis::DevMode;
     switch (kind) {
-        case DataKind::Emf: a.reliability = Reliability::Reliable; break;
+        case DataKind::Emf:
+            a.reliability = dataRead ? Reliability::Reliable : Reliability::Estimated;
+            if (!dataRead) a.reason = Reason::DataNotRead;
+            break;
         case DataKind::Xps:
             a.reliability = Reliability::Estimated;
             a.reason = Reason::XpsTicketUnread;
@@ -241,6 +247,14 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
 
     // 3. Copias solicitadas.
     acc.copies = ResolveCopies(acc.kind, dm, acc.devModeFromSpool, facts, &acc.copiesConflict);
+    acc.deviceCopies = acc.copies;
+    if (acc.dataPages.Known() && acc.deviceCopies.Known())
+        acc.printPages = Make(acc.dataPages.value * acc.deviceCopies.value,
+                              Worst(acc.dataPages.reliability, acc.deviceCopies.reliability), Basis::Calculated,
+                              acc.dataPages.reliability != Reliability::Reliable ? acc.dataPages.reason
+                                                                                  : acc.deviceCopies.reason);
+    else
+        acc.printPages = Unknown(!acc.dataPages.Known() ? acc.dataPages.reason : acc.deviceCopies.reason);
     if (acc.copies.Known() && repeat) {
         acc.copies = Make(acc.copies.value * acc.appCopies.value, Reliability::Estimated, Basis::ContentRepeat,
                           Reason::RepeatDetected);

@@ -33,6 +33,7 @@ namespace {
 constexpr UINT WM_APP_SNAPSHOT = WM_APP + 1;
 constexpr UINT WM_APP_PREVIEW = WM_APP + 2;
 constexpr UINT WM_APP_ACTION = WM_APP + 3;
+constexpr UINT WM_APP_FACTS = WM_APP + 4;  // hay datos nuevos de trabajos (páginas x copias)
 
 constexpr UINT_PTR kTimerSaveHistory = 1;
 constexpr UINT_PTR kTimerTransient = 2;
@@ -134,6 +135,9 @@ MainWindow::~MainWindow() {
 
 bool MainWindow::Create(const StartupOptions& options) {
     settings_ = config::Settings::Load(config::SettingsFile());
+    // El panel de detalles (vista previa y configuración) arranca siempre oculto:
+    // la tabla usa todo el ancho y se abre con el botón de la cabecera, Ctrl+B o F7.
+    settings_.showPreviewPane = false;
     if (options.hasServer) settings_.activeServer = options.server;
     settings_.startWithWindows = config::IsAutostartEnabled();
     i18n::SetLanguage(i18n::LanguageFromCode(settings_.language.c_str()));
@@ -176,6 +180,7 @@ bool MainWindow::Create(const StartupOptions& options) {
                                    case ui::HeaderButton::Help: Execute(Command::Help); break;
                                    case ui::HeaderButton::Theme: ToggleTheme(); break;
                                    case ui::HeaderButton::Menu: ShowMainMenu(below); break;
+                                   case ui::HeaderButton::Details: Execute(Command::TogglePane); break;
                                    default: break;
                                }
                            },
@@ -184,7 +189,7 @@ bool MainWindow::Create(const StartupOptions& options) {
                                [this](const std::wstring& printer, POINT pt) { ShowPrinterChipMenu(printer, pt); },
                                [this](POINT pt) { ShowQuickAccessMenu(pt); }});
     list_.Create(hwnd_, {[this] { UpdatePreview(); }, [this](POINT pt) { ShowJobContextMenu(pt); },
-                         [this] { ToggleQuickLook(); }});
+                         [this] { ToggleQuickLook(); }, [this](int sortId) { OnColumnClicked(sortId); }});
     preview_.Create(hwnd_);
     status_.Create(hwnd_);
     help_.Create(hwnd_, &shortcuts_,
@@ -218,6 +223,7 @@ bool MainWindow::Create(const StartupOptions& options) {
         [self](core::SnapshotPtr s) { PostOwned(self, WM_APP_SNAPSHOT, new core::SnapshotPtr(std::move(s))); });
     previews_ = std::make_unique<preview::PreviewService>(
         [self](const std::wstring& key) { PostOwned(self, WM_APP_PREVIEW, new std::wstring(key)); });
+    facts_ = std::make_unique<preview::JobFactsService>([self] { PostMessageW(self, WM_APP_FACTS, 0, 0); });
     actions_ = std::make_unique<JobActionRunner>(
         [self](ActionResult r) { PostOwned(self, WM_APP_ACTION, new ActionResult(std::move(r))); });
 
@@ -329,6 +335,7 @@ void MainWindow::ConnectTo(const std::wstring& serverIn) {
         snapshot_.reset();
         tracker_.Reset();
         previews_->Clear();
+        facts_->Clear();
         adminRights_.clear();
         lastProblems_.clear();
         connecting_ = true;
@@ -476,6 +483,8 @@ void MainWindow::OnSnapshot(core::SnapshotPtr snapshot) {
 
     ProcessEvents(tracker_.Update(*snapshot_));
     CheckPrinterProblems();
+    // Copias reales de cada trabajo (lectura del inicio de sus datos, una vez por trabajo).
+    facts_->Request(snapshot_->jobs, settings_.activeServer, SpoolOverrideDir());
 
     // "Al iniciar, pausar todo": pausa las impresoras apenas se conoce la lista.
     // (Los trabajos en cola los retiene el monitor en su primer refresco.)
@@ -604,6 +613,8 @@ std::vector<core::JobInfo> MainWindow::SelectedJobs() const {
 void MainWindow::RebuildRows() {
     std::vector<ui::ListRow> rows;
     if (historyView_) {
+        list_.SetColumns(HistoryColumns());
+        list_.SetSortIndicator(-1, false);
         const auto& entries = history_.Entries();
         for (size_t i = 0; i < entries.size(); ++i) {
             const auto& e = entries[i];
@@ -613,11 +624,22 @@ void MainWindow::RebuildRows() {
         }
         list_.SetEmptyText(filter_.empty() ? Tr(S::EmptyHistory) : Tr(S::EmptyFilter), L"", ui::glyph::History);
     } else {
+        const bool showPrinter = settings_.activePrinter == kAllPrinters;
+        list_.SetColumns(JobColumns(showPrinter));
+        list_.SetSortIndicator(static_cast<int>(CurrentSort(settings_)), settings_.sortDescending);
         if (snapshot_) {
-            const bool showPrinter = settings_.activePrinter == kAllPrinters;
+            // Los datos analizados se retienen mientras se arma la lista.
+            std::map<std::wstring, std::shared_ptr<const core::ContentFacts>> held;
+            FactsLookup lookup = [&](const core::JobInfo& job) -> const core::ContentFacts* {
+                auto facts = facts_->Find(job);
+                if (!facts) return nullptr;
+                auto& slot = held[job.Key()];
+                slot = std::move(facts);
+                return slot.get();
+            };
             for (const auto* job : VisibleJobs(*snapshot_, settings_.activePrinter, filter_,
-                                               CurrentSort(settings_), settings_.sortDescending))
-                rows.push_back(MakeJobRow(*job, showPrinter));
+                                               CurrentSort(settings_), settings_.sortDescending, lookup))
+                rows.push_back(MakeJobRow(*job, showPrinter, lookup(*job)));
         }
         if (connecting_) list_.SetEmptyText(Tr(S::StatusConnecting), ServerDisplayName(), ui::glyph::Server);
         else if (snapshot_ && !snapshot_->error.empty())
@@ -815,6 +837,8 @@ void MainWindow::UpdatePreview() {
     const core::PrinterInfo* printer = snapshot_ ? snapshot_->FindPrinter(job->printer) : nullptr;
     if (doc) {
         currentPreviewKey_ = key;
+        // La vista previa lee todos los datos: su análisis es el más completo para la lista.
+        if (doc->facts.analyzed) facts_->Store(*job, doc->facts);
         preview_.ShowDocument(job->document, JobDetails(*job, doc.get()), doc);
         preview_.SetSheet(BuildJobSheet(*job, printer, doc.get()));
         return;
@@ -1132,15 +1156,28 @@ void MainWindow::CycleSort(int delta) {
     SetSort(SortById(static_cast<SortBy>(index)), settings_.sortDescending);
 }
 
-void MainWindow::SetSort(const std::wstring& sortId, bool descending) {
+void MainWindow::SetSort(const std::wstring& sortId, bool descending, bool announce) {
     settings_.sortBy = SortById(SortByFromId(sortId));  // normaliza valores desconocidos
     settings_.sortDescending = descending;
     SaveSettings();
     RebuildRows();
     UpdateStatus();
+    if (!announce) return;
     const SortBy sort = CurrentSort(settings_);
     ShowTransient(util::Format(Tr(descending ? S::StatusSortedByDesc : S::StatusSortedBy), SortName(sort).c_str()),
                   ui::Tone::Neutral);
+}
+
+void MainWindow::OnColumnClicked(int sortId) {
+    if (historyView_ || sortId < 0 || sortId >= kSortCount) return;
+    auto [sort, descending] = NextSort(CurrentSort(settings_), settings_.sortDescending, static_cast<SortBy>(sortId));
+    // La flecha del encabezado ya muestra el orden: sin aviso extra en la barra de estado.
+    SetSort(SortById(sort), descending, false);
+}
+
+std::wstring MainWindow::SpoolOverrideDir() const {
+    auto it = settings_.spoolDirOverrides.find(settings_.activeServer);
+    return it == settings_.spoolDirOverrides.end() ? L"" : it->second;
 }
 
 // ---------------------------------------------------------------------------
@@ -1475,6 +1512,7 @@ void MainWindow::Layout() {
     }
     list_.Show(true);
     const bool showPane = settings_.showPreviewPane && width >= style.Px(720);
+    header_.SetDetailsActive(showPane);
     if (!showPane) {
         preview_.Show(false);
         list_.Move(body);
@@ -1612,6 +1650,14 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_APP_PREVIEW: {
             std::unique_ptr<std::wstring> key(reinterpret_cast<std::wstring*>(lParam));
             if (*key == currentPreviewKey_) UpdatePreview();
+            return 0;
+        }
+        case WM_APP_FACTS: {
+            // Agrupa los avisos que llegaron seguidos: basta con reconstruir una vez.
+            MSG pending;
+            while (PeekMessageW(&pending, hwnd_, WM_APP_FACTS, WM_APP_FACTS, PM_REMOVE)) {
+            }
+            if (!historyView_) RebuildRows();
             return 0;
         }
         case WM_APP_ACTION: {

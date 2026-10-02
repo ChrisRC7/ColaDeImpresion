@@ -11,6 +11,7 @@
 #include "core/PrintTypes.h"
 #include "preview/ExternalRenderer.h"
 #include "preview/PreviewTypes.h"
+#include "preview/SpoolFile.h"
 
 namespace cola::preview {
 
@@ -32,5 +33,10 @@ struct PreviewRequest {
 };
 
 DocumentPtr BuildPreview(const PreviewRequest& request);
+
+// Lo que se puede averiguar de los datos de un trabajo sin renderizarlos:
+// formato, páginas, repeticiones, DEVMODE del spool EMF y opciones declaradas
+// (PJL, EJL, DSC, PrintTicket). Lo usan la vista previa y JobFactsService.
+void AnalyzeSpoolData(const SpoolData& spool, core::ContentFacts& facts);
 
 }  // namespace cola::preview

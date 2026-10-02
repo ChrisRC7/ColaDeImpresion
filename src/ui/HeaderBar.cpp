@@ -55,7 +55,7 @@ void HeaderBar::OnStyleChanged() {
 }
 
 void HeaderBar::UpdateTooltips() {
-    const S texts[] = {S::TipPrinter, S::TipHistory, S::TipHelp, S::TipTheme, S::TipMenu};
+    const S texts[] = {S::TipPrinter, S::TipHistory, S::TipHelp, S::TipTheme, S::TipMenu, S::TipDetails};
     for (int i = 0; i < static_cast<int>(HeaderButton::Count_); ++i) {
         TTTOOLINFOW ti{};
         ti.cbSize = sizeof(ti);
@@ -84,6 +84,12 @@ void HeaderBar::SetPrinterLabel(const std::wstring& title, const std::wstring& s
 
 void HeaderBar::SetHistoryActive(bool active) {
     historyActive_ = active;
+    Invalidate();
+}
+
+void HeaderBar::SetDetailsActive(bool active) {
+    if (detailsActive_ == active) return;
+    detailsActive_ = active;
     Invalidate();
 }
 
@@ -141,9 +147,10 @@ void HeaderBar::Layout() {
     const int btn = style.Px(36);
     const int cy = (client.top + client.bottom) / 2;
 
-    // Botones a la derecha (de derecha a izquierda: menú, tema, ayuda, historial).
+    // Botones a la derecha (de derecha a izquierda: menú, tema, ayuda, historial, detalles).
     int x = client.right - pad;
-    for (HeaderButton b : {HeaderButton::Menu, HeaderButton::Theme, HeaderButton::Help, HeaderButton::History}) {
+    for (HeaderButton b : {HeaderButton::Menu, HeaderButton::Theme, HeaderButton::Help, HeaderButton::History,
+                           HeaderButton::Details}) {
         buttons_[static_cast<int>(b)] = {x - btn, cy - btn / 2, x, cy + btn / 2};
         x -= btn + style.Px(2);
     }
@@ -220,6 +227,7 @@ void HeaderBar::Paint(HDC dc, const RECT& client) {
         bool active;
     };
     const IconButton icons[] = {
+        {HeaderButton::Details, detailsActive_ ? glyph::ClosePane : glyph::OpenPane, detailsActive_},
         {HeaderButton::History, glyph::History, historyActive_},
         {HeaderButton::Help, glyph::Keyboard, false},
         {HeaderButton::Theme, style.dark() ? glyph::Sun : glyph::Moon, false},

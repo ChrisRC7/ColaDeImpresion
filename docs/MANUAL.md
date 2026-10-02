@@ -13,8 +13,24 @@ el servidor, problemas de impresoras y si la actualización es **en vivo** o por
 
 ## 2. Trabajos
 
-Cada fila muestra: estado (ícono y etiqueta de color), documento, usuario,
-equipo, hora, impresora, páginas y tamaño.
+La cola es una **tabla** como la de Windows. Columnas: `#` (posición en la
+cola), **Documento**, **Estado**, **Usuario**, **Equipo** (la PC desde la que
+se envió), **Impresora** (en la vista "Todas"), **Páginas**, **Papel**,
+**Orientación**, **Doble cara**, **Origen del papel**, **Tamaño** y **Enviado**.
+
+- **Ordenar:** un clic en el encabezado de una columna ordena por ella; otro
+  clic invierte el orden (la flecha del encabezado lo indica). Un clic en `#`
+  vuelve al orden real de impresión. También `F6` / `Shift+F6`. El orden es
+  solo una vista: no cambia el orden real del spooler.
+- **Páginas** es lo que se va a imprimir en total: **páginas × copias**
+  (3 páginas con 3 copias = 9). Para los trabajos enviados desde otras PCs las
+  copias se leen de los datos del trabajo (en las Epson del LAIMI, del
+  encabezado EJL), porque Windows no las informa. `≈` = estimado (por ejemplo,
+  todavía no se leyeron los datos); `—` = no se sabe.
+- Papel, orientación, doble cara y origen siguen el mismo criterio que la
+  pestaña Configuración (sección 4.1); `≈` = estimado.
+- En ventanas angostas se ocultan primero `#`, Impresora, Tamaño, Enviado,
+  Origen y Orientación; Usuario, Equipo y Páginas se mantienen.
 
 | Acción | Teclado | Mouse |
 |---|---|---|
@@ -114,7 +130,7 @@ El criterio se guarda entre sesiones (`sortBy` / `sortDescending` en `config.jso
 
 ## 4. Vista previa
 
-- Panel derecho: datos del trabajo y la página. `Ctrl+B` lo muestra/oculta; se puede cambiar su ancho arrastrando el separador.
+- Panel derecho de **detalles** (vista previa y configuración): **arranca oculto** para que la tabla use todo el ancho. Se abre y se cierra con el botón de panel de la cabecera (el primero de los íconos de la derecha), con `Ctrl+B`, o con `F7` (abre directamente la pestaña Configuración). Su ancho se cambia arrastrando el separador.
 - `Espacio` o `Enter`: **vista rápida** a pantalla completa (`Esc` para volver).
 - `AvPág`/`→` y `RePág`/`←`: cambiar de página. Rueda del mouse: páginas.
 - `Ctrl+rueda`, `Ctrl++`, `Ctrl+-`: zoom; `Ctrl+0`: ajustar. Con zoom, arrastrar para mover; doble clic alterna 100 %/200 %.

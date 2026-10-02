@@ -1,10 +1,14 @@
 #pragma once
-// Lista de trabajos (control propio). Muestra filas de dos líneas:
-//   ● Documento                                    3 págs   1.2 MB  [Imprimiendo]
-//     usuario · equipo · 14:05 · impresora
-// Soporta selección múltiple (Ctrl/Shift + clic, Shift + flechas, arrastre con
-// el botón izquierdo como en el Explorador), scroll con rueda y estado vacío. No conoce el spooler: recibe filas ya preparadas
-// (ver app/RowBuilder), por eso sirve igual para la cola y para el historial.
+// Lista de trabajos (control propio) en forma de tabla, como la cola de
+// Windows: un encabezado con columnas y una fila por trabajo.
+//   [●]  #  Documento            Estado     Usuario   Equipo   Páginas  Tamaño  Enviado
+// Un clic en el encabezado de una columna ordenable avisa por callback
+// (sortClicked) y la columna muestra la flecha del orden actual. Soporta
+// selección múltiple (Ctrl/Shift + clic, Shift + flechas, arrastre con el botón
+// izquierdo como en el Explorador), scroll con rueda y estado vacío. No conoce
+// el spooler: recibe columnas y filas ya preparadas (ver app/RowBuilder), por
+// eso sirve igual para la cola y para el historial. En ventanas angostas se
+// ocultan primero las columnas de menor prioridad.
 
 #include <functional>
 #include <set>
@@ -16,13 +20,19 @@
 
 namespace cola::ui {
 
+struct ListColumn {
+    std::wstring label;
+    int width = 0;          // en DIP; 0 = flexible (ocupa el espacio que sobre)
+    bool alignRight = false;
+    bool pill = false;      // la celda se dibuja como insignia de estado (con el tono de la fila)
+    bool emphasis = false;  // texto principal de la fila (semibold)
+    int sortId = -1;        // identificador que se devuelve al hacer clic; -1 = no ordenable
+    int hidePriority = 0;   // en ventanas angostas se ocultan primero las de número mayor (0 = nunca)
+};
+
 struct ListRow {
     std::wstring key;
-    std::wstring title;
-    std::wstring subtitle;
-    std::wstring pages;
-    std::wstring size;
-    std::wstring status;
+    std::vector<std::wstring> cells;  // una por columna, en el mismo orden
     Tone tone = Tone::Neutral;
     wchar_t glyph = 0;  // ícono de estado (0 = punto)
 };
@@ -32,10 +42,15 @@ public:
     struct Callbacks {
         std::function<void()> selectionChanged;
         std::function<void(POINT screen)> contextMenu;
-        std::function<void()> activate;  // doble clic / Enter
+        std::function<void()> activate;            // doble clic / Enter
+        std::function<void(int sortId)> sortClicked;  // clic en el encabezado de una columna
     };
 
     bool Create(HWND parent, Callbacks callbacks);
+
+    void SetColumns(std::vector<ListColumn> columns);
+    // Columna que muestra la flecha de orden (-1 = ninguna).
+    void SetSortIndicator(int sortId, bool descending);
 
     // Reemplaza las filas conservando la selección y el foco por clave.
     void SetRows(std::vector<ListRow> rows);
@@ -58,11 +73,23 @@ protected:
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 private:
+    // Posición horizontal de cada columna visible para un ancho dado.
+    struct Slot {
+        size_t column;
+        int left;
+        int right;
+    };
+    std::vector<Slot> Layout(int width) const;
+
     void Paint(HDC dc, const RECT& client);
-    void PaintRow(HDC dc, int index, const RECT& rowRect);
+    void PaintHeader(HDC dc, const RECT& client);
+    void PaintRow(HDC dc, int index, const RECT& rowRect, const std::vector<Slot>& slots);
     void PaintEmpty(HDC dc, const RECT& client);
+    int HeaderHeight() const;
     int RowHeight() const;
-    int RowAt(int y) const;
+    int ViewHeight() const;          // alto visible para las filas (sin el encabezado)
+    int RowAt(int clientY) const;    // -1 si no hay fila (o es el encabezado)
+    int HeaderColumnAt(POINT pt) const;  // índice de columna bajo el punto en el encabezado, o -1
     int ContentHeight() const { return RowCount() * RowHeight(); }
     void UpdateScrollBar();
     void ScrollTo(int y);
@@ -73,6 +100,10 @@ private:
     RECT BandRectClient() const;
 
     Callbacks callbacks_;
+    std::vector<ListColumn> columns_;
+    int sortId_ = -1;
+    bool sortDescending_ = false;
+    int hoverHeader_ = -1;
     std::vector<ListRow> rows_;
     std::set<std::wstring> selected_;
     int focus_ = -1;
@@ -83,7 +114,7 @@ private:
     // Selección por arrastre (rectángulo, como en el Explorador de archivos).
     bool bandPressed_ = false;   // botón abajo, aún sin superar el umbral
     bool bandActive_ = false;    // arrastrando el rectángulo
-    POINT bandStart_{};          // en coordenadas del contenido (con el scroll sumado)
+    POINT bandStart_{};          // en coordenadas del contenido (sin encabezado, con el scroll sumado)
     POINT bandEnd_{};
     std::set<std::wstring> bandBase_;  // selección previa (se conserva con Ctrl)
     std::wstring emptyTitle_;

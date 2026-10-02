@@ -11,6 +11,11 @@
 
 namespace cola::ui {
 
+namespace {
+constexpr wchar_t kGlyphSortUp = 0xE70E;   // ChevronUp
+constexpr wchar_t kGlyphSortDown = 0xE70D; // ChevronDown
+}  // namespace
+
 bool JobListView::Create(HWND parent, Callbacks callbacks) {
     callbacks_ = std::move(callbacks);
     if (!CreateWin(L"ColaJobList", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | WS_CLIPSIBLINGS, 0, 0, 0, 0,
@@ -26,12 +31,96 @@ void JobListView::OnStyleChanged() {
     Invalidate();
 }
 
-int JobListView::RowHeight() const { return Style::Get().Px(54); }
+int JobListView::HeaderHeight() const { return columns_.empty() ? 0 : Style::Get().Px(30); }
+int JobListView::RowHeight() const { return Style::Get().Px(40); }
 
-int JobListView::RowAt(int y) const {
-    if (rows_.empty()) return -1;
-    int row = (y + scrollY_) / RowHeight();
+int JobListView::ViewHeight() const {
+    RECT client;
+    GetClientRect(hwnd_, &client);
+    return std::max(0, gfx::Height(client) - HeaderHeight());
+}
+
+int JobListView::RowAt(int clientY) const {
+    if (rows_.empty() || clientY < HeaderHeight()) return -1;
+    int row = (clientY - HeaderHeight() + scrollY_) / RowHeight();
     return (row >= 0 && row < RowCount()) ? row : -1;
+}
+
+void JobListView::SetColumns(std::vector<ListColumn> columns) {
+    // Mismas columnas (cambia en cada refresco de la cola): no repintar de más.
+    bool same = columns.size() == columns_.size();
+    for (size_t i = 0; same && i < columns.size(); ++i)
+        same = columns[i].label == columns_[i].label && columns[i].sortId == columns_[i].sortId;
+    columns_ = std::move(columns);
+    if (!same) {
+        hoverHeader_ = -1;
+        UpdateScrollBar();
+        Invalidate();
+    }
+}
+
+void JobListView::SetSortIndicator(int sortId, bool descending) {
+    if (sortId == sortId_ && descending == sortDescending_) return;
+    sortId_ = sortId;
+    sortDescending_ = descending;
+    Invalidate();
+}
+
+std::vector<JobListView::Slot> JobListView::Layout(int width) const {
+    const auto& style = Style::Get();
+    const int gap = style.Px(12);
+    const int left = style.Px(12) + style.Px(32);  // margen + ícono de estado
+    const int right = width - style.Px(16);
+    const int flexMin = style.Px(140);
+
+    std::vector<bool> visible(columns_.size(), true);
+    auto required = [&] {
+        int total = 0;
+        for (size_t i = 0; i < columns_.size(); ++i)
+            if (visible[i]) total += (columns_[i].width ? style.Px(columns_[i].width) : flexMin) + gap;
+        return total;
+    };
+    // Oculta primero las columnas de mayor prioridad de ocultamiento hasta que quepa.
+    while (required() > right - left) {
+        int victim = -1;
+        for (size_t i = 0; i < columns_.size(); ++i)
+            if (visible[i] && columns_[i].hidePriority > 0 &&
+                (victim < 0 || columns_[i].hidePriority > columns_[static_cast<size_t>(victim)].hidePriority))
+                victim = static_cast<int>(i);
+        if (victim < 0) break;
+        visible[static_cast<size_t>(victim)] = false;
+    }
+    int fixed = 0;
+    int flexCount = 0;
+    for (size_t i = 0; i < columns_.size(); ++i) {
+        if (!visible[i]) continue;
+        if (columns_[i].width) fixed += style.Px(columns_[i].width) + gap;
+        else {
+            fixed += gap;
+            ++flexCount;
+        }
+    }
+    const int flexWidth = flexCount ? std::max(flexMin, (right - left - fixed) / flexCount) : 0;
+
+    std::vector<Slot> slots;
+    int x = left;
+    for (size_t i = 0; i < columns_.size(); ++i) {
+        if (!visible[i]) continue;
+        const int w = columns_[i].width ? style.Px(columns_[i].width) : flexWidth;
+        slots.push_back({i, x, x + w});
+        x += w + gap;
+    }
+    return slots;
+}
+
+int JobListView::HeaderColumnAt(POINT pt) const {
+    if (pt.y < 0 || pt.y >= HeaderHeight()) return -1;
+    RECT client;
+    GetClientRect(hwnd_, &client);
+    const int half = Style::Get().Px(6);  // la mitad del espacio entre columnas también cuenta
+    for (const auto& slot : Layout(gfx::Width(client)))
+        if (pt.x >= slot.left - half && pt.x < slot.right + half) return static_cast<int>(slot.column);
+    return -1;
 }
 
 void JobListView::SetRows(std::vector<ListRow> rows) {
@@ -107,8 +196,9 @@ void JobListView::ClearSelection() {
 }
 
 RECT JobListView::BandRectClient() const {
-    RECT r{std::min(bandStart_.x, bandEnd_.x), std::min(bandStart_.y, bandEnd_.y) - scrollY_,
-           std::max(bandStart_.x, bandEnd_.x), std::max(bandStart_.y, bandEnd_.y) - scrollY_};
+    const int offset = HeaderHeight() - scrollY_;
+    RECT r{std::min(bandStart_.x, bandEnd_.x), std::min(bandStart_.y, bandEnd_.y) + offset,
+           std::max(bandStart_.x, bandEnd_.x), std::max(bandStart_.y, bandEnd_.y) + offset};
     return r;
 }
 
@@ -161,25 +251,21 @@ void JobListView::NotifySelection() {
 }
 
 void JobListView::UpdateScrollBar() {
-    RECT client;
-    GetClientRect(hwnd_, &client);
     SCROLLINFO si{};
     si.cbSize = sizeof(si);
     si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL;
     si.nMin = 0;
     si.nMax = std::max(0, ContentHeight() - 1);
-    si.nPage = static_cast<UINT>(std::max(1, gfx::Height(client)));
-    int maxScroll = std::max(0, ContentHeight() - gfx::Height(client));
+    si.nPage = static_cast<UINT>(std::max(1, ViewHeight()));
+    int maxScroll = std::max(0, ContentHeight() - ViewHeight());
     scrollY_ = std::clamp(scrollY_, 0, maxScroll);
     si.nPos = scrollY_;
     SetScrollInfo(hwnd_, SB_VERT, &si, TRUE);
-    ShowScrollBar(hwnd_, SB_VERT, ContentHeight() > gfx::Height(client));
+    ShowScrollBar(hwnd_, SB_VERT, ContentHeight() > ViewHeight());
 }
 
 void JobListView::ScrollTo(int y) {
-    RECT client;
-    GetClientRect(hwnd_, &client);
-    int maxScroll = std::max(0, ContentHeight() - gfx::Height(client));
+    int maxScroll = std::max(0, ContentHeight() - ViewHeight());
     y = std::clamp(y, 0, maxScroll);
     if (y == scrollY_) return;
     scrollY_ = y;
@@ -188,37 +274,73 @@ void JobListView::ScrollTo(int y) {
 }
 
 void JobListView::EnsureVisible(int row) {
-    RECT client;
-    GetClientRect(hwnd_, &client);
     int top = row * RowHeight();
     int bottom = top + RowHeight();
     if (top < scrollY_) ScrollTo(top);
-    else if (bottom > scrollY_ + gfx::Height(client)) ScrollTo(bottom - gfx::Height(client));
+    else if (bottom > scrollY_ + ViewHeight()) ScrollTo(bottom - ViewHeight());
 }
 
 void JobListView::Paint(HDC dc, const RECT& client) {
     const auto& pal = Style::Get().palette();
     gfx::Fill(dc, client, pal.surface);
+    const int header = HeaderHeight();
     if (rows_.empty()) {
-        PaintEmpty(dc, client);
-        return;
+        RECT body{client.left, client.top + header, client.right, client.bottom};
+        PaintEmpty(dc, body);
+    } else {
+        const auto slots = Layout(gfx::Width(client));
+        int saved = SaveDC(dc);
+        IntersectClipRect(dc, client.left, client.top + header, client.right, client.bottom);
+        int first = scrollY_ / RowHeight();
+        for (int i = first; i < RowCount(); ++i) {
+            int top = header + i * RowHeight() - scrollY_;
+            if (top > client.bottom) break;
+            RECT r{client.left, top, client.right, top + RowHeight()};
+            PaintRow(dc, i, r, slots);
+        }
+        if (bandActive_) {
+            RECT band = BandRectClient();
+            const int radius = Style::Get().Px(3);
+            gfx::FillRoundedAlpha(dc, band, radius, pal.accent, pal.dark ? 60 : 45);
+            gfx::StrokeRounded(dc, band, radius, pal.accent);
+        }
+        RestoreDC(dc, saved);
     }
-    int first = scrollY_ / RowHeight();
-    for (int i = first; i < RowCount(); ++i) {
-        int top = i * RowHeight() - scrollY_;
-        if (top > client.bottom) break;
-        RECT r{client.left, top, client.right, top + RowHeight()};
-        PaintRow(dc, i, r);
-    }
-    if (bandActive_) {
-        RECT band = BandRectClient();
-        const int radius = Style::Get().Px(3);
-        gfx::FillRoundedAlpha(dc, band, radius, pal.accent, pal.dark ? 60 : 45);
-        gfx::StrokeRounded(dc, band, radius, pal.accent);
+    if (header) PaintHeader(dc, client);
+}
+
+void JobListView::PaintHeader(HDC dc, const RECT& client) {
+    const auto& style = Style::Get();
+    const auto& pal = style.palette();
+    const auto& fonts = style.fonts();
+    RECT bar{client.left, client.top, client.right, client.top + HeaderHeight()};
+    gfx::Fill(dc, bar, pal.surface);
+    gfx::HLine(dc, bar.left, bar.right, bar.bottom - 1, pal.border);
+    for (const auto& slot : Layout(gfx::Width(client))) {
+        const ListColumn& column = columns_[slot.column];
+        const bool sorted = column.sortId >= 0 && column.sortId == sortId_;
+        const bool hovered = column.sortId >= 0 && static_cast<int>(slot.column) == hoverHeader_;
+        if (hovered) {
+            RECT h{slot.left - style.Px(6), bar.top + style.Px(3), slot.right + style.Px(6), bar.bottom - style.Px(3)};
+            gfx::FillRounded(dc, h, style.Px(4), pal.hover);
+        }
+        const COLORREF color = sorted ? pal.text : pal.textMuted;
+        const int arrow = sorted ? style.Px(14) : 0;
+        RECT text{slot.left, bar.top, slot.right - arrow, bar.bottom};
+        if (column.alignRight) text = {slot.left, bar.top, slot.right - arrow, bar.bottom};
+        gfx::Text(dc, column.label, text, sorted ? fonts.semibold : fonts.small, color,
+                  (column.alignRight ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        if (sorted) {
+            // Flecha junto al texto (a su derecha).
+            SIZE size = gfx::MeasureText(dc, column.label, fonts.semibold);
+            int ax = column.alignRight ? slot.right - arrow : std::min<int>(slot.left + size.cx + style.Px(2), slot.right - arrow);
+            RECT a{ax, bar.top, ax + arrow, bar.bottom};
+            gfx::Glyph(dc, sortDescending_ ? kGlyphSortDown : kGlyphSortUp, a, fonts.iconSmall, pal.accent);
+        }
     }
 }
 
-void JobListView::PaintRow(HDC dc, int index, const RECT& r) {
+void JobListView::PaintRow(HDC dc, int index, const RECT& r, const std::vector<Slot>& slots) {
     const auto& style = Style::Get();
     const auto& pal = style.palette();
     const auto& fonts = style.fonts();
@@ -244,42 +366,26 @@ void JobListView::PaintRow(HDC dc, int index, const RECT& r) {
     RECT iconRect{x, cy - style.Px(10), x + style.Px(20), cy + style.Px(10)};
     if (row.glyph) gfx::Glyph(dc, row.glyph, iconRect, fonts.icon, toneColor);
     else gfx::FillCircle(dc, x + style.Px(10), cy, style.Px(4), toneColor);
-    x += style.Px(32);
 
-    // Columnas de la derecha: estado (insignia), tamaño, páginas.
-    int right = r.right - pad - style.Px(6);
-    SIZE statusSize = gfx::MeasureText(dc, row.status, fonts.small);
-    int pillW = statusSize.cx + style.Px(20);
-    RECT pill{right - pillW, cy - style.Px(11), right, cy + style.Px(11)};
-    if (!row.status.empty()) {
-        gfx::FillRounded(dc, pill, style.Px(11), selected ? pal.surface : pal.ToneBackground(row.tone));
-        gfx::Text(dc, row.status, pill, fonts.small, toneColor, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    for (const auto& slot : slots) {
+        const ListColumn& column = columns_[slot.column];
+        if (slot.column >= row.cells.size()) continue;
+        const std::wstring& cell = row.cells[slot.column];
+        if (cell.empty()) continue;
+        if (column.pill) {
+            SIZE size = gfx::MeasureText(dc, cell, fonts.small);
+            int w = std::min<int>(size.cx + style.Px(20), slot.right - slot.left);
+            RECT pill{slot.left, cy - style.Px(11), slot.left + w, cy + style.Px(11)};
+            gfx::FillRounded(dc, pill, style.Px(11), selected ? pal.surface : pal.ToneBackground(row.tone));
+            gfx::Text(dc, cell, gfx::Inset(pill, style.Px(6), 0), fonts.small, toneColor,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            continue;
+        }
+        RECT cellRect{slot.left, r.top, slot.right, r.bottom};
+        gfx::Text(dc, cell, cellRect, column.emphasis ? fonts.semibold : fonts.normal,
+                  column.emphasis ? textColor : mutedColor,
+                  (column.alignRight ? DT_RIGHT : DT_LEFT) | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
-    right = pill.left - style.Px(16);
-
-    const int sizeW = style.Px(72);
-    const int pagesW = style.Px(64);
-    RECT client;
-    GetClientRect(hwnd_, &client);
-    const bool compact = gfx::Width(client) < style.Px(520);  // en ventanas angostas se ocultan columnas
-    if (!compact) {
-        RECT sizeRect{right - sizeW, r.top, right, r.bottom};
-        gfx::Text(dc, row.size, sizeRect, fonts.normal, mutedColor, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        right -= sizeW + style.Px(8);
-        RECT pagesRect{right - pagesW, r.top, right, r.bottom};
-        gfx::Text(dc, row.pages, pagesRect, fonts.normal, mutedColor, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        right -= pagesW + style.Px(12);
-    }
-
-    // Título y subtítulo.
-    RECT titleRect{x, r.top + style.Px(8), right, cy + style.Px(1)};
-    gfx::Text(dc, row.title, titleRect, fonts.semibold, textColor,
-              DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-    std::wstring subtitle = row.subtitle;
-    if (compact) subtitle = row.pages + L" · " + row.size + (subtitle.empty() ? L"" : L" · " + subtitle);
-    RECT subRect{x, cy + style.Px(3), right, r.bottom - style.Px(6)};
-    gfx::Text(dc, subtitle, subRect, fonts.small, mutedColor,
-              DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 }
 
 void JobListView::PaintEmpty(HDC dc, const RECT& client) {
@@ -337,22 +443,22 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_MOUSEMOVE: {
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             if (bandPressed_) {
-                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 if (!bandActive_) {
                     const int threshold = Style::Get().Px(5);
                     if (std::abs(pt.x - bandStart_.x) > threshold ||
-                        std::abs(pt.y + scrollY_ - bandStart_.y) > threshold)
+                        std::abs(pt.y - HeaderHeight() + scrollY_ - bandStart_.y) > threshold)
                         bandActive_ = true;
                 }
                 if (bandActive_) {
                     RECT client;
                     GetClientRect(hwnd_, &client);
                     // Desplaza la lista si se arrastra más allá del borde.
-                    if (pt.y < 0) ScrollTo(scrollY_ - RowHeight());
+                    if (pt.y < HeaderHeight()) ScrollTo(scrollY_ - RowHeight());
                     else if (pt.y > client.bottom) ScrollTo(scrollY_ + RowHeight());
                     bandEnd_.x = pt.x;
-                    bandEnd_.y = std::clamp<LONG>(pt.y, client.top, client.bottom) + scrollY_;
+                    bandEnd_.y = std::clamp<LONG>(pt.y, HeaderHeight(), client.bottom) - HeaderHeight() + scrollY_;
                     UpdateBandSelection();
                 }
                 return 0;
@@ -362,26 +468,45 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 TrackMouseEvent(&tme);
                 trackingMouse_ = true;
             }
-            int row = RowAt(GET_Y_LPARAM(lParam));
-            if (row != hover_) {
+            int row = RowAt(pt.y);
+            int column = HeaderColumnAt(pt);
+            if (column >= 0 && columns_[static_cast<size_t>(column)].sortId < 0) column = -1;
+            if (row != hover_ || column != hoverHeader_) {
                 hover_ = row;
+                hoverHeader_ = column;
                 Invalidate();
             }
             return 0;
         }
         case WM_MOUSELEAVE:
             trackingMouse_ = false;
-            if (hover_ != -1) {
+            if (hover_ != -1 || hoverHeader_ != -1) {
                 hover_ = -1;
+                hoverHeader_ = -1;
                 Invalidate();
             }
             return 0;
+        case WM_SETCURSOR:
+            if (LOWORD(lParam) == HTCLIENT && hoverHeader_ >= 0) {
+                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                return TRUE;
+            }
+            break;
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN: {
             SetFocus(hwnd_);
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (pt.y < HeaderHeight()) {
+                // Clic en el encabezado: ordenar por esa columna.
+                int column = HeaderColumnAt(pt);
+                if (msg == WM_LBUTTONDOWN && column >= 0 && columns_[static_cast<size_t>(column)].sortId >= 0 &&
+                    callbacks_.sortClicked)
+                    callbacks_.sortClicked(columns_[static_cast<size_t>(column)].sortId);
+                return 0;
+            }
             const bool ctrl = (wParam & MK_CONTROL) != 0;
             const bool shift = (wParam & MK_SHIFT) != 0;
-            int row = RowAt(GET_Y_LPARAM(lParam));
+            int row = RowAt(pt.y);
             if (row >= 0) {
                 // Clic derecho sobre una fila ya seleccionada conserva la selección múltiple.
                 if (msg == WM_RBUTTONDOWN && selected_.count(rows_[static_cast<size_t>(row)].key)) {
@@ -396,7 +521,7 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             if (msg == WM_LBUTTONDOWN) {
                 // Prepara el arrastre de selección (se activa al mover el mouse).
                 bandPressed_ = true;
-                bandStart_ = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) + scrollY_};
+                bandStart_ = {pt.x, pt.y - HeaderHeight() + scrollY_};
                 bandEnd_ = bandStart_;
                 bandBase_ = ctrl ? selected_ : std::set<std::wstring>{};
                 SetCapture(hwnd_);
@@ -425,7 +550,7 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 RECT client;
                 GetClientRect(hwnd_, &client);
                 pt = {client.left + Style::Get().Px(40),
-                      std::max(0, (focus_ + 1) * RowHeight() - scrollY_)};
+                      std::max(HeaderHeight(), HeaderHeight() + (focus_ + 1) * RowHeight() - scrollY_)};
                 ClientToScreen(hwnd_, &pt);
             }
             if (callbacks_.contextMenu) callbacks_.contextMenu(pt);

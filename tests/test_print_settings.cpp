@@ -11,6 +11,7 @@
 
 #include "TestFramework.h"
 #include "app/JobSheet.h"
+#include "app/RowBuilder.h"
 #include "core/PageAccounting.h"
 #include "core/PrintSettings.h"
 #include "core/Spooler.h"
@@ -194,9 +195,13 @@ TEST(TotalPagesTimesCopiesIsNeverReliableWithoutContent) {
     auto acc = core::ComputePageAccounting(job, nullptr);
     CHECK(acc.logicalPages.reliability == Reliability::Estimated);
     CHECK(acc.logicalPages.reason == core::Reason::PossibleAppCopies);
-    CHECK(acc.copies.reliability == Reliability::Reliable);
+    // Sin leer los datos, el dmCopies de JOB_INFO_2 puede estar desactualizado (Word).
+    CHECK(acc.copies.reliability == Reliability::Estimated);
+    CHECK(acc.copies.reason == core::Reason::DataNotRead);
     CHECK_EQ(acc.sides.value, 12u);
     CHECK(acc.sides.reliability == Reliability::Estimated);
+    CHECK_EQ(acc.printPages.value, 12u);
+    CHECK(acc.printPages.reliability == Reliability::Estimated);
 }
 
 TEST(MultiPageCopiesNupAndDuplex) {
@@ -483,7 +488,7 @@ TEST(JobSheetShowsReliabilityPerValue) {
     }
     CHECK(sides);
     CHECK(paper);
-    CHECK(app::SettingsSummary(job, &doc).find(L"10 caras") != std::wstring::npos);
+    CHECK(app::SettingsSummary(job, &doc).find(L"10 págs. a imprimir") != std::wstring::npos);
 
     // Sin DEVMODE ni datos: las caras no se pueden determinar.
     core::JobInfo bare;
@@ -496,6 +501,74 @@ TEST(JobSheetShowsReliabilityPerValue) {
         CHECK_EQ(row.value, std::wstring(L"No determinable"));
     }
     CHECK(found);
+}
+
+// --- Lista: páginas a imprimir y orden por columnas ---------------------------
+
+TEST(TotalPrintPagesIsPagesTimesCopies) {
+    i18n::SetLanguage(i18n::Language::Spanish);
+    DEVMODEW dm = MakeDevMode();
+    dm.dmFields = DM_COPIES;
+    dm.dmCopies = 3;
+    auto job = EmfJob(3, dm);
+    auto facts = EmfFacts(3, 0);
+    // 3 páginas x 3 copias = 9 (fiable con los datos analizados).
+    auto total = app::TotalPrintPages(job, &facts);
+    CHECK_EQ(total.value, 9u);
+    // Sin los datos del trabajo: la misma cuenta, pero marcada como estimada.
+    auto estimate = app::TotalPrintPages(job, nullptr);
+    CHECK_EQ(estimate.value, 9u);
+    CHECK_EQ(app::TotalPagesText(estimate), std::wstring(L"≈9"));
+    // 1 página x 10 copias del ejemplo del LAIMI.
+    DEVMODEW ten = MakeDevMode();
+    ten.dmFields = DM_COPIES;
+    ten.dmCopies = 10;
+    auto one = EmfJob(1, ten);
+    auto oneFacts = EmfFacts(1, 0);
+    CHECK_EQ(app::TotalPagesText(app::TotalPrintPages(one, &oneFacts)), std::wstring(L"10"));
+    // Sin páginas conocidas.
+    core::JobInfo unknown;
+    unknown.datatype = L"RAW";
+    CHECK_EQ(app::TotalPagesText(app::TotalPrintPages(unknown, nullptr)), std::wstring(L"—"));
+
+    // La fila muestra ese total en la columna "Páginas".
+    auto columns = app::JobColumns(false);
+    auto row = app::MakeJobRow(job, false, &facts);
+    CHECK_EQ(row.cells.size(), columns.size());
+    for (size_t i = 0; i < columns.size(); ++i)
+        if (columns[i].label == L"Páginas") CHECK_EQ(row.cells[i], std::wstring(L"9"));
+    CHECK_EQ(app::MakeJobRow(job, true, &facts).cells.size(), app::JobColumns(true).size());
+    CHECK(app::HistoryColumns().size() == app::MakeHistoryRow(config::HistoryEntry{}, 0).cells.size());
+}
+
+TEST(ColumnClickSortsLikeWindowsQueue) {
+    using app::SortBy;
+    auto next = app::NextSort(SortBy::Queue, false, SortBy::User);
+    CHECK(next.first == SortBy::User && !next.second);   // otra columna: ascendente
+    next = app::NextSort(next.first, next.second, SortBy::User);
+    CHECK(next.first == SortBy::User && next.second);    // misma columna: invierte
+    next = app::NextSort(next.first, next.second, SortBy::User);
+    CHECK(next.first == SortBy::User && !next.second);
+    CHECK(app::SortByFromId(L"pages") == SortBy::Pages);
+    CHECK(app::SortByFromId(L"printer") == SortBy::Printer);
+
+    // Orden por páginas a imprimir (páginas x copias), no por TotalPages.
+    core::QueueSnapshot snapshot;
+    DEVMODEW one = MakeDevMode();
+    one.dmFields = DM_COPIES;
+    one.dmCopies = 1;
+    DEVMODEW five = one;
+    five.dmCopies = 5;
+    auto a = EmfJob(4, one);   // 4 x 1 = 4
+    a.id = 1;
+    a.position = 1;
+    auto b = EmfJob(2, five);  // 2 x 5 = 10
+    b.id = 2;
+    b.position = 2;
+    snapshot.jobs = {a, b};
+    auto byPages = app::VisibleJobs(snapshot, app::kAllPrinters, L"", SortBy::Pages, true);
+    CHECK_EQ(byPages[0]->id, 2u);
+    CHECK_EQ(byPages[1]->id, 1u);
 }
 
 // --- Cola: caché del cliente + servidor ---------------------------------------

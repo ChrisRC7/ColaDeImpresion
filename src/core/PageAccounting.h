@@ -113,6 +113,7 @@ enum class Reason {
     Conflict,           // el DEVMODE y los datos no coinciden
     UndocumentedHint,   // solo hay un indicio en una sintaxis no documentada (EJL)
     HintAgrees,         // el DEVMODE coincide con un indicio no documentado (EJL): sigue sin confirmarse
+    DataNotRead,        // EMF sin leer los datos: JOB_INFO_2.pDevMode puede no ser el que se aplica
     NupPrivate,         // las páginas por cara son una opción privada del controlador
     KindUnknown,        // no se sabe en qué formato están los datos
     DependsOnInputs,    // cálculo con alguna entrada estimada o no determinable
@@ -134,6 +135,11 @@ struct PageAccounting {
     Quantity logicalPages;  // páginas de una copia
     Quantity copies;        // copias solicitadas (totales)
     Quantity appCopies;     // repeticiones detectadas en los datos (1 si no hay)
+    Quantity deviceCopies;  // copias que aplica el controlador / la impresora (sin las repeticiones)
+    // Páginas a imprimir: páginas en los datos x copias del controlador. Es lo que
+    // se ve en la lista ("3 págs. x 3 copias = 9"); no depende de las páginas por
+    // cara ni de la doble cara (eso es caras y hojas).
+    Quantity printPages;
     Quantity pagesPerSide;  // N-up
     Quantity duplex;        // 1 = una cara, 2 = borde largo, 3 = borde corto
     Quantity sides;         // caras físicas previstas (todas las copias)
@@ -171,7 +177,10 @@ struct SettingAssessment {
     Basis basis = Basis::None;
     Reason reason = Reason::None;
 };
-SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, bool contentDocumented, bool agree);
+// dataRead = se leyeron los datos del trabajo (en EMF, sin ellos el DEVMODE de
+// JOB_INFO_2 puede estar desactualizado y solo se considera estimado).
+SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, bool contentDocumented, bool agree,
+                                bool dataRead = true);
 
 // Peor de dos fiabilidades (Unknown < Estimated < Reliable).
 Reliability Worst(Reliability a, Reliability b);

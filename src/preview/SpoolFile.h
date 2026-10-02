@@ -78,7 +78,10 @@ SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const st
 //      que el spooler mantiene sobre los .SHD/.SPL;
 //   3. archivo de spool en la carpeta del servidor (respaldo).
 // Un trabajo que todavía se está recibiendo no se lee (ReadPrinter esperaría).
-SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes);
+// allowFile = false: solo la API del spooler (para análisis en segundo plano,
+// donde buscar en la carpeta de spool solo sumaría esperas y errores).
+SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes,
+                       bool allowFile = true);
 
 // Lee un archivo cualquiera (hasta maxBytes) compartiendo lectura/escritura.
 bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vector<std::uint8_t>& out,
