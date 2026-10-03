@@ -52,6 +52,9 @@ JsonValue Settings::ToJson() const {
     json[L"showPrinterBar"] = showPrinterBar;
     json[L"sortBy"] = sortBy;
     json[L"sortDescending"] = sortDescending;
+    JsonValue widths = JsonValue::MakeObject();
+    for (const auto& [column, width] : columnWidths) widths[column] = width;
+    json[L"columnWidths"] = widths;
 
     JsonValue keys = JsonValue::MakeObject();
     for (const auto& [command, chord] : shortcuts) keys[command] = chord;
@@ -106,6 +109,8 @@ Settings Settings::FromJson(const JsonValue& json) {
     s.showPrinterBar = json[L"showPrinterBar"].AsBool(s.showPrinterBar);
     s.sortBy = json[L"sortBy"].AsString(s.sortBy);
     s.sortDescending = json[L"sortDescending"].AsBool(s.sortDescending);
+    for (const auto& [column, width] : json[L"columnWidths"].AsObject())
+        if (width.IsNumber()) s.columnWidths[column] = std::clamp(width.AsInt(), kMinColumnWidth, kMaxColumnWidth);
 
     for (const auto& [command, chord] : json[L"shortcuts"].AsObject())
         if (chord.IsString()) s.shortcuts[command] = chord.AsString();

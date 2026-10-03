@@ -9,8 +9,13 @@
 // el spooler: recibe columnas y filas ya preparadas (ver app/RowBuilder), por
 // eso sirve igual para la cola y para el historial. En ventanas angostas se
 // ocultan primero las columnas de menor prioridad.
+// Como en la cola de Windows, el ancho de cada columna se cambia arrastrando
+// el borde derecho de su título (doble clic en el borde = ajustar al
+// contenido); si las columnas no caben aparece una barra horizontal. Los
+// anchos elegidos se avisan por callback para guardarlos.
 
 #include <functional>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -30,7 +35,25 @@ struct ListColumn {
     bool emphasis = false;  // texto principal de la fila (semibold)
     int sortId = -1;        // identificador que se devuelve al hacer clic; -1 = no ordenable
     int hidePriority = 0;   // en ventanas angostas se ocultan primero las de número mayor (0 = nunca)
+    std::wstring id;        // identificador estable para guardar el ancho elegido ("" = no se guarda)
 };
+
+// Posición horizontal de una columna visible (px, sin el desplazamiento horizontal).
+struct ColumnSlot {
+    size_t column;
+    int left;
+    int right;
+};
+
+// Distribuye las columnas en un ancho de ventana (px). userWidths: anchos en
+// DIP elegidos por el operador (por id). Reglas:
+//  - Las columnas que no caben se ocultan por hidePriority, calculando con el
+//    ancho predeterminado (o el del operador si es menor): agrandar una
+//    columna nunca oculta otra, solo hace aparecer la barra horizontal.
+//  - La columna flexible (width 0) ocupa el espacio libre salvo que el
+//    operador le haya dado un ancho.
+std::vector<ColumnSlot> LayoutColumns(const std::vector<ListColumn>& columns,
+                                      const std::map<std::wstring, int>& userWidths, int width);
 
 struct ListRow {
     std::wstring key;
@@ -46,11 +69,16 @@ public:
         std::function<void(POINT screen)> contextMenu;
         std::function<void()> activate;            // doble clic / Enter
         std::function<void(int sortId)> sortClicked;  // clic en el encabezado de una columna
+        // El operador cambió el ancho de una columna (id, DIP); -1 = volver al predeterminado.
+        std::function<void(const std::wstring& id, int width)> columnResized;
+        std::function<void(POINT screen)> headerMenu;  // clic derecho en el encabezado
     };
 
     bool Create(HWND parent, Callbacks callbacks);
 
     void SetColumns(std::vector<ListColumn> columns);
+    // Anchos elegidos por el operador (id -> DIP).
+    void SetColumnWidths(std::map<std::wstring, int> widths);
     // Columna que muestra la flecha de orden (-1 = ninguna).
     void SetSortIndicator(int sortId, bool descending);
 
@@ -75,13 +103,11 @@ protected:
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
 
 private:
-    // Posición horizontal de cada columna visible para un ancho dado.
-    struct Slot {
-        size_t column;
-        int left;
-        int right;
-    };
+    using Slot = ColumnSlot;
+    // Columnas visibles en coordenadas del cliente (con el desplazamiento horizontal aplicado).
     std::vector<Slot> Layout(int width) const;
+    int ContentWidth(int width) const;  // ancho total de las columnas (px)
+    int ClientWidth() const;
 
     void Paint(HDC dc, const RECT& client);
     void PaintHeader(HDC dc, const RECT& client);
@@ -92,9 +118,12 @@ private:
     int ViewHeight() const;          // alto visible para las filas (sin el encabezado)
     int RowAt(int clientY) const;    // -1 si no hay fila (o es el encabezado)
     int HeaderColumnAt(POINT pt) const;  // índice de columna bajo el punto en el encabezado, o -1
+    int DividerAt(POINT pt) const;       // columna cuyo borde derecho está bajo el punto, o -1
+    int FitWidth(size_t column) const;   // ancho (DIP) que necesita el contenido de una columna
+    void ScrollToX(int x);
     int ContentHeight() const { return RowCount() * RowHeight(); }
     void UpdateScrollBar();
-    void ScrollTo(int y);
+    void ScrollTo(int y);  // desplazamiento vertical
     void EnsureVisible(int row);
     void SetFocusRow(int row, bool extend, bool toggle);
     void NotifySelection();
@@ -112,6 +141,13 @@ private:
     int anchor_ = -1;
     int hover_ = -1;
     int scrollY_ = 0;
+    int scrollX_ = 0;
+    std::map<std::wstring, int> widths_;  // anchos del operador (id -> DIP)
+    // Cambio de ancho con el mouse.
+    int hoverDivider_ = -1;     // columna cuyo borde está bajo el mouse
+    int resizing_ = -1;         // columna que se está redimensionando
+    int resizeStartX_ = 0;      // x del mouse al empezar (px)
+    int resizeStartWidth_ = 0;  // ancho de la columna al empezar (px)
     bool trackingMouse_ = false;
     // Selección por arrastre (rectángulo, como en el Explorador de archivos).
     bool bandPressed_ = false;   // botón abajo, aún sin superar el umbral

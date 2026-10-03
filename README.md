@@ -18,6 +18,8 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 - **Impresoras**: pausar/reanudar/vaciar cola; avisos de sin papel, atasco, sin tóner, fuera de línea...
 - **Acceso rápido a impresoras**: barra superior con las impresoras que el operador fija (botón `+`), cada una con su cantidad de trabajos y su estado; un clic o `Ctrl+1`…`Ctrl+9` filtran la cola por esa impresora.
 - **Tabla como la cola de Windows**: un clic en el encabezado ordena por esa columna y otro clic invierte (documento, estado, usuario, equipo, impresora, páginas, papel, orientación, doble cara, origen del papel, tamaño, enviado; `#` = orden real de impresión). También `F6` / `Shift+F6`.
+- **Columnas redimensionables** arrastrando el borde del título (doble clic = ajustar al contenido), con barra horizontal si no caben; los anchos se guardan.
+- **Botones de pausa** junto a la búsqueda: pausar / reanudar los trabajos seleccionados y la impresora.
 - **Páginas a imprimir** en la lista: páginas × copias (3 págs. con 3 copias = 9), con las copias leídas de los datos del trabajo también para los enviados desde otras PCs.
 - **Panel de detalles** (vista previa y configuración) oculto al iniciar; se abre con el botón de la cabecera, `Ctrl+B` o `F7`.
 - **Vista previa** de los datos del trabajo, leídos con la API del spooler (`OpenPrinter("Cola,Job N")` + `ReadPrinter`; basta con "Administrar documentos"): EMF nativo; PostScript, PDF, PCL y XPS con Ghostscript/GhostPCL/GhostXPS (opcionales, autodetectados). Zoom, arrastre y paso de páginas. Caché de vistas previas. Los datos ESC/Page de las Epson del LAIMI no tienen vista previa (se explica por qué).

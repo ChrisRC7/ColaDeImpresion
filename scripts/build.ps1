@@ -143,6 +143,12 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - COLUMNAS: arrastre el borde derecho del título de una columna para
+     cambiar su ancho (doble clic en el borde = ajustar al contenido). Si no
+     caben, aparece una barra horizontal. Clic derecho en los títulos >
+     "Restablecer el ancho de las columnas".
+   - BOTONES DE PAUSA junto a la búsqueda: "Pausar / Reanudar trabajos" (los
+     seleccionados) y "Pausar / Reanudar impresora".
    - IMPRIMIR Y VOLVER A PAUSAR: seleccione uno o varios trabajos retenidos
      y presione F11 (o Ctrl+Enter). Se reanudan esos trabajos y su impresora;
      cuando todos terminaron de enviarse, la impresora vuelve a quedar en

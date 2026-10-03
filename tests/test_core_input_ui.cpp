@@ -13,6 +13,7 @@
 #include "core/PrintRelease.h"
 #include "core/Spooler.h"
 #include "input/Shortcuts.h"
+#include "ui/JobListView.h"
 #include "ui/Theme.h"
 
 using namespace cola;
@@ -253,6 +254,42 @@ TEST(AutoHoldOnlyNewJobsOnce) {
     CHECK(hold.Process(printer, {MakeJob(6, core::JobState::Queued)}, false).empty());
     // ...y un trabajo ya evaluado con la retención apagada no se pausa al encenderla.
     CHECK(hold.Process(printer, {MakeJob(6, core::JobState::Queued)}, true).empty());
+}
+
+TEST(ColumnLayoutWithUserWidths) {
+    // A 96 DPI (1 DIP = 1 px): margen izquierdo 18, derecho 16, separación 12, flexible mín. 140.
+    std::vector<ui::ListColumn> cols(3);
+    cols[0].width = 100;
+    cols[0].hidePriority = 1;
+    cols[0].id = L"a";
+    cols[1].width = 0;  // flexible
+    cols[1].id = L"doc";
+    cols[2].width = 100;
+    cols[2].hidePriority = 2;
+    cols[2].id = L"b";
+
+    // Sin anchos del operador la flexible ocupa lo que sobra.
+    auto slots = ui::LayoutColumns(cols, {}, 1000);
+    CHECK_EQ(slots.size(), size_t(3));
+    CHECK_EQ(slots[1].left, 130);
+    CHECK_EQ(slots[1].right, 860);
+    CHECK_EQ(slots[2].right, 972);
+
+    // Agrandar una columna no oculta otras: se sale del ancho (barra horizontal).
+    slots = ui::LayoutColumns(cols, {{L"b", 600}}, 500);
+    CHECK_EQ(slots.size(), size_t(3));
+    CHECK_EQ(slots[2].right - slots[2].left, 600);
+    CHECK(slots[2].right > 500);
+
+    // En una ventana angosta se ocultan primero las de mayor prioridad.
+    slots = ui::LayoutColumns(cols, {}, 300);
+    CHECK_EQ(slots.size(), size_t(2));
+    CHECK_EQ(slots[1].column, size_t(1));
+
+    // La flexible con ancho del operador queda fija.
+    slots = ui::LayoutColumns(cols, {{L"doc", 200}}, 1000);
+    CHECK_EQ(slots[1].right - slots[1].left, 200);
+    CHECK_EQ(slots[2].left, 342);
 }
 
 TEST(HeldJobsShownAsHeld) {

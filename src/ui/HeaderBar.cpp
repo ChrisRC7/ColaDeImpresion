@@ -56,13 +56,17 @@ void HeaderBar::OnStyleChanged() {
 
 void HeaderBar::UpdateTooltips() {
     const S texts[] = {S::TipPrinter, S::TipHistory, S::TipHelp, S::TipTheme, S::TipMenu, S::TipDetails};
+    static_assert(sizeof(texts) / sizeof(texts[0]) == static_cast<size_t>(HeaderButton::PauseJobs),
+                  "un texto por botón fijo; los de pausa traen el suyo");
     for (int i = 0; i < static_cast<int>(HeaderButton::Count_); ++i) {
         TTTOOLINFOW ti{};
         ti.cbSize = sizeof(ti);
         ti.hwnd = hwnd_;
         ti.uId = static_cast<UINT_PTR>(i + 1);
         ti.rect = buttons_[i];
-        ti.lpszText = const_cast<LPWSTR>(Tr(texts[i]));
+        const auto button = static_cast<HeaderButton>(i);
+        const bool pause = button == HeaderButton::PauseJobs || button == HeaderButton::PausePrinter;
+        ti.lpszText = const_cast<LPWSTR>(pause ? PauseState(button).tooltip.c_str() : Tr(texts[i]));
         SendMessageW(tooltip_, TTM_NEWTOOLRECTW, 0, reinterpret_cast<LPARAM>(&ti));
         SendMessageW(tooltip_, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
     }
@@ -91,6 +95,31 @@ void HeaderBar::SetDetailsActive(bool active) {
     if (detailsActive_ == active) return;
     detailsActive_ = active;
     Invalidate();
+}
+
+void HeaderBar::SetPauseButtons(const PauseButtonState& jobs, const PauseButtonState& printer) {
+    if (jobs == pauseJobs_ && printer == pausePrinter_) return;
+    pauseJobs_ = jobs;
+    pausePrinter_ = printer;
+    UpdateTooltips();
+    InvalidateRect(hwnd_, &buttons_[static_cast<int>(HeaderButton::PauseJobs)], FALSE);
+    InvalidateRect(hwnd_, &buttons_[static_cast<int>(HeaderButton::PausePrinter)], FALSE);
+}
+
+const PauseButtonState& HeaderBar::PauseState(HeaderButton id) const {
+    return id == HeaderButton::PauseJobs ? pauseJobs_ : pausePrinter_;
+}
+
+int HeaderBar::PauseButtonWidth(HeaderButton id) const {
+    const auto& style = Style::Get();
+    if (!pauseLabels_) return style.Px(52);  // dos íconos
+    const bool jobs = id == HeaderButton::PauseJobs;
+    HDC dc = GetDC(hwnd_);
+    HFONT font = style.fonts().normal;
+    const LONG text = std::max(gfx::MeasureText(dc, Tr(jobs ? S::BtnPauseJobs : S::BtnPausePrinter), font).cx,
+                               gfx::MeasureText(dc, Tr(jobs ? S::BtnResumeJobs : S::BtnResumePrinter), font).cx);
+    ReleaseDC(hwnd_, dc);
+    return style.Px(10 + 20 + 6) + static_cast<int>(text) + style.Px(12);  // margen, ícono, separación, texto
 }
 
 void HeaderBar::FocusSearch() {
@@ -166,11 +195,25 @@ void HeaderBar::Layout() {
     buttons_[static_cast<int>(HeaderButton::Printer)] = {client.left + pad, cy - style.Px(20),
                                                          client.left + pad + printerW, cy + style.Px(20)};
 
-    // Búsqueda: el espacio restante (máx. 480 dip).
+    // Búsqueda: el espacio restante (máx. 480 dip), con los dos botones de
+    // pausa a su derecha. Si no alcanza, los botones quedan solo con el ícono.
     int left = buttons_[static_cast<int>(HeaderButton::Printer)].right + style.Px(12);
-    int width = std::min(rightLimit - left, style.Px(480));
+    const int gap = style.Px(6);
+    pauseLabels_ = true;
+    int pauseW = PauseButtonWidth(HeaderButton::PauseJobs) + gap + PauseButtonWidth(HeaderButton::PausePrinter);
+    if (rightLimit - left - pauseW - gap < style.Px(200)) {
+        pauseLabels_ = false;
+        pauseW = PauseButtonWidth(HeaderButton::PauseJobs) + gap + PauseButtonWidth(HeaderButton::PausePrinter);
+    }
+    int width = std::min(rightLimit - left - pauseW - style.Px(8), style.Px(480));
     if (width < style.Px(80)) width = 0;
     searchBox_ = {left, cy - style.Px(17), left + width, cy + style.Px(17)};
+    int px = width > 0 ? static_cast<int>(searchBox_.right) + style.Px(8) : left;
+    for (HeaderButton b : {HeaderButton::PauseJobs, HeaderButton::PausePrinter}) {
+        const int w = PauseButtonWidth(b);
+        buttons_[static_cast<int>(b)] = {px, cy - style.Px(17), px + w, cy + style.Px(17)};
+        px += w + gap;
+    }
 
     HFONT font = style.fonts().normal;
     dc = GetDC(hwnd_);
@@ -220,6 +263,9 @@ void HeaderBar::Paint(HDC dc, const RECT& client) {
         gfx::Glyph(dc, serverMode_ ? glyph::Server : glyph::Search, glyphRect, fonts.iconSmall, pal.textMuted);
     }
 
+    PaintPauseButton(dc, HeaderButton::PauseJobs, pauseJobs_);
+    PaintPauseButton(dc, HeaderButton::PausePrinter, pausePrinter_);
+
     // Botones de ícono.
     struct IconButton {
         HeaderButton id;
@@ -240,6 +286,38 @@ void HeaderBar::Paint(HDC dc, const RECT& client) {
         else if (hover_ == index) gfx::FillRounded(dc, r, style.Px(8), pal.hover);
         gfx::Glyph(dc, b.glyph, r, fonts.icon, b.active ? pal.accent : pal.text);
     }
+}
+
+void HeaderBar::PaintPauseButton(HDC dc, HeaderButton id, const PauseButtonState& state) {
+    const auto& style = Style::Get();
+    const auto& pal = style.palette();
+    const auto& fonts = style.fonts();
+    const RECT r = buttons_[static_cast<int>(id)];
+    if (gfx::Width(r) <= 0) return;
+    const bool hovered = state.enabled && hover_ == static_cast<int>(id);
+    gfx::FillRounded(dc, r, style.Px(8), hovered ? pal.hover : pal.surface);
+    gfx::StrokeRounded(dc, r, style.Px(8), pal.border);
+    // "Reanudar" se destaca con el color de acento: es lo que hace falta tras la retención.
+    const COLORREF disabled = Blend(pal.textMuted, pal.surfaceAlt, 0.45);
+    const COLORREF glyphColor = !state.enabled ? disabled : state.resume ? pal.accent : pal.text;
+    const COLORREF textColor = !state.enabled ? disabled : pal.text;
+    const wchar_t g = state.resume ? glyph::Play : glyph::Pause;
+    const bool jobs = id == HeaderButton::PauseJobs;
+    if (!pauseLabels_) {
+        // Solo íconos: documento o impresora + pausa/reanudar, para distinguir los dos botones.
+        const int mid = (r.left + r.right) / 2;
+        gfx::Glyph(dc, jobs ? glyph::Document : glyph::Printer, RECT{r.left + style.Px(4), r.top, mid, r.bottom},
+                   fonts.iconSmall, textColor);
+        gfx::Glyph(dc, g, RECT{mid, r.top, r.right - style.Px(4), r.bottom}, fonts.iconSmall, glyphColor);
+        return;
+    }
+    RECT icon{r.left + style.Px(10), r.top, r.left + style.Px(30), r.bottom};
+    gfx::Glyph(dc, g, icon, fonts.iconSmall, glyphColor);
+    const S label = jobs ? (state.resume ? S::BtnResumeJobs : S::BtnPauseJobs)
+                         : (state.resume ? S::BtnResumePrinter : S::BtnPausePrinter);
+    RECT text{icon.right + style.Px(6), r.top, r.right - style.Px(8), r.bottom};
+    gfx::Text(dc, Tr(label), text, fonts.normal, textColor,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 }
 
 int HeaderBar::HitTest(POINT pt) const {
@@ -301,6 +379,12 @@ LRESULT HeaderBar::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_LBUTTONUP: {
             int hit = HitTest({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+            if (hit >= 0) {
+                const auto button = static_cast<HeaderButton>(hit);
+                if ((button == HeaderButton::PauseJobs || button == HeaderButton::PausePrinter) &&
+                    !PauseState(button).enabled)
+                    hit = -1;  // deshabilitado
+            }
             if (hit >= 0 && hit == pressed_ && callbacks_.clicked)
                 callbacks_.clicked(static_cast<HeaderButton>(hit), ButtonScreenRect(static_cast<HeaderButton>(hit)));
             pressed_ = -1;

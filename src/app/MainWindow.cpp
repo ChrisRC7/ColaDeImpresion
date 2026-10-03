@@ -68,6 +68,7 @@ enum MenuId : UINT {
     ID_PAUSE_ON_START,
     ID_PAUSE_BOTH,
     ID_PRINT_REPAUSE,
+    ID_RESET_COLUMNS,
     ID_SORT_DESC,
     ID_SHOW_PRINTER_BAR,
     ID_PIN_CURRENT,
@@ -183,6 +184,8 @@ bool MainWindow::Create(const StartupOptions& options) {
                                    case ui::HeaderButton::Theme: ToggleTheme(); break;
                                    case ui::HeaderButton::Menu: ShowMainMenu(below); break;
                                    case ui::HeaderButton::Details: Execute(Command::TogglePane); break;
+                                   case ui::HeaderButton::PauseJobs: Execute(Command::Pause); break;
+                                   case ui::HeaderButton::PausePrinter: Execute(Command::PausePrinter); break;
                                    default: break;
                                }
                            },
@@ -190,8 +193,18 @@ bool MainWindow::Create(const StartupOptions& options) {
     printerBar_.Create(hwnd_, {[this](const std::wstring& printer) { SelectPrinter(printer); },
                                [this](const std::wstring& printer, POINT pt) { ShowPrinterChipMenu(printer, pt); },
                                [this](POINT pt) { ShowQuickAccessMenu(pt); }});
-    list_.Create(hwnd_, {[this] { UpdatePreview(); }, [this](POINT pt) { ShowJobContextMenu(pt); },
-                         [this] { ToggleQuickLook(); }, [this](int sortId) { OnColumnClicked(sortId); }});
+    list_.Create(hwnd_, {[this] {
+                             UpdatePreview();
+                             UpdatePauseButtons();
+                         },
+                         [this](POINT pt) { ShowJobContextMenu(pt); }, [this] { ToggleQuickLook(); },
+                         [this](int sortId) { OnColumnClicked(sortId); },
+                         [this](const std::wstring& id, int width) {
+                             settings_.columnWidths[id] = width;
+                             SaveSettings();
+                         },
+                         [this](POINT pt) { ShowColumnHeaderMenu(pt); }});
+    list_.SetColumnWidths(settings_.columnWidths);
     preview_.Create(hwnd_);
     status_.Create(hwnd_);
     help_.Create(hwnd_, &shortcuts_,
@@ -674,6 +687,54 @@ void MainWindow::UpdateHeader() {
     }
     header_.SetPrinterLabel(title, subtitle, warning);
     header_.SetHistoryActive(historyView_);
+    UpdatePauseButtons();
+}
+
+void MainWindow::UpdatePauseButtons() {
+    // El atajo actual (puede estar reasignado) se muestra en la descripción.
+    auto withKey = [this](std::wstring text, Command command) {
+        auto keys = shortcuts_.Get(command);
+        if (!keys.empty()) text += L" (" + keys.front().ToString() + L")";
+        return text;
+    };
+    ui::PauseButtonState jobs;
+    const auto selected = SelectedJobs();
+    jobs.enabled = !selected.empty();
+    jobs.resume = jobs.enabled && !ShouldPauseJobs(selected);
+    jobs.tooltip = !jobs.enabled ? std::wstring(Tr(S::TipNoJobsSelected))
+                                 : withKey(Tr(jobs.resume ? S::TipResumeJobs : S::TipPauseJobs), Command::Pause);
+
+    // Mismo criterio que el atajo (TogglePrinterPause): si alguna está en pausa, reanuda.
+    ui::PauseButtonState printer;
+    const auto targets = TargetPrinters();
+    printer.enabled = !historyView_ && !targets.empty();
+    for (const auto& name : targets)
+        if (const auto* p = snapshot_->FindPrinter(name); p && (p->problems & core::ProblemPaused)) printer.resume = true;
+    if (!printer.enabled) {
+        printer.tooltip = Tr(S::NoPrinters);
+    } else if (settings_.activePrinter == kAllPrinters) {
+        printer.tooltip = withKey(Tr(printer.resume ? S::TipResumePrinterAll : S::TipPausePrinterAll), Command::PausePrinter);
+    } else {
+        printer.tooltip = withKey(util::Format(Tr(printer.resume ? S::TipResumePrinterOne : S::TipPausePrinterOne),
+                                               PrinterDisplay(settings_.activePrinter).c_str()),
+                                  Command::PausePrinter);
+    }
+    header_.SetPauseButtons(jobs, printer);
+}
+
+void MainWindow::ShowColumnHeaderMenu(POINT screen) {
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING | (settings_.columnWidths.empty() ? MF_GRAYED : 0), ID_RESET_COLUMNS,
+                Tr(S::MenuResetColumns));
+    UINT id = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, screen.x, screen.y, 0, hwnd_, nullptr);
+    DestroyMenu(menu);
+    if (id == ID_RESET_COLUMNS) ResetColumnWidths();
+}
+
+void MainWindow::ResetColumnWidths() {
+    settings_.columnWidths.clear();
+    list_.SetColumnWidths({});
+    SaveSettings();
 }
 
 void MainWindow::UpdateStatus() {
@@ -1298,6 +1359,8 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(sortMenu, MF_STRING | check(settings_.sortDescending), ID_SORT_DESC,
                 keyed(S::MenuSortDescending, Command::SortReverse).c_str());
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(sortMenu), Tr(S::MenuSortBy));
+    AppendMenuW(menu, MF_STRING | (settings_.columnWidths.empty() ? MF_GRAYED : 0), ID_RESET_COLUMNS,
+                Tr(S::MenuResetColumns));
     // Acceso rápido: qué impresoras aparecen en la barra superior.
     HMENU pinMenu = CreatePopupMenu();
     menuPrinters_.clear();
@@ -1474,6 +1537,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
         case ID_HISTORY: ToggleHistory(); break;
         case ID_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;
         case ID_PRINT_REPAUSE: Execute(Command::PrintAndRepause); break;
+        case ID_RESET_COLUMNS: ResetColumnWidths(); break;
         case ID_PAUSE_PRINTER: TogglePrinterPause(); break;
         case ID_RESUME_PRINTER: SetPrintersPaused(false); break;
         case ID_PAUSE_ON_START:

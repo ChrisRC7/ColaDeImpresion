@@ -24,6 +24,10 @@ struct WindowPlacement {
     static constexpr int CW_USEDEFAULT_VALUE = static_cast<int>(0x80000000);
 };
 
+// Límites del ancho de una columna de la lista (DIP).
+constexpr int kMinColumnWidth = 28;
+constexpr int kMaxColumnWidth = 1200;
+
 struct Settings {
     ThemeMode theme = ThemeMode::System;
     std::wstring language = L"es";  // "es" | "en"
@@ -41,6 +45,9 @@ struct Settings {
     // "user", "document", "status", "size" (ver app::SortBy).
     std::wstring sortBy = L"queue";
     bool sortDescending = false;
+    // Ancho de columnas elegido por el operador (id de columna -> DIP). Las
+    // que no están usan su ancho predeterminado.
+    std::map<std::wstring, int> columnWidths;
 
     // Atajos personalizados: nombre de comando -> combinación ("Ctrl+P").
     // Solo se guardan los que difieren de los predeterminados.

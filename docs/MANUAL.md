@@ -6,6 +6,7 @@
 2. Para controlar el servidor del laboratorio: `Ctrl+O` (o menú `⋯` → *Conectar a servidor…*), escribir el nombre, p. ej. `\\SERVIDOR-LAIMI`, y `Enter`. El servidor queda en la lista de **servidores recientes** del menú.
 3. El botón de la izquierda (o `Ctrl+E`) elige la impresora; **Todas las impresoras** muestra la cola completa del servidor con el nombre de la impresora en cada trabajo.
 4. Bajo la cabecera está la **barra de acceso rápido**: los botones de las impresoras que se hayan fijado, con la cantidad de trabajos de cada una (ver §3.1).
+5. A la derecha de la búsqueda hay dos botones: **Pausar / Reanudar trabajos** (los seleccionados, igual que `Ctrl+P`) y **Pausar / Reanudar impresora** (igual que `F9`; en la vista "Todas" actúa sobre todas). Su texto dice lo que harán: si todo lo elegido está en pausa dicen *Reanudar* (con ▶ resaltado). Sin trabajos seleccionados el primero queda gris. En ventanas angostas muestran solo íconos (documento o impresora + ⏸/▶); al pasar el mouse se ve la descripción con el atajo.
 
 La barra inferior resume la cola (trabajos, imprimiendo, en pausa, con error),
 el servidor, problemas de impresoras y si la actualización es **en vivo** o por
@@ -35,8 +36,16 @@ bajo su título.
   (Carta, A3, 12 × 18) y el origen con el nombre de la bandeja: en las Epson
   del LAIMI, *Auto selección*, *Alimentador de papel*, *Bandeja 1* o
   *Bandeja 2* (nunca un número de código).
+- **Ancho de las columnas**, como en la cola de Windows: arrastrar el borde
+  derecho del título de una columna (el cursor cambia a ↔). **Doble clic** en
+  el borde ajusta la columna a su contenido. Si las columnas no caben aparece
+  una barra de desplazamiento horizontal (también `Shift` + rueda). Los anchos
+  se guardan; clic derecho en los títulos (o menú `⋯`) → *Restablecer el ancho
+  de las columnas* vuelve a los predeterminados. Documento ocupa el espacio
+  libre hasta que se le da un ancho propio.
 - En ventanas angostas se ocultan primero `#`, Impresora, Tamaño, Enviado,
-  Origen y Orientación; Usuario, Equipo y Páginas se mantienen.
+  Origen y Orientación; Usuario, Equipo y Páginas se mantienen. Agrandar una
+  columna nunca oculta otra: aparece la barra horizontal.
 
 | Acción | Teclado | Mouse |
 |---|---|---|

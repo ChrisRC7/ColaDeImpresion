@@ -102,6 +102,11 @@ private:
     // vuelve a pausar sola cuando todos sus trabajos liberados se enviaron.
     void PrintSelectionAndRepause();
     void RepauseReleasedPrinters();
+    // Botones de pausa de la cabecera: qué harán según la selección y las impresoras.
+    void UpdatePauseButtons();
+    // Columnas: menú del encabezado (clic derecho) y volver a los anchos predeterminados.
+    void ShowColumnHeaderMenu(POINT screen);
+    void ResetColumnWidths();
     void CancelSelection(const std::vector<core::JobInfo>& jobs);
     void MoveFocused(int direction);
     void StartRedirect(POINT screen);

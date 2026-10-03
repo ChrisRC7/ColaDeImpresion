@@ -93,7 +93,11 @@ TEST(SettingsRoundTrip) {
     s.spoolDirOverrides[L"\\\\LAIMI-PS"] = L"\\\\LAIMI-PS\\spool$";
     s.notifications = config::NotifyMode::All;
     s.ghostscriptPath = L"C:\\gs\\gswin64c.exe";
+    s.columnWidths[L"user"] = 150;
+    s.columnWidths[L"document"] = 5;  // fuera de rango: se ajusta al mínimo
     config::Settings r = config::Settings::FromJson(s.ToJson());
+    CHECK_EQ(r.columnWidths[L"user"], 150);
+    CHECK_EQ(r.columnWidths[L"document"], config::kMinColumnWidth);
     CHECK(r.theme == config::ThemeMode::Dark);
     CHECK_EQ(r.language, std::wstring(L"en"));
     CHECK_EQ(r.servers.size(), size_t(2));

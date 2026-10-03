@@ -4,6 +4,9 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdlib>
+
+#include "config/Settings.h"
 
 #include "ui/DarkMode.h"
 #include "ui/Gfx.h"
@@ -18,7 +21,7 @@ constexpr wchar_t kGlyphSortDown = 0xE70D; // ChevronDown
 
 bool JobListView::Create(HWND parent, Callbacks callbacks) {
     callbacks_ = std::move(callbacks);
-    if (!CreateWin(L"ColaJobList", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | WS_CLIPSIBLINGS, 0, 0, 0, 0,
+    if (!CreateWin(L"ColaJobList", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | WS_TABSTOP | WS_CLIPSIBLINGS, 0, 0, 0, 0,
                    0, parent))
         return false;
     OnStyleChanged();
@@ -66,35 +69,49 @@ void JobListView::SetSortIndicator(int sortId, bool descending) {
     Invalidate();
 }
 
-std::vector<JobListView::Slot> JobListView::Layout(int width) const {
+std::vector<ColumnSlot> LayoutColumns(const std::vector<ListColumn>& columns,
+                                      const std::map<std::wstring, int>& userWidths, int width) {
     const auto& style = Style::Get();
     const int gap = style.Px(12);
     const int left = style.Px(18);  // margen (el estado se ve en su columna, sin ícono aparte)
     const int right = width - style.Px(16);
     const int flexMin = style.Px(140);
 
-    std::vector<bool> visible(columns_.size(), true);
+    // Ancho elegido por el operador (px), o -1.
+    auto user = [&](size_t i) {
+        if (columns[i].id.empty()) return -1;
+        auto it = userWidths.find(columns[i].id);
+        return it == userWidths.end() ? -1 : style.Px(it->second);
+    };
+    auto defaultWidth = [&](size_t i) { return columns[i].width ? style.Px(columns[i].width) : flexMin; };
+
+    std::vector<bool> visible(columns.size(), true);
     auto required = [&] {
         int total = 0;
-        for (size_t i = 0; i < columns_.size(); ++i)
-            if (visible[i]) total += (columns_[i].width ? style.Px(columns_[i].width) : flexMin) + gap;
+        for (size_t i = 0; i < columns.size(); ++i) {
+            if (!visible[i]) continue;
+            const int u = user(i);
+            total += (u >= 0 ? std::min(u, defaultWidth(i)) : defaultWidth(i)) + gap;
+        }
         return total;
     };
     // Oculta primero las columnas de mayor prioridad de ocultamiento hasta que quepa.
     while (required() > right - left) {
         int victim = -1;
-        for (size_t i = 0; i < columns_.size(); ++i)
-            if (visible[i] && columns_[i].hidePriority > 0 &&
-                (victim < 0 || columns_[i].hidePriority > columns_[static_cast<size_t>(victim)].hidePriority))
+        for (size_t i = 0; i < columns.size(); ++i)
+            if (visible[i] && columns[i].hidePriority > 0 &&
+                (victim < 0 || columns[i].hidePriority > columns[static_cast<size_t>(victim)].hidePriority))
                 victim = static_cast<int>(i);
         if (victim < 0) break;
         visible[static_cast<size_t>(victim)] = false;
     }
     int fixed = 0;
     int flexCount = 0;
-    for (size_t i = 0; i < columns_.size(); ++i) {
+    for (size_t i = 0; i < columns.size(); ++i) {
         if (!visible[i]) continue;
-        if (columns_[i].width) fixed += style.Px(columns_[i].width) + gap;
+        const int u = user(i);
+        if (u >= 0) fixed += u + gap;
+        else if (columns[i].width) fixed += style.Px(columns[i].width) + gap;
         else {
             fixed += gap;
             ++flexCount;
@@ -102,25 +119,89 @@ std::vector<JobListView::Slot> JobListView::Layout(int width) const {
     }
     const int flexWidth = flexCount ? std::max(flexMin, (right - left - fixed) / flexCount) : 0;
 
-    std::vector<Slot> slots;
+    std::vector<ColumnSlot> slots;
     int x = left;
-    for (size_t i = 0; i < columns_.size(); ++i) {
+    for (size_t i = 0; i < columns.size(); ++i) {
         if (!visible[i]) continue;
-        const int w = columns_[i].width ? style.Px(columns_[i].width) : flexWidth;
+        const int u = user(i);
+        const int w = u >= 0 ? u : columns[i].width ? style.Px(columns[i].width) : flexWidth;
         slots.push_back({i, x, x + w});
         x += w + gap;
     }
     return slots;
 }
 
-int JobListView::HeaderColumnAt(POINT pt) const {
-    if (pt.y < 0 || pt.y >= HeaderHeight()) return -1;
+int JobListView::ClientWidth() const {
     RECT client;
     GetClientRect(hwnd_, &client);
+    return gfx::Width(client);
+}
+
+int JobListView::ContentWidth(int width) const {
+    auto slots = LayoutColumns(columns_, widths_, width);
+    return slots.empty() ? 0 : slots.back().right + Style::Get().Px(16);
+}
+
+std::vector<JobListView::Slot> JobListView::Layout(int width) const {
+    auto slots = LayoutColumns(columns_, widths_, width);
+    for (auto& slot : slots) {
+        slot.left -= scrollX_;
+        slot.right -= scrollX_;
+    }
+    return slots;
+}
+
+void JobListView::SetColumnWidths(std::map<std::wstring, int> widths) {
+    if (widths == widths_) return;
+    widths_ = std::move(widths);
+    UpdateScrollBar();
+    Invalidate();
+}
+
+int JobListView::HeaderColumnAt(POINT pt) const {
+    if (pt.y < 0 || pt.y >= HeaderHeight()) return -1;
     const int half = Style::Get().Px(6);  // la mitad del espacio entre columnas también cuenta
-    for (const auto& slot : Layout(gfx::Width(client)))
+    for (const auto& slot : Layout(ClientWidth()))
         if (pt.x >= slot.left - half && pt.x < slot.right + half) return static_cast<int>(slot.column);
     return -1;
+}
+
+int JobListView::DividerAt(POINT pt) const {
+    if (pt.y < 0 || pt.y >= HeaderHeight()) return -1;
+    const auto& style = Style::Get();
+    const int grip = style.Px(5);
+    for (const auto& slot : Layout(ClientWidth())) {
+        const int divider = slot.right + style.Px(6);  // mitad del espacio entre columnas
+        if (std::abs(pt.x - divider) <= grip) return static_cast<int>(slot.column);
+    }
+    return -1;
+}
+
+int JobListView::FitWidth(size_t column) const {
+    const auto& style = Style::Get();
+    const auto& fonts = style.fonts();
+    const ListColumn& c = columns_[column];
+    HDC dc = GetDC(hwnd_);
+    // Título en seminegrita y con lugar para la flecha de orden.
+    int widest = gfx::MeasureText(dc, c.label, fonts.semibold).cx + style.Px(16);
+    for (const auto& row : rows_) {
+        if (column >= row.cells.size() || row.cells[column].empty()) continue;
+        HFONT font = c.pill ? fonts.small : c.emphasis ? fonts.semibold : fonts.normal;
+        int w = gfx::MeasureText(dc, row.cells[column], font).cx + (c.pill ? style.Px(20) : 0);
+        widest = std::max(widest, w);
+    }
+    ReleaseDC(hwnd_, dc);
+    const int dip = MulDiv(widest + style.Px(4), 96, static_cast<int>(style.dpi()));
+    return std::clamp(dip, config::kMinColumnWidth, config::kMaxColumnWidth);
+}
+
+void JobListView::ScrollToX(int x) {
+    const int maxScroll = std::max(0, ContentWidth(ClientWidth()) - ClientWidth());
+    x = std::clamp(x, 0, maxScroll);
+    if (x == scrollX_) return;
+    scrollX_ = x;
+    SetScrollPos(hwnd_, SB_HORZ, scrollX_, TRUE);
+    Invalidate();
 }
 
 void JobListView::SetRows(std::vector<ListRow> rows) {
@@ -262,6 +343,20 @@ void JobListView::UpdateScrollBar() {
     si.nPos = scrollY_;
     SetScrollInfo(hwnd_, SB_VERT, &si, TRUE);
     ShowScrollBar(hwnd_, SB_VERT, ContentHeight() > ViewHeight());
+
+    // Horizontal: solo si las columnas no caben (el operador las agrandó).
+    const int width = ClientWidth();
+    const int content = ContentWidth(width);
+    SCROLLINFO sh{};
+    sh.cbSize = sizeof(sh);
+    sh.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    sh.nMin = 0;
+    sh.nMax = std::max(0, content - 1);
+    sh.nPage = static_cast<UINT>(std::max(1, width));
+    scrollX_ = std::clamp(scrollX_, 0, std::max(0, content - width));
+    sh.nPos = scrollX_;
+    SetScrollInfo(hwnd_, SB_HORZ, &sh, TRUE);
+    ShowScrollBar(hwnd_, SB_HORZ, content > width);
 }
 
 void JobListView::ScrollTo(int y) {
@@ -318,6 +413,11 @@ void JobListView::PaintHeader(HDC dc, const RECT& client) {
     gfx::HLine(dc, bar.left, bar.right, bar.bottom - 1, pal.border);
     for (const auto& slot : Layout(gfx::Width(client))) {
         const ListColumn& column = columns_[slot.column];
+        // Separador (borde que se arrastra para cambiar el ancho), como en la cola de Windows.
+        const int divider = slot.right + style.Px(6);
+        const bool grabbing = static_cast<int>(slot.column) == (resizing_ >= 0 ? resizing_ : hoverDivider_);
+        gfx::VLine(dc, divider, bar.top + style.Px(grabbing ? 4 : 8), bar.bottom - style.Px(grabbing ? 4 : 8),
+                   grabbing ? pal.accent : pal.border);
         const bool sorted = column.sortId >= 0 && column.sortId == sortId_;
         const bool hovered = column.sortId >= 0 && static_cast<int>(slot.column) == hoverHeader_;
         if (hovered) {
@@ -438,13 +538,55 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             ScrollTo(y);
             return 0;
         }
+        case WM_HSCROLL: {
+            SCROLLINFO si{};
+            si.cbSize = sizeof(si);
+            si.fMask = SIF_ALL;
+            GetScrollInfo(hwnd_, SB_HORZ, &si);
+            const int step = Style::Get().Px(40);
+            int x = scrollX_;
+            switch (LOWORD(wParam)) {
+                case SB_LINELEFT: x -= step; break;
+                case SB_LINERIGHT: x += step; break;
+                case SB_PAGELEFT: x -= static_cast<int>(si.nPage); break;
+                case SB_PAGERIGHT: x += static_cast<int>(si.nPage); break;
+                case SB_THUMBTRACK:
+                case SB_THUMBPOSITION: x = si.nTrackPos; break;
+                case SB_LEFT: x = 0; break;
+                case SB_RIGHT: x = INT_MAX / 2; break;
+            }
+            ScrollToX(x);
+            return 0;
+        }
+        case WM_MOUSEHWHEEL:
+            ScrollToX(scrollX_ + MulDiv(GET_WHEEL_DELTA_WPARAM(wParam), Style::Get().Px(40), WHEEL_DELTA));
+            return 0;
         case WM_MOUSEWHEEL: {
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            ScrollTo(scrollY_ - MulDiv(delta, RowHeight() * 3, WHEEL_DELTA));
+            // Shift + rueda desplaza horizontalmente (si las columnas no caben).
+            if ((GET_KEYSTATE_WPARAM(wParam) & MK_SHIFT) && ContentWidth(ClientWidth()) > ClientWidth())
+                ScrollToX(scrollX_ - MulDiv(delta, Style::Get().Px(40) * 3, WHEEL_DELTA));
+            else
+                ScrollTo(scrollY_ - MulDiv(delta, RowHeight() * 3, WHEEL_DELTA));
             return 0;
         }
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (resizing_ >= 0) {
+                // Arrastrando el borde de una columna: el ancho sigue al mouse.
+                const auto& style = Style::Get();
+                const int px = std::max(style.Px(config::kMinColumnWidth),
+                                        resizeStartWidth_ + static_cast<int>(pt.x) - resizeStartX_);
+                const int dip = std::clamp(MulDiv(px, 96, static_cast<int>(style.dpi())), config::kMinColumnWidth,
+                                           config::kMaxColumnWidth);
+                const std::wstring& id = columns_[static_cast<size_t>(resizing_)].id;
+                if (auto it = widths_.find(id); it == widths_.end() || it->second != dip) {
+                    widths_[id] = dip;
+                    UpdateScrollBar();
+                    Invalidate();
+                }
+                return 0;
+            }
             if (bandPressed_) {
                 if (!bandActive_) {
                     const int threshold = Style::Get().Px(5);
@@ -470,24 +612,32 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 trackingMouse_ = true;
             }
             int row = RowAt(pt.y);
-            int column = HeaderColumnAt(pt);
+            int divider = DividerAt(pt);
+            if (divider >= 0 && columns_[static_cast<size_t>(divider)].id.empty()) divider = -1;
+            int column = divider >= 0 ? -1 : HeaderColumnAt(pt);
             if (column >= 0 && columns_[static_cast<size_t>(column)].sortId < 0) column = -1;
-            if (row != hover_ || column != hoverHeader_) {
+            if (row != hover_ || column != hoverHeader_ || divider != hoverDivider_) {
                 hover_ = row;
                 hoverHeader_ = column;
+                hoverDivider_ = divider;
                 Invalidate();
             }
             return 0;
         }
         case WM_MOUSELEAVE:
             trackingMouse_ = false;
-            if (hover_ != -1 || hoverHeader_ != -1) {
+            if (hover_ != -1 || hoverHeader_ != -1 || hoverDivider_ != -1) {
                 hover_ = -1;
                 hoverHeader_ = -1;
+                hoverDivider_ = -1;
                 Invalidate();
             }
             return 0;
         case WM_SETCURSOR:
+            if (LOWORD(lParam) == HTCLIENT && (hoverDivider_ >= 0 || resizing_ >= 0)) {
+                SetCursor(LoadCursorW(nullptr, IDC_SIZEWE));
+                return TRUE;
+            }
             if (LOWORD(lParam) == HTCLIENT && hoverHeader_ >= 0) {
                 SetCursor(LoadCursorW(nullptr, IDC_HAND));
                 return TRUE;
@@ -498,6 +648,18 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             SetFocus(hwnd_);
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             if (pt.y < HeaderHeight()) {
+                // Clic en el borde de una columna: empezar a cambiar su ancho.
+                const int divider = DividerAt(pt);
+                if (msg == WM_LBUTTONDOWN && divider >= 0 && !columns_[static_cast<size_t>(divider)].id.empty()) {
+                    for (const auto& slot : Layout(ClientWidth()))
+                        if (static_cast<int>(slot.column) == divider) resizeStartWidth_ = slot.right - slot.left;
+                    resizing_ = divider;
+                    resizeStartX_ = pt.x;
+                    SetCapture(hwnd_);
+                    Invalidate();
+                    return 0;
+                }
+                if (divider >= 0) return 0;
                 // Clic en el encabezado: ordenar por esa columna.
                 int column = HeaderColumnAt(pt);
                 if (msg == WM_LBUTTONDOWN && column >= 0 && columns_[static_cast<size_t>(column)].sortId >= 0 &&
@@ -530,6 +692,16 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_LBUTTONUP:
+            if (resizing_ >= 0) {
+                const std::wstring id = columns_[static_cast<size_t>(resizing_)].id;
+                resizing_ = -1;
+                ReleaseCapture();
+                Invalidate();
+                // Sin mover el mouse no cambió nada (y la columna sigue con su ancho predeterminado).
+                if (auto it = widths_.find(id); it != widths_.end() && callbacks_.columnResized)
+                    callbacks_.columnResized(id, it->second);
+                return 0;
+            }
             if (bandPressed_) {
                 bandPressed_ = false;
                 bandActive_ = false;
@@ -539,14 +711,41 @@ LRESULT JobListView::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
         case WM_CAPTURECHANGED:
+            if (resizing_ >= 0) {
+                // Se perdió el mouse a mitad del arrastre: se guarda lo que haya quedado.
+                const std::wstring id = columns_[static_cast<size_t>(resizing_)].id;
+                resizing_ = -1;
+                if (auto it = widths_.find(id); it != widths_.end() && callbacks_.columnResized)
+                    callbacks_.columnResized(id, it->second);
+            }
             bandPressed_ = bandActive_ = false;
             Invalidate();
             return 0;
-        case WM_LBUTTONDBLCLK:
-            if (RowAt(GET_Y_LPARAM(lParam)) >= 0 && callbacks_.activate) callbacks_.activate();
+        case WM_LBUTTONDBLCLK: {
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            // Doble clic en el borde: ajustar el ancho al contenido (como en Windows).
+            const int divider = DividerAt(pt);
+            if (divider >= 0 && !columns_[static_cast<size_t>(divider)].id.empty()) {
+                const std::wstring& id = columns_[static_cast<size_t>(divider)].id;
+                widths_[id] = FitWidth(static_cast<size_t>(divider));
+                UpdateScrollBar();
+                Invalidate();
+                if (callbacks_.columnResized) callbacks_.columnResized(id, widths_[id]);
+                return 0;
+            }
+            if (RowAt(pt.y) >= 0 && callbacks_.activate) callbacks_.activate();
             return 0;
+        }
         case WM_CONTEXTMENU: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (pt.x != -1 || pt.y != -1) {
+                POINT local = pt;
+                ScreenToClient(hwnd_, &local);
+                if (local.y >= 0 && local.y < HeaderHeight()) {
+                    if (callbacks_.headerMenu) callbacks_.headerMenu(pt);
+                    return 0;
+                }
+            }
             if (pt.x == -1 && pt.y == -1) {  // desde el teclado (tecla Menú / Shift+F10)
                 RECT client;
                 GetClientRect(hwnd_, &client);

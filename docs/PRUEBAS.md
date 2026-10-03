@@ -59,6 +59,8 @@ PDF", trabajos generados con `cola_testjob` y spool EMF simulado.
 | `F9`: alterna pausa/reanudación de la impresora (4 ciclos seguidos) | OK |
 | `F8`: reanuda el trabajo retenido seleccionado y su impresora | OK |
 | `F11` con 2 trabajos pausados seleccionados: los reanuda y, cuando salen de la cola, intenta volver a pausar la impresora (en esta PC sin administrador: error 5 en la barra, esperado) | OK |
+| Columnas: arrastrar el borde de "Usuario" (+100 → 200, guardado en config.json), agrandar "Origen del papel" más allá de la ventana (barra horizontal, sin ocultar columnas), doble clic en el borde (ajuste al contenido: 76) | OK |
+| Botón "Reanudar trabajos" con un trabajo pausado seleccionado: se reanuda y el botón pasa a "Pausar trabajos"; "Pausar impresora" ejecuta la pausa (aquí negada por permisos, igual que `F9`); ventana angosta: botones solo con íconos distinguibles | OK |
 | Panel F1: reasignar "Pausar / reanudar impresora" con clic y restaurar con R | OK |
 | Vista previa PCL / PostScript / XPS con los renderizadores incluidos | OK |
 
