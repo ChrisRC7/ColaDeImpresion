@@ -59,6 +59,15 @@ using FactsLookup = std::function<const core::ContentFacts*(const core::JobInfo&
 std::vector<ui::ListColumn> JobColumns(bool showPrinter);
 std::vector<ui::ListColumn> HistoryColumns();
 
+// Orden de las columnas (config.json "columnOrder"): ids de la cola (con
+// Impresora) y del historial en el orden predeterminado...
+std::vector<std::wstring> DefaultColumnOrder();
+// ...el orden completo a usar a partir del guardado...
+std::vector<std::wstring> EffectiveColumnOrder(const std::vector<std::wstring>& saved);
+// ...y el que se guarda cuando el operador mueve columnas en una vista
+// (`view` = ids de esa vista en el orden nuevo). Vacío si quedó el predeterminado.
+std::vector<std::wstring> SaveColumnOrder(const std::vector<std::wstring>& saved, const std::vector<std::wstring>& view);
+
 // Clic en el encabezado de una columna, como en la cola de Windows: la misma
 // columna invierte el orden; otra columna ordena de forma ascendente.
 std::pair<SortBy, bool> NextSort(SortBy current, bool descending, SortBy clicked);

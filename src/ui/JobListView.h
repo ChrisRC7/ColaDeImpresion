@@ -13,6 +13,9 @@
 // el borde derecho de su título (doble clic en el borde = ajustar al
 // contenido); si las columnas no caben aparece una barra horizontal. Los
 // anchos elegidos se avisan por callback para guardarlos.
+// También como en Windows, arrastrar el título de una columna la mueve a otra
+// posición (una línea marca dónde va a quedar); el orden nuevo se avisa por
+// callback para guardarlo. Un clic sin arrastrar sigue ordenando.
 
 #include <functional>
 #include <map>
@@ -20,40 +23,11 @@
 #include <string>
 #include <vector>
 
+#include "ui/ListColumns.h"
 #include "ui/Theme.h"
 #include "ui/Window.h"
 
 namespace cola::ui {
-
-enum class Align { Left, Center, Right };
-
-struct ListColumn {
-    std::wstring label;
-    int width = 0;          // en DIP; 0 = flexible (ocupa el espacio que sobre)
-    Align align = Align::Left;  // del encabezado y de los valores
-    bool pill = false;      // la celda se dibuja como insignia de estado (con el tono de la fila)
-    bool emphasis = false;  // texto principal de la fila (semibold)
-    int sortId = -1;        // identificador que se devuelve al hacer clic; -1 = no ordenable
-    int hidePriority = 0;   // en ventanas angostas se ocultan primero las de número mayor (0 = nunca)
-    std::wstring id;        // identificador estable para guardar el ancho elegido ("" = no se guarda)
-};
-
-// Posición horizontal de una columna visible (px, sin el desplazamiento horizontal).
-struct ColumnSlot {
-    size_t column;
-    int left;
-    int right;
-};
-
-// Distribuye las columnas en un ancho de ventana (px). userWidths: anchos en
-// DIP elegidos por el operador (por id). Reglas:
-//  - Las columnas que no caben se ocultan por hidePriority, calculando con el
-//    ancho predeterminado (o el del operador si es menor): agrandar una
-//    columna nunca oculta otra, solo hace aparecer la barra horizontal.
-//  - La columna flexible (width 0) ocupa el espacio libre salvo que el
-//    operador le haya dado un ancho.
-std::vector<ColumnSlot> LayoutColumns(const std::vector<ListColumn>& columns,
-                                      const std::map<std::wstring, int>& userWidths, int width);
 
 struct ListRow {
     std::wstring key;
@@ -72,6 +46,8 @@ public:
         // El operador cambió el ancho de una columna (id, DIP); -1 = volver al predeterminado.
         std::function<void(const std::wstring& id, int width)> columnResized;
         std::function<void(POINT screen)> headerMenu;  // clic derecho en el encabezado
+        // El operador arrastró una columna: ids de las columnas de esta vista en el orden nuevo.
+        std::function<void(const std::vector<std::wstring>& order)> columnMoved;
     };
 
     bool Create(HWND parent, Callbacks callbacks);
@@ -79,6 +55,8 @@ public:
     void SetColumns(std::vector<ListColumn> columns);
     // Anchos elegidos por el operador (id -> DIP).
     void SetColumnWidths(std::map<std::wstring, int> widths);
+    // Orden de presentación de las columnas (ids; ver ui::NormalizeColumnOrder).
+    void SetColumnOrder(std::vector<std::wstring> order);
     // Columna que muestra la flecha de orden (-1 = ninguna).
     void SetSortIndicator(int sortId, bool descending);
 
@@ -106,6 +84,7 @@ private:
     using Slot = ColumnSlot;
     // Columnas visibles en coordenadas del cliente (con el desplazamiento horizontal aplicado).
     std::vector<Slot> Layout(int width) const;
+    std::vector<Slot> LayoutUnscrolled(int width) const;  // en el orden de presentación
     int ContentWidth(int width) const;  // ancho total de las columnas (px)
     int ClientWidth() const;
 
@@ -129,9 +108,16 @@ private:
     void NotifySelection();
     void UpdateBandSelection();
     RECT BandRectClient() const;
+    // Arrastre de columnas: dónde quedaría la columna si se suelta en x
+    // (columna de referencia y si va después de ella) y la x de la línea que lo marca.
+    bool DropTarget(int x, size_t& anchor, bool& after, int& lineX) const;
+    void FinishColumnDrag(bool apply);
+    void PaintColumnDrag(HDC dc, const RECT& client);
 
     Callbacks callbacks_;
     std::vector<ListColumn> columns_;
+    std::vector<std::wstring> order_;  // orden de presentación (ids)
+    std::vector<size_t> display_;      // índices de columns_ en el orden de presentación
     int sortId_ = -1;
     bool sortDescending_ = false;
     int hoverHeader_ = -1;
@@ -148,6 +134,12 @@ private:
     int resizing_ = -1;         // columna que se está redimensionando
     int resizeStartX_ = 0;      // x del mouse al empezar (px)
     int resizeStartWidth_ = 0;  // ancho de la columna al empezar (px)
+    // Clic o arrastre del título de una columna.
+    int headerPressed_ = -1;    // columna presionada (aún puede ser un clic para ordenar)
+    bool dragging_ = false;     // superó el umbral: se está moviendo la columna
+    int dragStartX_ = 0;        // x del mouse al presionar (px, cliente)
+    int dragX_ = 0;             // x actual del mouse (px, cliente)
+    int dragGrabOffset_ = 0;    // distancia del mouse al borde izquierdo del título
     bool trackingMouse_ = false;
     // Selección por arrastre (rectángulo, como en el Explorador de archivos).
     bool bandPressed_ = false;   // botón abajo, aún sin superar el umbral

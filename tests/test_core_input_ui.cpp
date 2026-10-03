@@ -4,6 +4,8 @@
 #include <windows.h>
 #include <winspool.h>
 
+#include <algorithm>
+
 #include "TestFramework.h"
 #include "app/RowBuilder.h"
 #include "config/Settings.h"
@@ -290,6 +292,67 @@ TEST(ColumnLayoutWithUserWidths) {
     slots = ui::LayoutColumns(cols, {{L"doc", 200}}, 1000);
     CHECK_EQ(slots[1].right - slots[1].left, 200);
     CHECK_EQ(slots[2].left, 342);
+}
+
+TEST(ColumnOrderNormalizeAndMerge) {
+    using V = std::vector<std::wstring>;
+    const V defaults = {L"number", L"document", L"status", L"user", L"printer", L"pages"};
+    // Vacío = predeterminado; ids desconocidos o repetidos se descartan.
+    CHECK(ui::NormalizeColumnOrder({}, defaults) == defaults);
+    CHECK(ui::NormalizeColumnOrder({L"number", L"user", L"viejo", L"document", L"user", L"status", L"printer",
+                                    L"pages"},
+                                   defaults) == (V{L"number", L"user", L"document", L"status", L"printer", L"pages"}));
+    // Una columna que falta (nueva) va detrás de la que la precede por defecto.
+    CHECK(ui::NormalizeColumnOrder({L"pages", L"document", L"number", L"status", L"user"}, defaults) ==
+          (V{L"pages", L"document", L"number", L"status", L"user", L"printer"}));
+
+    // Mover en la vista sin Impresora no le cambia el lugar a Impresora.
+    const V merged = ui::MergeColumnOrder(defaults, {L"user", L"number", L"document", L"status", L"pages"});
+    CHECK(merged == (V{L"user", L"number", L"document", L"status", L"printer", L"pages"}));
+}
+
+TEST(ColumnDisplayOrderAndMove) {
+    std::vector<ui::ListColumn> cols(4);
+    cols[0].id = L"a";
+    cols[1].id = L"b";
+    cols[2].id = L"c";
+    cols[3].id = L"d";
+    using I = std::vector<size_t>;
+    CHECK(ui::ColumnDisplayOrder(cols, {}) == (I{0, 1, 2, 3}));
+    CHECK(ui::ColumnDisplayOrder(cols, {L"c", L"a", L"d", L"b"}) == (I{2, 0, 3, 1}));
+    // Sin id (o fuera del orden) no se mueve; las demás se reparten en sus lugares.
+    cols[1].id.clear();
+    CHECK(ui::ColumnDisplayOrder(cols, {L"d", L"c", L"a"}) == (I{3, 1, 2, 0}));
+
+    const I display = {0, 1, 2, 3};
+    CHECK(ui::MoveDisplayColumn(display, 0, 3, true) == (I{1, 2, 3, 0}));
+    CHECK(ui::MoveDisplayColumn(display, 3, 0, false) == (I{3, 0, 1, 2}));
+    CHECK(ui::MoveDisplayColumn(display, 1, 2, false) == display);  // ya estaba ahí
+    CHECK(ui::MoveDisplayColumn(display, 1, 9, false) == display);  // ancla inexistente
+}
+
+TEST(ColumnOrderSavedPerView) {
+    // Predeterminado = el orden actual de la tabla: nada guardado.
+    CHECK(app::EffectiveColumnOrder({}) == app::DefaultColumnOrder());
+    CHECK(app::SaveColumnOrder({}, {L"number", L"document", L"status"}).empty());
+
+    // Mover Usuario al principio en la vista de una impresora (sin Impresora).
+    std::vector<std::wstring> view;
+    for (const auto& c : app::JobColumns(false)) view.push_back(c.id);
+    view.erase(std::find(view.begin(), view.end(), L"user"));
+    view.insert(view.begin(), L"user");
+    auto saved = app::SaveColumnOrder({}, view);
+    CHECK(!saved.empty());
+    auto columns = app::JobColumns(true);
+    auto display = ui::ColumnDisplayOrder(columns, app::EffectiveColumnOrder(saved));
+    CHECK_EQ(columns[display[0]].id, std::wstring(L"user"));
+    // En "Todas", Impresora sigue después de Equipo como antes.
+    for (size_t i = 0; i + 1 < display.size(); ++i)
+        if (columns[display[i]].id == L"machine") CHECK_EQ(columns[display[i + 1]].id, std::wstring(L"printer"));
+    // El historial no cambia.
+    auto history = app::HistoryColumns();
+    CHECK(ui::ColumnDisplayOrder(history, app::EffectiveColumnOrder(saved)) ==
+          ui::ColumnDisplayOrder(history, {}));
 }
 
 TEST(HeldJobsShownAsHeld) {

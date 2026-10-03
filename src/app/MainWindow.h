@@ -107,6 +107,7 @@ private:
     // Columnas: menú del encabezado (clic derecho) y volver a los anchos predeterminados.
     void ShowColumnHeaderMenu(POINT screen);
     void ResetColumnWidths();
+    void ResetColumnOrder();
     void CancelSelection(const std::vector<core::JobInfo>& jobs);
     void MoveFocused(int direction);
     void StartRedirect(POINT screen);

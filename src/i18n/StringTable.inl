@@ -510,5 +510,6 @@ X(TipResumePrinterOne, L"Reanudar la impresora %ls", L"Resume the printer %ls")
 X(TipPausePrinterAll, L"Pausar todas las impresoras", L"Pause all printers")
 X(TipResumePrinterAll, L"Reanudar las impresoras en pausa", L"Resume the paused printers")
 X(MenuResetColumns, L"Restablecer el ancho de las columnas", L"Reset column widths")
+X(MenuResetColumnOrder, L"Restablecer el orden de las columnas", L"Reset column order")
 X(TipDetails, L"Mostrar u ocultar los detalles del trabajo: vista previa y configuración (Ctrl+B)",
   L"Show or hide the job details: preview and settings (Ctrl+B)")

@@ -69,6 +69,7 @@ enum MenuId : UINT {
     ID_PAUSE_BOTH,
     ID_PRINT_REPAUSE,
     ID_RESET_COLUMNS,
+    ID_RESET_COLUMN_ORDER,
     ID_SORT_DESC,
     ID_SHOW_PRINTER_BAR,
     ID_PIN_CURRENT,
@@ -203,8 +204,14 @@ bool MainWindow::Create(const StartupOptions& options) {
                              settings_.columnWidths[id] = width;
                              SaveSettings();
                          },
-                         [this](POINT pt) { ShowColumnHeaderMenu(pt); }});
+                         [this](POINT pt) { ShowColumnHeaderMenu(pt); },
+                         [this](const std::vector<std::wstring>& order) {
+                             settings_.columnOrder = SaveColumnOrder(settings_.columnOrder, order);
+                             list_.SetColumnOrder(EffectiveColumnOrder(settings_.columnOrder));
+                             SaveSettings();
+                         }});
     list_.SetColumnWidths(settings_.columnWidths);
+    list_.SetColumnOrder(EffectiveColumnOrder(settings_.columnOrder));
     preview_.Create(hwnd_);
     status_.Create(hwnd_);
     help_.Create(hwnd_, &shortcuts_,
@@ -726,14 +733,23 @@ void MainWindow::ShowColumnHeaderMenu(POINT screen) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING | (settings_.columnWidths.empty() ? MF_GRAYED : 0), ID_RESET_COLUMNS,
                 Tr(S::MenuResetColumns));
+    AppendMenuW(menu, MF_STRING | (settings_.columnOrder.empty() ? MF_GRAYED : 0), ID_RESET_COLUMN_ORDER,
+                Tr(S::MenuResetColumnOrder));
     UINT id = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, screen.x, screen.y, 0, hwnd_, nullptr);
     DestroyMenu(menu);
     if (id == ID_RESET_COLUMNS) ResetColumnWidths();
+    if (id == ID_RESET_COLUMN_ORDER) ResetColumnOrder();
 }
 
 void MainWindow::ResetColumnWidths() {
     settings_.columnWidths.clear();
     list_.SetColumnWidths({});
+    SaveSettings();
+}
+
+void MainWindow::ResetColumnOrder() {
+    settings_.columnOrder.clear();
+    list_.SetColumnOrder(EffectiveColumnOrder({}));
     SaveSettings();
 }
 
@@ -1361,6 +1377,8 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(sortMenu), Tr(S::MenuSortBy));
     AppendMenuW(menu, MF_STRING | (settings_.columnWidths.empty() ? MF_GRAYED : 0), ID_RESET_COLUMNS,
                 Tr(S::MenuResetColumns));
+    AppendMenuW(menu, MF_STRING | (settings_.columnOrder.empty() ? MF_GRAYED : 0), ID_RESET_COLUMN_ORDER,
+                Tr(S::MenuResetColumnOrder));
     // Acceso rápido: qué impresoras aparecen en la barra superior.
     HMENU pinMenu = CreatePopupMenu();
     menuPrinters_.clear();
@@ -1538,6 +1556,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
         case ID_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;
         case ID_PRINT_REPAUSE: Execute(Command::PrintAndRepause); break;
         case ID_RESET_COLUMNS: ResetColumnWidths(); break;
+        case ID_RESET_COLUMN_ORDER: ResetColumnOrder(); break;
         case ID_PAUSE_PRINTER: TogglePrinterPause(); break;
         case ID_RESUME_PRINTER: SetPrintersPaused(false); break;
         case ID_PAUSE_ON_START:

@@ -309,6 +309,23 @@ std::vector<ui::ListColumn> HistoryColumns() {
     return columns;
 }
 
+std::vector<std::wstring> DefaultColumnOrder() {
+    std::vector<std::wstring> ids;
+    for (const auto& c : JobColumns(true)) ids.push_back(c.id);
+    for (const auto& c : HistoryColumns()) ids.push_back(c.id);
+    return ids;
+}
+
+std::vector<std::wstring> EffectiveColumnOrder(const std::vector<std::wstring>& saved) {
+    return ui::NormalizeColumnOrder(saved, DefaultColumnOrder());
+}
+
+std::vector<std::wstring> SaveColumnOrder(const std::vector<std::wstring>& saved, const std::vector<std::wstring>& view) {
+    auto order = ui::MergeColumnOrder(EffectiveColumnOrder(saved), view);
+    if (order == DefaultColumnOrder()) order.clear();
+    return order;
+}
+
 std::pair<SortBy, bool> NextSort(SortBy current, bool descending, SortBy clicked) {
     if (clicked == current) return {current, !descending};
     return {clicked, false};

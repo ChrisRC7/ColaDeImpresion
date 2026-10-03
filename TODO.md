@@ -135,6 +135,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] **Lista en forma de tabla** como la cola de Windows: clic en el encabezado para ordenar, otro clic para invertir (también páginas, impresora, papel, orientación, doble cara y origen)
 - [x] Panel de detalles (vista previa y configuración) oculto al iniciar, con botón en la cabecera
 - [x] Cambiar el ancho de las columnas con el mouse como en la cola de Windows (arrastrar el borde, doble clic = ajustar al contenido, barra horizontal si no caben, anchos guardados y "Restablecer el ancho de las columnas")
+- [x] Mover las columnas arrastrando su título como en la cola de Windows (línea que marca dónde quedan, desplazamiento automático en los bordes); el orden predeterminado es el de siempre y el de cada operador se guarda en su `config.json` (`columnOrder`) y se conserva al abrir; "Restablecer el orden de las columnas"
+- [ ] Verificar en la app el arrastre de columnas (cola, vista "Todas" con Impresora, historial y con barra horizontal); no se abrió la app en la PC personal porque al iniciar pausa las impresoras
 - [x] Botones junto a la búsqueda para pausar / reanudar los trabajos seleccionados y la impresora (texto según lo que harán; solo íconos en ventanas angostas)
 - [x] Indicadores visuales claros de estado (colores + íconos por estado)
 - [x] Evitar menús anidados; priorizar acciones directas y atajos (un único menú plano)

@@ -48,6 +48,10 @@ struct Settings {
     // Ancho de columnas elegido por el operador (id de columna -> DIP). Las
     // que no están usan su ancho predeterminado.
     std::map<std::wstring, int> columnWidths;
+    // Orden de las columnas elegido por el operador arrastrando los títulos
+    // (ids de la cola y del historial; ver ui::NormalizeColumnOrder). Vacío =
+    // orden predeterminado.
+    std::vector<std::wstring> columnOrder;
 
     // Atajos personalizados: nombre de comando -> combinación ("Ctrl+P").
     // Solo se guardan los que difieren de los predeterminados.

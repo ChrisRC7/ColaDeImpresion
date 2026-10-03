@@ -43,6 +43,14 @@ bajo su título.
   se guardan; clic derecho en los títulos (o menú `⋯`) → *Restablecer el ancho
   de las columnas* vuelve a los predeterminados. Documento ocupa el espacio
   libre hasta que se le da un ancho propio.
+- **Orden de las columnas**, como en la cola de Windows: arrastrar el título
+  de una columna hacia la izquierda o la derecha; una línea azul marca dónde
+  va a quedar y se suelta para ubicarla ahí (cerca de los bordes la tabla se
+  desplaza sola). Un clic sin arrastrar sigue ordenando por esa columna. El
+  orden se guarda por operador (en su `config.json`) y se conserva al volver a
+  abrir la app; la cola y el historial tienen cada uno su orden. Clic derecho
+  en los títulos (o menú `⋯`) → *Restablecer el orden de las columnas* vuelve
+  al orden original.
 - En ventanas angostas se ocultan primero `#`, Impresora, Tamaño, Enviado,
   Origen y Orientación; Usuario, Equipo y Páginas se mantienen. Agrandar una
   columna nunca oculta otra: aparece la barra horizontal.

@@ -95,7 +95,10 @@ TEST(SettingsRoundTrip) {
     s.ghostscriptPath = L"C:\\gs\\gswin64c.exe";
     s.columnWidths[L"user"] = 150;
     s.columnWidths[L"document"] = 5;  // fuera de rango: se ajusta al mínimo
+    s.columnOrder = {L"user", L"document", L"status"};
     config::Settings r = config::Settings::FromJson(s.ToJson());
+    CHECK(config::Settings{}.columnOrder.empty());  // predeterminado: orden de fábrica
+    CHECK(r.columnOrder == s.columnOrder);
     CHECK_EQ(r.columnWidths[L"user"], 150);
     CHECK_EQ(r.columnWidths[L"document"], config::kMinColumnWidth);
     CHECK(r.theme == config::ThemeMode::Dark);
