@@ -285,12 +285,10 @@ TEST(ColumnLayoutWithUserWidths) {
     // A 96 DPI (1 DIP = 1 px): margen izquierdo 18, derecho 16, separación 12, flexible mín. 140.
     std::vector<ui::ListColumn> cols(3);
     cols[0].width = 100;
-    cols[0].hidePriority = 1;
     cols[0].id = L"a";
     cols[1].width = 0;  // flexible
     cols[1].id = L"doc";
     cols[2].width = 100;
-    cols[2].hidePriority = 2;
     cols[2].id = L"b";
 
     // Sin anchos del operador la flexible ocupa lo que sobra.
@@ -306,10 +304,13 @@ TEST(ColumnLayoutWithUserWidths) {
     CHECK_EQ(slots[2].right - slots[2].left, 600);
     CHECK(slots[2].right > 500);
 
-    // En una ventana angosta se ocultan primero las de mayor prioridad.
+    // En una ventana angosta no se oculta ninguna: la flexible queda en su
+    // mínimo y las demás se salen por la derecha (barra horizontal).
     slots = ui::LayoutColumns(cols, {}, 300);
-    CHECK_EQ(slots.size(), size_t(2));
-    CHECK_EQ(slots[1].column, size_t(1));
+    CHECK_EQ(slots.size(), size_t(3));
+    CHECK_EQ(slots[1].right - slots[1].left, 140);
+    CHECK_EQ(slots[2].column, size_t(2));
+    CHECK(slots[2].right > 300);
 
     // La flexible con ancho del operador queda fija.
     slots = ui::LayoutColumns(cols, {{L"doc", 200}}, 1000);

@@ -51,9 +51,9 @@ bajo su título.
   abrir la app; la cola y el historial tienen cada uno su orden. Clic derecho
   en los títulos (o menú `⋯`) → *Restablecer el orden de las columnas* vuelve
   al orden original.
-- En ventanas angostas se ocultan primero `#`, Impresora, Tamaño, Enviado,
-  Origen y Orientación; Usuario, Equipo y Páginas se mantienen. Agrandar una
-  columna nunca oculta otra: aparece la barra horizontal.
+- **Nunca se oculta ninguna columna**: si la ventana es angosta o se abre el
+  panel de detalles y las columnas no caben, aparece la barra horizontal
+  (también `Shift` + rueda) para llegar a las de la derecha.
 
 | Acción | Teclado | Mouse |
 |---|---|---|

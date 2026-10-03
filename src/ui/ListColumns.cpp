@@ -21,32 +21,10 @@ std::vector<ColumnSlot> LayoutColumns(const std::vector<ListColumn>& columns,
         auto it = userWidths.find(columns[i].id);
         return it == userWidths.end() ? -1 : style.Px(it->second);
     };
-    auto defaultWidth = [&](size_t i) { return columns[i].width ? style.Px(columns[i].width) : flexMin; };
 
-    std::vector<bool> visible(columns.size(), true);
-    auto required = [&] {
-        int total = 0;
-        for (size_t i = 0; i < columns.size(); ++i) {
-            if (!visible[i]) continue;
-            const int u = user(i);
-            total += (u >= 0 ? std::min(u, defaultWidth(i)) : defaultWidth(i)) + gap;
-        }
-        return total;
-    };
-    // Oculta primero las columnas de mayor prioridad de ocultamiento hasta que quepa.
-    while (required() > right - left) {
-        int victim = -1;
-        for (size_t i = 0; i < columns.size(); ++i)
-            if (visible[i] && columns[i].hidePriority > 0 &&
-                (victim < 0 || columns[i].hidePriority > columns[static_cast<size_t>(victim)].hidePriority))
-                victim = static_cast<int>(i);
-        if (victim < 0) break;
-        visible[static_cast<size_t>(victim)] = false;
-    }
     int fixed = 0;
     int flexCount = 0;
     for (size_t i = 0; i < columns.size(); ++i) {
-        if (!visible[i]) continue;
         const int u = user(i);
         if (u >= 0) fixed += u + gap;
         else if (columns[i].width) fixed += style.Px(columns[i].width) + gap;
@@ -60,7 +38,6 @@ std::vector<ColumnSlot> LayoutColumns(const std::vector<ListColumn>& columns,
     std::vector<ColumnSlot> slots;
     int x = left;
     for (size_t i = 0; i < columns.size(); ++i) {
-        if (!visible[i]) continue;
         const int u = user(i);
         const int w = u >= 0 ? u : columns[i].width ? style.Px(columns[i].width) : flexWidth;
         slots.push_back({i, x, x + w});

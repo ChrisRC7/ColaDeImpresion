@@ -275,37 +275,35 @@ std::vector<ui::ListColumn> JobColumns(bool showPrinter) {
     auto id = [](SortBy s) { return static_cast<int>(s); };
     std::vector<ui::ListColumn> columns;
     // Desde Estado en adelante los valores van centrados bajo su título.
-    // En ventanas angostas se ocultan primero las de número mayor: #, Impresora,
-    // Tamaño, Enviado, Origen, Orientación, Doble cara, Papel. Usuario, Equipo
-    // (de qué PC se envió) y Páginas se mantienen: son las que más usa el operador.
-    //               texto                 ancho alineación     pill   énfasis orden                     ocultar  id (ancho guardado)
-    columns.push_back({Tr(S::ColNumber), 30, Align::Right, false, false, id(SortBy::Queue), 12, L"number"});
-    columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, id(SortBy::Document), 0, L"document"});
-    columns.push_back({Tr(S::ColStatus), 104, Align::Center, true, false, id(SortBy::Status), 0, L"status"});
-    columns.push_back({Tr(S::ColUser), 100, Align::Center, false, false, id(SortBy::User), 2, L"user"});
-    columns.push_back({Tr(S::ColMachine), 100, Align::Center, false, false, id(SortBy::Machine), 3, L"machine"});
-    if (showPrinter) columns.push_back({Tr(S::ColPrinter), 120, Align::Center, false, false, id(SortBy::Printer), 11, L"printer"});
-    columns.push_back({Tr(S::ColPages), 78, Align::Center, false, false, id(SortBy::Pages), 1, L"pages"});
-    columns.push_back({Tr(S::ColPaper), 84, Align::Center, false, false, id(SortBy::Paper), 4, L"paper"});
-    columns.push_back({Tr(S::ColOrientation), 96, Align::Center, false, false, id(SortBy::Orientation), 6, L"orientation"});
-    columns.push_back({Tr(S::ColDuplex), 96, Align::Center, false, false, id(SortBy::Duplex), 5, L"duplex"});
-    columns.push_back({Tr(S::ColSource), 130, Align::Center, false, false, id(SortBy::Source), 7, L"source"});
-    columns.push_back({Tr(S::ColSize), 72, Align::Center, false, false, id(SortBy::Size), 10, L"size"});
-    columns.push_back({Tr(S::ColSubmitted), 124, Align::Center, false, false, id(SortBy::Time), 9, L"submitted"});
+    // Nunca se ocultan: si no caben, la tabla muestra la barra horizontal.
+    //               texto                 ancho alineación     pill   énfasis orden                     id (ancho y orden guardados)
+    columns.push_back({Tr(S::ColNumber), 30, Align::Right, false, false, id(SortBy::Queue), L"number"});
+    columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, id(SortBy::Document), L"document"});
+    columns.push_back({Tr(S::ColStatus), 104, Align::Center, true, false, id(SortBy::Status), L"status"});
+    columns.push_back({Tr(S::ColUser), 100, Align::Center, false, false, id(SortBy::User), L"user"});
+    columns.push_back({Tr(S::ColMachine), 100, Align::Center, false, false, id(SortBy::Machine), L"machine"});
+    if (showPrinter) columns.push_back({Tr(S::ColPrinter), 120, Align::Center, false, false, id(SortBy::Printer), L"printer"});
+    columns.push_back({Tr(S::ColPages), 78, Align::Center, false, false, id(SortBy::Pages), L"pages"});
+    columns.push_back({Tr(S::ColPaper), 84, Align::Center, false, false, id(SortBy::Paper), L"paper"});
+    columns.push_back({Tr(S::ColOrientation), 96, Align::Center, false, false, id(SortBy::Orientation), L"orientation"});
+    columns.push_back({Tr(S::ColDuplex), 96, Align::Center, false, false, id(SortBy::Duplex), L"duplex"});
+    columns.push_back({Tr(S::ColSource), 130, Align::Center, false, false, id(SortBy::Source), L"source"});
+    columns.push_back({Tr(S::ColSize), 72, Align::Center, false, false, id(SortBy::Size), L"size"});
+    columns.push_back({Tr(S::ColSubmitted), 124, Align::Center, false, false, id(SortBy::Time), L"submitted"});
     return columns;
 }
 
 std::vector<ui::ListColumn> HistoryColumns() {
     using ui::Align;
     std::vector<ui::ListColumn> columns;
-    columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, -1, 0, L"history.document"});
-    columns.push_back({Tr(S::ColResult), 118, Align::Center, true, false, -1, 0, L"history.result"});
-    columns.push_back({Tr(S::ColUser), 118, Align::Center, false, false, -1, 3, L"history.user"});
-    columns.push_back({Tr(S::ColMachine), 118, Align::Center, false, false, -1, 5, L"history.machine"});
-    columns.push_back({Tr(S::ColPrinter), 130, Align::Center, false, false, -1, 4, L"history.printer"});
-    columns.push_back({Tr(S::ColPages), 64, Align::Center, false, false, -1, 1, L"history.pages"});
-    columns.push_back({Tr(S::ColSize), 74, Align::Center, false, false, -1, 2, L"history.size"});
-    columns.push_back({Tr(S::ColTime), 136, Align::Center, false, false, -1, 2, L"history.time"});
+    columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, -1, L"history.document"});
+    columns.push_back({Tr(S::ColResult), 118, Align::Center, true, false, -1, L"history.result"});
+    columns.push_back({Tr(S::ColUser), 118, Align::Center, false, false, -1, L"history.user"});
+    columns.push_back({Tr(S::ColMachine), 118, Align::Center, false, false, -1, L"history.machine"});
+    columns.push_back({Tr(S::ColPrinter), 130, Align::Center, false, false, -1, L"history.printer"});
+    columns.push_back({Tr(S::ColPages), 64, Align::Center, false, false, -1, L"history.pages"});
+    columns.push_back({Tr(S::ColSize), 74, Align::Center, false, false, -1, L"history.size"});
+    columns.push_back({Tr(S::ColTime), 136, Align::Center, false, false, -1, L"history.time"});
     return columns;
 }
 

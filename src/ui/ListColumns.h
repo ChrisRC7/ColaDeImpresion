@@ -23,7 +23,6 @@ struct ListColumn {
     bool pill = false;      // la celda se dibuja como insignia de estado (con el tono de la fila)
     bool emphasis = false;  // texto principal de la fila (semibold)
     int sortId = -1;        // identificador que se devuelve al hacer clic; -1 = no ordenable
-    int hidePriority = 0;   // en ventanas angostas se ocultan primero las de número mayor (0 = nunca)
     std::wstring id;        // identificador estable para guardar ancho y orden ("" = no se guarda ni se mueve)
 };
 
@@ -36,11 +35,10 @@ struct ColumnSlot {
 
 // Distribuye las columnas en un ancho de ventana (px), en el orden en que
 // vienen. userWidths: anchos en DIP elegidos por el operador (por id). Reglas:
-//  - Las columnas que no caben se ocultan por hidePriority, calculando con el
-//    ancho predeterminado (o el del operador si es menor): agrandar una
-//    columna nunca oculta otra, solo hace aparecer la barra horizontal.
-//  - La columna flexible (width 0) ocupa el espacio libre salvo que el
-//    operador le haya dado un ancho.
+//  - Nunca se oculta una columna: si no caben en el ancho, se salen por la
+//    derecha y la tabla muestra la barra horizontal (como la cola de Windows).
+//  - La columna flexible (width 0) ocupa el espacio libre (como mínimo 140
+//    DIP) salvo que el operador le haya dado un ancho.
 std::vector<ColumnSlot> LayoutColumns(const std::vector<ListColumn>& columns,
                                       const std::map<std::wstring, int>& userWidths, int width);
 

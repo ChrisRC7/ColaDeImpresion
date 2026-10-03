@@ -147,6 +147,9 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      cambiar su ancho (doble clic en el borde = ajustar al contenido). Si no
      caben, aparece una barra horizontal. Clic derecho en los títulos >
      "Restablecer el ancho de las columnas".
+   - NINGUNA COLUMNA DESAPARECE: achique la ventana o abra el panel de
+     detalles (Ctrl+B): todas las columnas siguen (también Enviado) y aparece
+     la barra horizontal para llegar a las de la derecha.
    - MOVER COLUMNAS: arrastre el título de una columna a la izquierda o a la
      derecha (una línea azul marca dónde va a quedar) y suéltelo. El orden se
      guarda y se mantiene al volver a abrir. Un clic sin arrastrar sigue

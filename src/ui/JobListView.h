@@ -7,8 +7,8 @@
 // selección múltiple (Ctrl/Shift + clic, Shift + flechas, arrastre con el botón
 // izquierdo como en el Explorador), scroll con rueda y estado vacío. No conoce
 // el spooler: recibe columnas y filas ya preparadas (ver app/RowBuilder), por
-// eso sirve igual para la cola y para el historial. En ventanas angostas se
-// ocultan primero las columnas de menor prioridad.
+// eso sirve igual para la cola y para el historial. Nunca se oculta una
+// columna: si no caben, aparece la barra horizontal.
 // Como en la cola de Windows, el ancho de cada columna se cambia arrastrando
 // el borde derecho de su título (doble clic en el borde = ajustar al
 // contenido); si las columnas no caben aparece una barra horizontal. Los

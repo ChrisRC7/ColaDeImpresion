@@ -18,7 +18,7 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 - **Impresoras**: pausar/reanudar/vaciar cola; avisos de sin papel, atasco, sin tóner, fuera de línea...
 - **Acceso rápido a impresoras**: barra superior con las impresoras que el operador fija (botón `+`), cada una con su cantidad de trabajos y su estado; un clic o `Ctrl+1`…`Ctrl+9` filtran la cola por esa impresora.
 - **Tabla como la cola de Windows**: un clic en el encabezado ordena por esa columna y otro clic invierte (documento, estado, usuario, equipo, impresora, páginas, papel, orientación, doble cara, origen del papel, tamaño, enviado; `#` = orden real de impresión). También `F6` / `Shift+F6`.
-- **Columnas redimensionables** arrastrando el borde del título (doble clic = ajustar al contenido), con barra horizontal si no caben; los anchos se guardan.
+- **Columnas redimensionables** arrastrando el borde del título (doble clic = ajustar al contenido), con barra horizontal si no caben (nunca se oculta una columna); los anchos se guardan.
 - **Columnas reordenables** arrastrando el título a otra posición; el orden se guarda por operador y se conserva al abrir la app (*Restablecer el orden de las columnas* vuelve al original).
 - **Botones de pausa** junto a la búsqueda: pausar / reanudar los trabajos seleccionados y la impresora.
 - **Páginas a imprimir** en la lista: páginas × copias (3 págs. con 3 copias = 9), con las copias leídas de los datos del trabajo también para los enviados desde otras PCs.
