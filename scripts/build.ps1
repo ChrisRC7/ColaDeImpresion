@@ -147,6 +147,12 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      cambiar su ancho (doble clic en el borde = ajustar al contenido). Si no
      caben, aparece una barra horizontal. Clic derecho en los títulos >
      "Restablecer el ancho de las columnas".
+   - MOVER COLUMNAS: arrastre el título de una columna a la izquierda o a la
+     derecha (una línea azul marca dónde va a quedar) y suéltelo. El orden se
+     guarda y se mantiene al volver a abrir. Un clic sin arrastrar sigue
+     ordenando. Clic derecho en los títulos > "Restablecer el orden de las
+     columnas" vuelve al orden original. Pruébelo en la vista "Todas", con
+     una sola impresora y en el historial (Ctrl+H).
    - BOTONES DE PAUSA junto a la búsqueda: "Pausar / Reanudar trabajos" (los
      seleccionados) y "Pausar / Reanudar impresora".
    - IMPRIMIR Y VOLVER A PAUSAR: seleccione uno o varios trabajos retenidos
