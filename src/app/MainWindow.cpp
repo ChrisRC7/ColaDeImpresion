@@ -1705,6 +1705,12 @@ bool MainWindow::PreTranslate(MSG& msg) {
         help_.Open();
         return true;
     }
+    // Con el panel de atajos abierto la rueda siempre lo desplaza a él, aunque
+    // el foco haya quedado en otro control (p. ej. el cuadro de búsqueda).
+    if (msg.message == WM_MOUSEWHEEL && help_.IsOpen() && msg.hwnd != help_.hwnd()) {
+        SendMessageW(help_.hwnd(), WM_MOUSEWHEEL, msg.wParam, msg.lParam);
+        return true;
+    }
     if (msg.message != WM_KEYDOWN && msg.message != WM_SYSKEYDOWN) return false;
 
     const UINT vk = static_cast<UINT>(msg.wParam);

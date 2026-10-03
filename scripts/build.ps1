@@ -150,6 +150,9 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
    - NINGUNA COLUMNA DESAPARECE: achique la ventana o abra el panel de
      detalles (Ctrl+B): todas las columnas siguen (también Enviado) y aparece
      la barra horizontal para llegar a las de la derecha.
+   - PANEL DE ATAJOS (F1): desplácese con la rueda del mouse (o el touchpad)
+     y arrastrando la barra de la derecha hasta el final de la lista; ya no
+     debe volver sola a la fila elegida.
    - MOVER COLUMNAS: arrastre el título de una columna a la izquierda o a la
      derecha (una línea azul marca dónde va a quedar) y suéltelo. El orden se
      guarda y se mantiene al volver a abrir. Un clic sin arrastrar sigue

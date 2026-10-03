@@ -25,6 +25,8 @@ bool HelpOverlay::Create(HWND parent, const input::ShortcutMap* shortcuts, Callb
 void HelpOverlay::Open() {
     capturing_ = false;
     message_.clear();
+    wheelRemainder_ = 0;
+    EnsureVisible();
     SetWindowPos(hwnd_, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     SetFocus(hwnd_);
     Invalidate();
@@ -115,7 +117,7 @@ void HelpOverlay::StartCapture() {
 RECT HelpOverlay::ScrollThumbRect() const {
     if (kCommandCount <= visibleRows_ || gfx::Height(listArea_) <= 0) return RECT{};
     const auto& style = Style::Get();
-    const int width = style.Px(6);
+    const int width = style.Px(8);
     const int trackTop = listArea_.top + style.Px(2);
     const int trackHeight = gfx::Height(listArea_) - style.Px(4);
     const int thumbHeight = std::max(style.Px(28), trackHeight * visibleRows_ / kCommandCount);
@@ -130,8 +132,16 @@ void HelpOverlay::ScrollTo(int firstRow) {
     Invalidate();
 }
 
+bool HelpOverlay::OnScrollBar(POINT pt) const {
+    RECT thumb = ScrollThumbRect();
+    if (thumb.bottom <= thumb.top) return false;
+    // Zona de agarre de 20 px a la derecha de la lista (el pulgar mide 8).
+    return pt.x >= thumb.right - Style::Get().Px(20) && pt.x <= listArea_.right && pt.y >= listArea_.top &&
+           pt.y <= listArea_.bottom;
+}
+
 int HelpOverlay::RowAt(POINT pt) const {
-    if (!gfx::Contains(listArea_, pt)) return -1;
+    if (!gfx::Contains(listArea_, pt) || OnScrollBar(pt)) return -1;
     int index = scroll_ + (pt.y - listArea_.top) / RowHeight();
     if (index >= kCommandCount || index >= scroll_ + visibleRows_) return -1;
     return index;
@@ -159,7 +169,9 @@ void HelpOverlay::Paint(HDC dc, const RECT& client) {
     RECT listArea{card.left + style.Px(10), title.bottom + style.Px(10), card.right - style.Px(10), footer.top - style.Px(8)};
     visibleRows_ = std::max(1, gfx::Height(listArea) / RowHeight());
     listArea_ = listArea;
-    EnsureVisible();
+    // Solo se ajusta al rango válido: si se forzara a mostrar la fila elegida,
+    // la rueda y la barra no podrían alejarse de ella (la lista "rebotaba").
+    scroll_ = std::clamp(scroll_, 0, std::max(0, kCommandCount - visibleRows_));
 
     for (int i = scroll_; i < kCommandCount && i < scroll_ + visibleRows_; ++i) {
         int top = listArea.top + (i - scroll_) * RowHeight();
@@ -211,13 +223,24 @@ LRESULT HelpOverlay::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_SYSKEYDOWN:
             HandleKey(static_cast<UINT>(wParam));
             return 0;
-        case WM_MOUSEWHEEL:
-            ScrollTo(scroll_ - GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA * 3);
+        case WM_MOUSEWHEEL: {
+            // 3 filas por muesca; los giros parciales se acumulan.
+            wheelRemainder_ += GET_WHEEL_DELTA_WPARAM(wParam) * 3;
+            const int rows = wheelRemainder_ / WHEEL_DELTA;
+            wheelRemainder_ -= rows * WHEEL_DELTA;
+            if (rows) ScrollTo(scroll_ - rows);
             return 0;
+        }
         case WM_LBUTTONUP:
             if (draggingThumb_) {
                 draggingThumb_ = false;
                 ReleaseCapture();
+                Invalidate();
+            }
+            return 0;
+        case WM_CAPTURECHANGED:
+            if (draggingThumb_) {
+                draggingThumb_ = false;
                 Invalidate();
             }
             return 0;
@@ -267,13 +290,13 @@ LRESULT HelpOverlay::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
             // Barra de desplazamiento: arrastrar el pulgar o saltar en la pista.
-            RECT thumb = ScrollThumbRect();
-            if (thumb.bottom > thumb.top && pt.x >= thumb.left - Style::Get().Px(4) && pt.x <= thumb.right) {
-                if (gfx::Contains(thumb, pt)) {
+            if (OnScrollBar(pt)) {
+                RECT thumb = ScrollThumbRect();
+                if (pt.y >= thumb.top && pt.y < thumb.bottom) {
                     draggingThumb_ = true;
                     thumbGrabOffset_ = pt.y - thumb.top;
                     SetCapture(hwnd_);
-                } else if (pt.y >= listArea_.top && pt.y <= listArea_.bottom) {
+                } else {
                     ScrollTo(scroll_ + (pt.y < thumb.top ? -visibleRows_ : visibleRows_));
                 }
                 Invalidate();

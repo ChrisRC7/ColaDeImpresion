@@ -44,6 +44,7 @@ private:
     void StartCapture();
     RECT ScrollThumbRect() const;  // vacío si no hace falta desplazarse
     void ScrollTo(int firstRow);
+    bool OnScrollBar(POINT pt) const;  // el punto cae en la zona de la barra (más ancha que el pulgar)
 
     const input::ShortcutMap* shortcuts_ = nullptr;
     Callbacks callbacks_;
@@ -56,6 +57,7 @@ private:
     RECT listArea_{};  // área de la lista (se calcula al pintar; se usa para el clic)
     bool draggingThumb_ = false;
     int thumbGrabOffset_ = 0;
+    int wheelRemainder_ = 0;  // giro de la rueda acumulado (ruedas finas y touchpads mandan menos de 120)
     std::wstring message_;
 };
 
