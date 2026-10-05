@@ -2,6 +2,7 @@
 
 #include <winspool.h>
 
+#include "core/JobStatus.h"
 #include "preview/PreviewBuilder.h"
 #include "preview/SpoolFile.h"
 #include "util/Strings.h"
@@ -12,8 +13,10 @@ JobFactsService::JobFactsService(ReadyCallback onReady) : onReady_(std::move(onR
 
 std::wstring JobFactsService::Key(const core::JobInfo& job) {
     const unsigned spooling = (job.rawStatus & JOB_STATUS_SPOOLING) ? 1u : 0u;
-    return util::Format(L"%ls#%u|%llu|%u", job.printer.c_str(), job.id, static_cast<unsigned long long>(job.sizeBytes),
-                        spooling);
+    // Si se puede leer forma parte de la clave: al volver a pausarlo se analiza.
+    const unsigned readable = core::CanReadJobData(job.rawStatus) ? 1u : 0u;
+    return util::Format(L"%ls#%u|%llu|%u|%u", job.printer.c_str(), job.id,
+                        static_cast<unsigned long long>(job.sizeBytes), spooling, readable);
 }
 
 std::shared_ptr<const core::ContentFacts> JobFactsService::Find(const core::JobInfo& job) {
@@ -31,7 +34,9 @@ void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std:
     for (auto it = cache_.begin(); it != cache_.end();) it = alive.count(it->first) ? std::next(it) : cache_.erase(it);
 
     for (const auto& job : jobs) {
-        if (job.rawStatus & JOB_STATUS_SPOOLING) continue;  // ReadPrinter esperaría: se analiza al terminar
+        // Recibiéndose (ReadPrinter esperaría) o sin pausar (la lectura le quitaría
+        // datos a la impresora): se analiza cuando se pueda.
+        if (!core::CanReadJobData(job.rawStatus)) continue;
         const std::wstring key = Key(job);
         if (cache_.count(key) || pending_.count(key)) continue;
         pending_.insert(key);

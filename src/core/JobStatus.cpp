@@ -26,6 +26,13 @@ JobState JobStateFromFlags(std::uint32_t s, std::uint32_t printerProblems) {
     return JobState::Queued;
 }
 
+bool CanReadJobData(std::uint32_t s) {
+    if (s & (JOB_STATUS_SPOOLING | JOB_STATUS_PRINTING | JOB_STATUS_DELETING | JOB_STATUS_DELETED |
+             JOB_STATUS_RESTART | kJobStatusRenderingLocally))
+        return false;
+    return (s & (JOB_STATUS_PAUSED | JOB_STATUS_PRINTED | JOB_STATUS_COMPLETE)) != 0;
+}
+
 std::uint32_t PrinterProblemsFromFlags(std::uint32_t s, std::uint32_t attributes) {
     std::uint32_t p = ProblemNone;
     if ((s & PRINTER_STATUS_OFFLINE) || (attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE)) p |= ProblemOffline;

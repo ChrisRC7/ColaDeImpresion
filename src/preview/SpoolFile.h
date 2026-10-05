@@ -29,6 +29,7 @@ struct SpoolData {
     SpoolOrigin origin = SpoolOrigin::None;
     unsigned long apiError = 0;      // error de la API del spooler si no se pudo usar
     bool stillSpooling = false;      // no se leyó: el trabajo todavía se está recibiendo
+    bool notHeld = false;            // no se leyó: no está en pausa (leerlo dañaría la impresión)
     std::wstring path;               // archivo leído (vacío si vino por la API)
     std::vector<std::uint8_t> bytes;
     std::uint64_t fileSize = 0;      // tamaño real (bytes puede estar recortado)
@@ -77,7 +78,9 @@ SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const st
 //      administrador del servidor, sin \\SRV\C$ y sin chocar con los bloqueos
 //      que el spooler mantiene sobre los .SHD/.SPL;
 //   3. archivo de spool en la carpeta del servidor (respaldo).
-// Un trabajo que todavía se está recibiendo no se lee (ReadPrinter esperaría).
+// Un trabajo que todavía se está recibiendo no se lee (ReadPrinter esperaría),
+// y tampoco uno que no esté en pausa (core::CanReadJobData): la lectura le
+// quitaría datos al procesador de impresión.
 // allowFile = false: solo la API del spooler (para análisis en segundo plano,
 // donde buscar en la carpeta de spool solo sumaría esperas y errores).
 SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes,

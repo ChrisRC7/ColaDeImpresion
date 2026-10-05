@@ -3,6 +3,7 @@
 namespace cola::core {
 
 bool ShouldHold(const JobInfo& job) {
+    if (job.rawStatus & kJobStatusRenderingLocally) return false;  // ver AutoHold.h
     switch (job.state) {
         case JobState::Paused:
         case JobState::Deleting:

@@ -51,6 +51,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] (LAIMI) Verificar la retención con trabajos de estudiantes en `vtec-laimiprint` (requiere "Administrar documentos")
 - [x] Trabajos enviados desde otras PCs que no aparecían hasta que llegaba otro documento: la lista se consulta por el nombre DNS completo del servidor, que evita la caché de la conexión (0.3.2; `PRINTER_OPTION_NO_CACHE` no bastaba)
 - [ ] (LAIMI) Confirmar con trabajos reales que ya no faltan trabajos (en `app.log` aparece "los trabajos se consultan en \\…estudiantes.tec.cr\…" al iniciar y "la caché del cliente muestra N trabajo(s) y el servidor M" cuando la corrección actúa)
+- [x] Hojas en blanco / impresora que se reinicia con documentos grandes enviados con la app abierta: la retención ya no pausa la copia local de Client Side Rendering (`RENDERING_LOCALLY`) y los datos solo se leen de trabajos en pausa o impresos (0.4.9, D39)
+- [ ] (LAIMI) Confirmar con "50 pag.pdf" desde una PC del laboratorio que llega con ~70,9 MB, queda retenido y se imprime bien al liberarlo con la 0.4.9
 - [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
 - [ ] (LAIMI) Verificar reordenamiento y reenvío con impresoras físicas del laboratorio
 
@@ -165,7 +167,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 71 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 75 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

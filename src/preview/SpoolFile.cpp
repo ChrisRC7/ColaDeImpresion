@@ -7,6 +7,7 @@
 #include <map>
 #include <mutex>
 
+#include "core/JobStatus.h"
 #include "core/Spooler.h"
 #include "util/Log.h"
 #include "util/Strings.h"
@@ -270,6 +271,12 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
         data.error = ERROR_BUSY;
         return data;
     }
+    if (!core::CanReadJobData(job.rawStatus)) {
+        // Se está imprimiendo o puede empezar en cualquier momento: no se toca.
+        data.notHeld = true;
+        data.error = ERROR_BUSY;
+        return data;
+    }
 
     // 2. API del spooler.
     bool truncated = false;
@@ -287,6 +294,12 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
         data.format = DetectFormat(data.bytes.data(), data.bytes.size());
         util::LogInfo(L"Datos del trabajo %u leídos por la API del spooler (%llu bytes, %ls)", job.id,
                       static_cast<unsigned long long>(data.bytes.size()), DataFormatName(data.format));
+        return data;
+    }
+    if (api.error == ERROR_BUSY) {
+        // El estado real (consultado al leer) no permitía leerlo, o se reanudó mientras tanto.
+        data.notHeld = true;
+        data.error = ERROR_BUSY;
         return data;
     }
     util::LogError(L"ReadPrinter del trabajo %u en '%ls' falló: %lu", job.id, job.printer.c_str(), api.error);

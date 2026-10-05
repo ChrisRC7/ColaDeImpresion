@@ -32,6 +32,20 @@ TEST(JobStateMapping) {
     CHECK(core::JobStateFromFlags(0, core::ProblemOffline) == JobState::Offline);
 }
 
+TEST(CanReadJobDataOnlyWhenHeld) {
+    // Solo en pausa o ya impreso: leer a la vez que el spooler lo envía daña la impresión.
+    CHECK(core::CanReadJobData(JOB_STATUS_PAUSED));
+    CHECK(core::CanReadJobData(JOB_STATUS_PRINTED));
+    CHECK(core::CanReadJobData(JOB_STATUS_COMPLETE));
+    CHECK(!core::CanReadJobData(0));  // en cola: puede empezar a imprimirse en cualquier momento
+    CHECK(!core::CanReadJobData(JOB_STATUS_PRINTING));
+    CHECK(!core::CanReadJobData(JOB_STATUS_PAUSED | JOB_STATUS_PRINTING));
+    CHECK(!core::CanReadJobData(JOB_STATUS_PAUSED | JOB_STATUS_SPOOLING));
+    CHECK(!core::CanReadJobData(JOB_STATUS_PAUSED | JOB_STATUS_DELETING));
+    CHECK(!core::CanReadJobData(JOB_STATUS_PAUSED | JOB_STATUS_RESTART));
+    CHECK(!core::CanReadJobData(JOB_STATUS_PAUSED | core::kJobStatusRenderingLocally));
+}
+
 TEST(PrinterProblems) {
     auto p = core::PrinterProblemsFromFlags(PRINTER_STATUS_PAPER_OUT | PRINTER_STATUS_TONER_LOW, 0);
     CHECK(p & core::ProblemPaperOut);
@@ -256,6 +270,15 @@ TEST(AutoHoldOnlyNewJobsOnce) {
     CHECK(hold.Process(printer, {MakeJob(6, core::JobState::Queued)}, false).empty());
     // ...y un trabajo ya evaluado con la retención apagada no se pausa al encenderla.
     CHECK(hold.Process(printer, {MakeJob(6, core::JobState::Queued)}, true).empty());
+
+    // La copia local que esta PC todavía envía al servidor (CSR) nunca se pausa:
+    // se retiene el trabajo del servidor (8) cuando aparece.
+    core::JobInfo local = MakeJob(7, core::JobState::Queued);
+    local.rawStatus = core::kJobStatusRenderingLocally;
+    CHECK(!core::ShouldHold(local));
+    ids = hold.Process(printer, {local, MakeJob(8, core::JobState::Spooling)}, true);
+    CHECK_EQ(ids.size(), size_t(1));
+    CHECK_EQ(ids[0], 8u);
 }
 
 TEST(ColumnLayoutWithUserWidths) {

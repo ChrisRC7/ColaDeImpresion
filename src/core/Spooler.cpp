@@ -4,10 +4,12 @@
 #include <ws2tcpip.h>
 
 #include <algorithm>
+#include <condition_variable>
 #include <cwchar>
 #include <iterator>
 #include <map>
 #include <mutex>
+#include <set>
 
 #include "core/JobStatus.h"
 #include "util/Log.h"
@@ -100,6 +102,60 @@ OpResult ControlPrinter(const std::wstring& printer, DWORD command) {
     if (!h.Open(printer, true)) return OpResult::FromLastError();
     if (!SetPrinterW(h.get(), 0, nullptr, command)) return OpResult::FromLastError();
     return OpResult::Success();
+}
+
+// Coordina las lecturas de datos (ReadJobData) con las reanudaciones de la app:
+// un trabajo no se reanuda mientras se lee (la lectura se corta) y no se empieza
+// a leer uno que se está reanudando. Así el procesador de impresión nunca
+// comparte el trabajo con una lectura de la app.
+struct JobReadGate {
+    std::mutex mutex;
+    std::condition_variable idle;
+    std::wstring reading;                // trabajo que se lee ahora ("" = ninguno)
+    std::multiset<std::wstring> releasing;  // trabajos que la app va a reanudar
+};
+
+JobReadGate& ReadGate() {
+    static JobReadGate gate;
+    return gate;
+}
+
+std::wstring ReadGateKey(const std::wstring& printer, std::uint32_t jobId) {
+    return util::ToLower(printer) + L"#" + std::to_wstring(jobId);
+}
+
+bool ReleaseRequested(const std::wstring& key) {
+    auto& gate = ReadGate();
+    std::lock_guard lock(gate.mutex);
+    return gate.releasing.count(key) > 0;
+}
+
+// Reanuda o reinicia un trabajo esperando a que termine (o se corte) una
+// lectura en curso del mismo trabajo.
+OpResult ReleaseJob(const std::wstring& printer, std::uint32_t jobId, DWORD command) {
+    auto& gate = ReadGate();
+    const std::wstring key = ReadGateKey(printer, jobId);
+    {
+        std::unique_lock lock(gate.mutex);
+        gate.releasing.insert(key);
+        gate.idle.wait(lock, [&] { return gate.reading != key; });
+    }
+    OpResult result = ControlJob(printer, jobId, command);
+    std::lock_guard lock(gate.mutex);
+    gate.releasing.erase(gate.releasing.find(key));
+    return result;
+}
+
+// Estado actual del trabajo consultado al servidor (no a la caché del cliente,
+// que puede estar atrasada). false si no se pudo consultar.
+bool LiveJobStatus(HANDLE printer, std::uint32_t jobId, DWORD& status) {
+    std::vector<BYTE> buffer;
+    bool ok = FillBuffer(buffer, [&](BYTE* data, DWORD size, DWORD* needed) {
+        return GetJobW(printer, jobId, 1, data, size, needed) != FALSE;
+    });
+    if (!ok || buffer.empty()) return false;
+    status = reinterpret_cast<const JOB_INFO_1W*>(buffer.data())->Status;
+    return true;
 }
 
 // Modifica un trabajo usando el nivel 1 (posición/prioridad).
@@ -358,7 +414,7 @@ OpResult PauseJob(const std::wstring& printer, std::uint32_t jobId) {
 }
 
 OpResult ResumeJob(const std::wstring& printer, std::uint32_t jobId) {
-    return ControlJob(printer, jobId, JOB_CONTROL_RESUME);
+    return ReleaseJob(printer, jobId, JOB_CONTROL_RESUME);
 }
 
 OpResult CancelJob(const std::wstring& printer, std::uint32_t jobId) {
@@ -367,7 +423,7 @@ OpResult CancelJob(const std::wstring& printer, std::uint32_t jobId) {
 }
 
 OpResult RestartJob(const std::wstring& printer, std::uint32_t jobId) {
-    return ControlJob(printer, jobId, JOB_CONTROL_RESTART);
+    return ReleaseJob(printer, jobId, JOB_CONTROL_RESTART);
 }
 
 OpResult SetJobPosition(const std::wstring& printer, std::uint32_t jobId, std::uint32_t position) {
@@ -397,6 +453,43 @@ OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint
     // bytes (comprobado): todas las lecturas de la app pasan de a una.
     static std::mutex readMutex;
     std::lock_guard readLock(readMutex);
+
+    // Nunca se lee a la vez que el spooler envía el trabajo a la impresora: las
+    // lecturas comparten el avance y a la impresora le llegarían datos
+    // incompletos. Se registra la lectura (una reanudación de la app la espera)...
+    auto& gate = ReadGate();
+    const std::wstring key = ReadGateKey(printer, jobId);
+    {
+        std::lock_guard lock(gate.mutex);
+        if (gate.releasing.count(key)) return OpResult::Fail(ERROR_BUSY);
+        gate.reading = key;
+    }
+    struct ReadingGuard {
+        JobReadGate& gate;
+        ~ReadingGuard() {
+            {
+                std::lock_guard lock(gate.mutex);
+                gate.reading.clear();
+            }
+            gate.idle.notify_all();
+        }
+    } readingGuard{gate};
+    // ...y se comprueba el estado real antes y durante la lectura (otro operador
+    // o la cola de Windows pueden reanudarlo).
+    PrinterHandle statusHandle;
+    const std::wstring direct = CacheBypassName(printer);
+    if ((direct.empty() || !statusHandle.Open(direct, false)) && !statusHandle.Open(printer, false))
+        return OpResult::FromLastError();
+    auto safeToRead = [&] {
+        DWORD status = 0;
+        return !ReleaseRequested(key) && LiveJobStatus(statusHandle.get(), jobId, status) && CanReadJobData(status);
+    };
+    if (!safeToRead()) {
+        util::LogInfo(L"No se leen los datos del trabajo %u en '%ls': no está en pausa o se está imprimiendo", jobId,
+                      printer.c_str());
+        return OpResult::Fail(ERROR_BUSY);
+    }
+
     // "Impresora,Job N" abre el trabajo (no la impresora) para leer sus datos.
     std::wstring name = printer + L",Job " + std::to_wstring(jobId);
     PRINTER_DEFAULTSW defaults{};
@@ -417,6 +510,12 @@ OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint
             DWORD got = 0;
             if (truncated && ReadPrinter(handle.get(), &probe, 1, &got) && got > 0) *truncated = true;
             break;
+        }
+        if (!out.empty() && !safeToRead()) {
+            // Lo reanudaron mientras se leía: se corta para no quitarle datos a la impresora.
+            util::LogInfo(L"Lectura del trabajo %u en '%ls' cortada: se reanudó", jobId, printer.c_str());
+            out.clear();
+            return OpResult::Fail(ERROR_BUSY);
         }
         DWORD want = static_cast<DWORD>(std::min<std::uint64_t>(chunk.size(), maxBytes - out.size()));
         DWORD got = 0;

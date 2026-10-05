@@ -5,6 +5,7 @@
 
 #include <algorithm>
 
+#include "core/JobStatus.h"
 #include "i18n/Strings.h"
 #include "preview/EmfSpool.h"
 #include "preview/ImageLoader.h"
@@ -25,8 +26,10 @@ std::wstring PreviewRequest::Key() const {
     // El estado "recibiendo" forma parte de la clave: al terminar la recepción
     // se vuelve a generar (antes no se leen los datos).
     const unsigned spooling = (job.rawStatus & JOB_STATUS_SPOOLING) ? 1u : 0u;
-    return util::Format(L"%ls|%ls|%u|%llu|%u|%u", server.c_str(), job.printer.c_str(), job.id,
-                        static_cast<unsigned long long>(job.sizeBytes), job.totalPages, spooling);
+    // Igual con "se puede leer": un trabajo que se vuelve a pausar se lee entonces.
+    const unsigned readable = core::CanReadJobData(job.rawStatus) ? 1u : 0u;
+    return util::Format(L"%ls|%ls|%u|%llu|%u|%u|%u", server.c_str(), job.printer.c_str(), job.id,
+                        static_cast<unsigned long long>(job.sizeBytes), job.totalPages, spooling, readable);
 }
 
 namespace {
@@ -179,6 +182,8 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
     SpoolData spool = ReadJobSpool(search, request.job, opt.maxSpoolBytes);
     if (spool.stillSpooling) {
         doc->message = Tr(S::PreviewStillSpooling);
+    } else if (spool.notHeld) {
+        doc->message = Tr(S::PreviewNotHeld);
     } else if (spool.error == 0 && spool.bytes.empty()) {
         // Los datos existen pero todavía están vacíos: el trabajo sigue llegando.
         doc->message = Tr(S::PreviewSpoolEmpty);

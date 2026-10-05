@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ColaDeImpresion VERSION 0.4.7 LANGUAGES CXX RC)
+project(ColaDeImpresion VERSION 0.4.9 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Con MSVC, runtime estático (/MT): el .exe no depende de MSVCP140/VCRUNTIME140,
+# igual que con MinGW (-static). Las PCs del laboratorio pueden no tenerlas.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Tipo de build" FORCE)

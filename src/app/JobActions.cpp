@@ -109,10 +109,22 @@ void JobActionRunner::Redirect(RedirectRequest request) {
             result.message = std::move(message);
         };
 
-        // 1. Leer los datos completos del trabajo.
+        // 1. Pausar el original: que no se imprima dos veces y que el spooler no
+        //    lo envíe a la impresora mientras se leen sus datos (la lectura le
+        //    quitaría datos). Si ya estaba en pausa se deja así al terminar.
+        const bool wasPaused = (job.rawStatus & JOB_STATUS_PAUSED) != 0;
+        if (!wasPaused) spooler::PauseJob(job.printer, job.id);
+        auto restore = [&] {
+            if (!wasPaused) spooler::ResumeJob(job.printer, job.id);
+        };
+
+        // 2. Leer los datos completos del trabajo.
+        core::JobInfo held = job;
+        held.rawStatus |= JOB_STATUS_PAUSED;
         preview::SpoolSearch search{request.server, job.printer, request.spoolOverrideDir};
-        preview::SpoolData spool = preview::ReadJobSpool(search, job, 4ull * 1024 * 1024 * 1024);
+        preview::SpoolData spool = preview::ReadJobSpool(search, held, 4ull * 1024 * 1024 * 1024);
         if (spool.error != 0 || spool.truncated || spool.bytes.empty()) {
+            restore();
             fail(spool.error ? spool.error : ERROR_NO_DATA,
                  spool.error == ERROR_ACCESS_DENIED ? Tr(S::PreviewAccessDenied) : Tr(S::RedirectNoData));
             done_(std::move(result));
@@ -127,13 +139,11 @@ void JobActionRunner::Redirect(RedirectRequest request) {
 
         if (!sameDriver && !canRender && !request.allowRaw) {
             // No hay forma de convertir: preguntar al usuario si enviar RAW igualmente.
+            restore();
             result.needsRawConfirmation = true;
             done_(std::move(result));
             return;
         }
-
-        // 2. Pausar el original para que no se imprima dos veces mientras tanto.
-        spooler::PauseJob(job.printer, job.id);
 
         preview::ReprintResult printed;
         const std::wstring docName = job.document.empty() ? L"Documento" : job.document;
@@ -176,7 +186,7 @@ void JobActionRunner::Redirect(RedirectRequest request) {
         }
 
         if (!printed.ok) {
-            spooler::ResumeJob(job.printer, job.id);  // deja el original como estaba
+            restore();  // deja el original como estaba
             fail(printed.error, ActionErrorText(printed.error));
         } else {
             // 3. Eliminar el original: ya está en la otra impresora.

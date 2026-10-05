@@ -128,7 +128,11 @@ bool CanAdminister(const std::wstring& printer);
 // ReadPrinter espera a que lleguen más datos: no llamarla en ese caso. Las
 // lecturas se serializan dentro del proceso: si dos coinciden en el tiempo, la
 // segunda recibe 0 bytes. Si otro programa lee el mismo trabajo a la vez puede
-// pasar lo mismo (ver el reintento de preview::ReadJobSpool).
+// pasar lo mismo (ver el reintento de preview::ReadJobSpool), y el procesador
+// de impresión es "otro programa": solo se lee si el estado real del trabajo
+// (consultado al servidor antes y durante la lectura) cumple CanReadJobData;
+// si no, o si lo reanudan a mitad, devuelve ERROR_BUSY. ResumeJob/RestartJob
+// esperan a que termine o se corte una lectura del mismo trabajo.
 OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint64_t maxBytes,
                      std::vector<std::uint8_t>& out, bool* truncated);
 
