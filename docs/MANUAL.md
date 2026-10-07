@@ -248,8 +248,12 @@ En la barra de estado se ve "Filtro: … (n de m)".
 
 `Ctrl+H` (o el botón del reloj) muestra los trabajos que salieron de la cola con
 su resultado: **Impreso**, **Cancelado**, **Falló** o **Retirado** (se fue sin
-que se viera imprimir). La barra de estado muestra páginas impresas hoy y en los
-últimos 7 días. Menú → *Borrar historial* lo vacía.
+que se viera imprimir). Cada trabajo conserva las mismas columnas que tenía en la
+cola (`#`, páginas × copias, papel, orientación, doble cara, origen del papel,
+tamaño, enviado) y además la hora en que terminó (*Finalizado*). Los registros
+guardados con versiones anteriores a la 0.5.0 muestran "—" en las columnas que
+no tenían. La barra de estado muestra páginas impresas hoy y en los últimos 7
+días. Menú → *Borrar historial* lo vacía.
 
 ## 7. Apariencia e idioma
 

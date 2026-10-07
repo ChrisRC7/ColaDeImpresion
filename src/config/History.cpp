@@ -38,6 +38,13 @@ bool History::Load() {
         e.pages = static_cast<std::uint32_t>(item[L"pages"].AsInt64());
         e.sizeBytes = static_cast<std::uint64_t>(item[L"size"].AsInt64());
         e.outcome = JobOutcomeFromString(item[L"outcome"].AsString());
+        e.position = static_cast<std::uint32_t>(item[L"position"].AsInt64());
+        e.printPages = item[L"printPages"].AsString();
+        e.paper = item[L"paper"].AsString();
+        e.orientation = item[L"orientation"].AsString();
+        e.duplex = item[L"duplex"].AsString();
+        e.source = item[L"source"].AsString();
+        e.submittedUnix = item[L"submitted"].AsInt64();
         entries_.push_back(std::move(e));
     }
     if (entries_.size() > limit_) entries_.resize(limit_);
@@ -61,6 +68,13 @@ bool History::Save() {
         item[L"pages"] = static_cast<long long>(e.pages);
         item[L"size"] = static_cast<long long>(e.sizeBytes);
         item[L"outcome"] = JobOutcomeToString(e.outcome);
+        item[L"position"] = static_cast<long long>(e.position);
+        item[L"printPages"] = e.printPages;
+        item[L"paper"] = e.paper;
+        item[L"orientation"] = e.orientation;
+        item[L"duplex"] = e.duplex;
+        item[L"source"] = e.source;
+        item[L"submitted"] = static_cast<long long>(e.submittedUnix);
         list.Push(std::move(item));
     }
     json[L"entries"] = list;

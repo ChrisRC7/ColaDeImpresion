@@ -90,6 +90,13 @@ std::wstring MachineName(const std::wstring& machine);
 // printer (puede ser nullptr) aporta los nombres de bandejas y papeles del controlador.
 ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts = nullptr,
                        const core::PrinterInfo* printer = nullptr);
+// Registro del historial de un trabajo que salió de la cola, con los mismos
+// valores que tenía su fila en la tabla (páginas, papel, orientación, doble
+// cara, origen, enviado...). El servidor lo completa quien llama.
+config::HistoryEntry MakeHistoryEntry(const core::JobInfo& job, config::JobOutcome outcome, std::int64_t timeUnix,
+                                      const core::ContentFacts* facts = nullptr,
+                                      const core::PrinterInfo* printer = nullptr);
+// Celdas en el orden de HistoryColumns().
 ui::ListRow MakeHistoryRow(const config::HistoryEntry& entry, size_t index);
 std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index);
 

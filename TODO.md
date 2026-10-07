@@ -140,6 +140,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Cambiar el ancho de las columnas con el mouse como en la cola de Windows (arrastrar el borde, doble clic = ajustar al contenido, barra horizontal si no caben, anchos guardados y "Restablecer el ancho de las columnas")
 - [x] Mover las columnas arrastrando su título como en la cola de Windows (línea que marca dónde quedan, desplazamiento automático en los bordes); el orden predeterminado es el de siempre y el de cada operador se guarda en su `config.json` (`columnOrder`) y se conserva al abrir; "Restablecer el orden de las columnas"
 - [x] Ninguna columna desaparece al achicar la ventana o abrir el panel de detalles (antes se ocultaba Enviado, entre otras): aparece la barra horizontal
+- [x] La cabecera (búsqueda, botones de pausa e íconos) y la barra de impresoras se redibujan mientras se cambia el tamaño de la ventana (antes se encimaban hasta soltar el borde)
 - [ ] Verificar en la app el arrastre de columnas (cola, vista "Todas" con Impresora, historial y con barra horizontal); no se abrió la app en la PC personal porque al iniciar pausa las impresoras
 - [x] Botones junto a la búsqueda para pausar / reanudar los trabajos seleccionados y la impresora (texto según lo que harán; solo íconos en ventanas angostas)
 - [x] Indicadores visuales claros de estado (colores + íconos por estado)
@@ -163,13 +164,15 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 - [x] Guardar preferencias del usuario (tema, idioma, atajos, impresora y servidor, ventana, notificaciones...)
 - [x] Guardar historial reciente de trabajos impresos (con resultado y estadísticas)
+- [x] El historial guarda y muestra las mismas columnas que la cola (#, páginas × copias, papel, orientación, doble cara, origen, enviado) además del resultado y la hora en que terminó
+- [ ] (LAIMI) Verificar con trabajos reales que el historial conserva papel, doble cara, origen y páginas × copias de trabajos de otras PCs
 - [x] Archivo de configuración local (JSON) — `%APPDATA%\ColaDeImpresion` o modo portable
 
 ---
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 75 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 76 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

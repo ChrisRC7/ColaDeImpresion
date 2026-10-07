@@ -334,7 +334,12 @@ LRESULT HeaderBar::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_ERASEBKGND: return 1;
-        case WM_SIZE: Layout(); return 0;
+        case WM_SIZE:
+            // Sin CS_HREDRAW solo se pintaría la franja nueva y quedarían restos
+            // de la distribución anterior mientras se arrastra el borde.
+            Layout();
+            Invalidate();
+            return 0;
         case WM_CTLCOLOREDIT: {
             const auto& pal = Style::Get().palette();
             HDC dc = reinterpret_cast<HDC>(wParam);

@@ -569,16 +569,13 @@ void MainWindow::ProcessEvents(const std::vector<core::JobEvent>& events) {
                 break;
             case core::JobEvent::Kind::Finished:
                 if (settings_.keepHistory) {
-                    config::HistoryEntry entry;
-                    entry.timeUnix = util::ToUnixSeconds(util::NowUtc());
+                    // Los datos analizados del trabajo siguen en caché: facts_->Request
+                    // olvida los que salieron de la cola recién después de esto.
+                    const auto facts = facts_->Find(e.job);
+                    config::HistoryEntry entry =
+                        MakeHistoryEntry(e.job, e.outcome, util::ToUnixSeconds(util::NowUtc()), facts.get(),
+                                         snapshot_ ? snapshot_->FindPrinter(e.job.printer) : nullptr);
                     entry.server = settings_.activeServer;
-                    entry.printer = e.job.printer;
-                    entry.document = e.job.document;
-                    entry.user = e.job.user;
-                    entry.machine = e.job.machine;
-                    entry.pages = std::max(e.job.totalPages, e.job.pagesPrinted);
-                    entry.sizeBytes = e.job.sizeBytes;
-                    entry.outcome = e.outcome;
                     history_.Add(std::move(entry));
                     historyChanged = true;
                 }

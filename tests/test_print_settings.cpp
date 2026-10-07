@@ -12,6 +12,7 @@
 #include "TestFramework.h"
 #include "app/JobSheet.h"
 #include "app/RowBuilder.h"
+#include "config/History.h"
 #include "core/PageAccounting.h"
 #include "core/PrintSettings.h"
 #include "core/Spooler.h"
@@ -600,6 +601,77 @@ TEST(TotalPrintPagesIsPagesTimesCopies) {
         if (columns[i].label == L"Páginas") CHECK_EQ(row.cells[i], std::wstring(L"9"));
     CHECK_EQ(app::MakeJobRow(job, true, &facts).cells.size(), app::JobColumns(true).size());
     CHECK(app::HistoryColumns().size() == app::MakeHistoryRow(config::HistoryEntry{}, 0).cells.size());
+}
+
+TEST(HistoryKeepsEveryQueueColumn) {
+    i18n::SetLanguage(i18n::Language::Spanish);
+    DEVMODEW dm = MakeDevMode();
+    dm.dmFields = DM_COPIES | DM_DUPLEX | DM_ORIENTATION;
+    dm.dmCopies = 3;
+    dm.dmDuplex = DMDUP_VERTICAL;
+    dm.dmOrientation = DMORIENT_LANDSCAPE;
+    auto job = EmfJob(3, dm);
+    job.position = 4;
+    job.printer = L"\\\\S\\LAIMI 1";
+    job.document = L"Tarea.pdf";
+    job.user = L"ana";
+    job.machine = L"\\\\LAB-PC07";
+    job.sizeBytes = 2048;
+    job.submitted.wYear = 2026;
+    job.submitted.wMonth = 10;
+    job.submitted.wDay = 6;
+    job.submitted.wHour = 15;
+    auto facts = EmfFacts(3, 0);
+    auto entry = app::MakeHistoryEntry(job, config::JobOutcome::Printed, 1'800'000'000, &facts);
+
+    // Guardar y volver a leer no pierde nada.
+    wchar_t dir[MAX_PATH];
+    GetTempPathW(MAX_PATH, dir);
+    const std::wstring path = std::wstring(dir) + L"cola_tests_historial.json";
+    {
+        config::History history(path);
+        history.Add(entry);
+        CHECK(history.Save());
+    }
+    config::History loaded(path);
+    CHECK(loaded.Load());
+    DeleteFileW(path.c_str());
+    CHECK_EQ(loaded.Entries().size(), size_t(1));
+    const auto& back = loaded.Entries().front();
+    CHECK_EQ(back.position, 4u);
+    CHECK_EQ(back.printPages, entry.printPages);
+    CHECK_EQ(back.paper, entry.paper);
+    CHECK_EQ(back.orientation, entry.orientation);
+    CHECK_EQ(back.duplex, entry.duplex);
+    CHECK_EQ(back.source, entry.source);
+    CHECK_EQ(back.submittedUnix, entry.submittedUnix);
+
+    // Cada columna de la cola tiene la suya en el historial, con el mismo valor
+    // (salvo Estado, que en el historial es el resultado).
+    auto jobColumns = app::JobColumns(true);
+    auto jobRow = app::MakeJobRow(job, true, &facts);
+    auto historyColumns = app::HistoryColumns();
+    auto historyRow = app::MakeHistoryRow(back, 0);
+    CHECK_EQ(historyRow.cells.size(), historyColumns.size());
+    for (size_t i = 0; i < jobColumns.size(); ++i) {
+        if (jobColumns[i].id == L"status") continue;
+        bool found = false;
+        for (size_t h = 0; h < historyColumns.size(); ++h) {
+            if (historyColumns[h].id != L"history." + jobColumns[i].id) continue;
+            found = true;
+            CHECK_EQ(historyRow.cells[h], jobRow.cells[i]);
+        }
+        CHECK(found);
+    }
+    CHECK_EQ(jobRow.cells[6], std::wstring(L"9"));  // páginas × copias
+
+    // Un registro de una versión anterior (sin esos datos) se muestra con "—".
+    config::HistoryEntry old;
+    old.pages = 5;
+    auto oldRow = app::MakeHistoryRow(old, 0);
+    CHECK_EQ(oldRow.cells.size(), historyColumns.size());
+    CHECK_EQ(oldRow.cells[6], std::wstring(L"5"));
+    CHECK_EQ(oldRow.cells[7], std::wstring(L"—"));
 }
 
 TEST(SubmittedShowsDateAndTime) {

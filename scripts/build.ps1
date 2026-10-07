@@ -143,6 +143,16 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - HISTORIAL COMPLETO: imprima o cancele un trabajo y abra el historial
+     (Ctrl+H). Debe tener las mismas columnas que tenía en la cola (#,
+     Páginas = páginas x copias, Papel, Orientación, Doble cara, Origen del
+     papel, Tamaño, Enviado) más Resultado y Finalizado. Los registros de
+     versiones anteriores muestran "—" en las columnas nuevas.
+   - CAMBIAR EL TAMAÑO DE LA VENTANA: arrastre el borde para achicarla y
+     agrandarla; la búsqueda, los botones de pausa y los íconos de la derecha
+     deben acomodarse mientras se arrastra, sin encimarse.
+   - HOJAS EN BLANCO (0.4.9): imprima un documento grande (p. ej. un PDF de
+     50 páginas) con la app abierta y libérelo; debe salir completo.
    - COLUMNAS: arrastre el borde derecho del título de una columna para
      cambiar su ancho (doble clic en el borde = ajustar al contenido). Si no
      caben, aparece una barra horizontal. Clic derecho en los títulos >

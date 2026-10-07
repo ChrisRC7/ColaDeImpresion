@@ -3,7 +3,7 @@
 ; (primero genera dist\ con el ejecutable y luego ejecuta ISCC sobre este archivo)
 
 #define AppName "Cola de Impresión"
-#define AppVersion "0.4.9"
+#define AppVersion "0.5.0"
 #define AppPublisher "ChrisCorp"
 #define AppExe "ColaDeImpresion.exe"
 

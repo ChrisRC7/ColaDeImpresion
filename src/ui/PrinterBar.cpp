@@ -142,7 +142,10 @@ LRESULT PrinterBar::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_ERASEBKGND: return 1;
-        case WM_SIZE: Layout(); return 0;
+        case WM_SIZE:
+            Layout();
+            Invalidate();  // el botón "+" se mueve con el borde derecho
+            return 0;
         case WM_MOUSEMOVE: {
             if (!trackingMouse_) {
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};

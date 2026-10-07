@@ -21,9 +21,18 @@ struct HistoryEntry {
     std::wstring document;
     std::wstring user;
     std::wstring machine;
-    std::uint32_t pages = 0;
+    std::uint32_t pages = 0;  // para las estadísticas
     std::uint64_t sizeBytes = 0;
     JobOutcome outcome = JobOutcome::Printed;
+    // Lo que mostraba la tabla de la cola al salir el trabajo, para que el
+    // historial conserve todas sus columnas. Vacío / 0 en registros anteriores.
+    std::uint32_t position = 0;     // columna "#"
+    std::wstring printPages;        // "Páginas" (páginas × copias, o "—")
+    std::wstring paper;
+    std::wstring orientation;
+    std::wstring duplex;
+    std::wstring source;            // origen del papel
+    std::int64_t submittedUnix = 0;  // "Enviado" (UTC)
 };
 
 struct HistoryStats {

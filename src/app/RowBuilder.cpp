@@ -296,14 +296,22 @@ std::vector<ui::ListColumn> JobColumns(bool showPrinter) {
 std::vector<ui::ListColumn> HistoryColumns() {
     using ui::Align;
     std::vector<ui::ListColumn> columns;
+    // Las mismas columnas que la cola (con Impresora), con el resultado en lugar
+    // del estado y al final el momento en que el trabajo salió de la cola.
+    columns.push_back({Tr(S::ColNumber), 30, Align::Right, false, false, -1, L"history.number"});
     columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, -1, L"history.document"});
-    columns.push_back({Tr(S::ColResult), 118, Align::Center, true, false, -1, L"history.result"});
-    columns.push_back({Tr(S::ColUser), 118, Align::Center, false, false, -1, L"history.user"});
-    columns.push_back({Tr(S::ColMachine), 118, Align::Center, false, false, -1, L"history.machine"});
-    columns.push_back({Tr(S::ColPrinter), 130, Align::Center, false, false, -1, L"history.printer"});
-    columns.push_back({Tr(S::ColPages), 64, Align::Center, false, false, -1, L"history.pages"});
-    columns.push_back({Tr(S::ColSize), 74, Align::Center, false, false, -1, L"history.size"});
-    columns.push_back({Tr(S::ColTime), 136, Align::Center, false, false, -1, L"history.time"});
+    columns.push_back({Tr(S::ColResult), 104, Align::Center, true, false, -1, L"history.result"});
+    columns.push_back({Tr(S::ColUser), 100, Align::Center, false, false, -1, L"history.user"});
+    columns.push_back({Tr(S::ColMachine), 100, Align::Center, false, false, -1, L"history.machine"});
+    columns.push_back({Tr(S::ColPrinter), 120, Align::Center, false, false, -1, L"history.printer"});
+    columns.push_back({Tr(S::ColPages), 78, Align::Center, false, false, -1, L"history.pages"});
+    columns.push_back({Tr(S::ColPaper), 84, Align::Center, false, false, -1, L"history.paper"});
+    columns.push_back({Tr(S::ColOrientation), 96, Align::Center, false, false, -1, L"history.orientation"});
+    columns.push_back({Tr(S::ColDuplex), 96, Align::Center, false, false, -1, L"history.duplex"});
+    columns.push_back({Tr(S::ColSource), 130, Align::Center, false, false, -1, L"history.source"});
+    columns.push_back({Tr(S::ColSize), 72, Align::Center, false, false, -1, L"history.size"});
+    columns.push_back({Tr(S::ColSubmitted), 124, Align::Center, false, false, -1, L"history.submitted"});
+    columns.push_back({Tr(S::ColFinished), 124, Align::Center, false, false, -1, L"history.time"});
     return columns;
 }
 
@@ -356,17 +364,48 @@ std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index) {
     return util::Format(L"h%lld_%zu", static_cast<long long>(entry.timeUnix), index);
 }
 
+config::HistoryEntry MakeHistoryEntry(const core::JobInfo& job, config::JobOutcome outcome, std::int64_t timeUnix,
+                                      const core::ContentFacts* facts, const core::PrinterInfo* printer) {
+    config::HistoryEntry entry;
+    entry.timeUnix = timeUnix;
+    entry.printer = job.printer;
+    entry.document = job.document;
+    entry.user = job.user;
+    entry.machine = job.machine;
+    entry.pages = std::max(job.totalPages, job.pagesPrinted);
+    entry.sizeBytes = job.sizeBytes;
+    entry.outcome = outcome;
+    // Los mismos valores que MakeJobRow mostraba en la cola.
+    entry.position = job.position;
+    entry.printPages = TotalPagesText(TotalPrintPages(job, facts));
+    const ListSettings settings = ResolveListSettings(job, facts, printer);
+    entry.paper = settings.paper;
+    entry.orientation = settings.orientation;
+    entry.duplex = settings.duplex;
+    entry.source = settings.source;
+    if (job.submitted.wYear) entry.submittedUnix = util::ToUnixSeconds(job.submitted);
+    return entry;
+}
+
 ui::ListRow MakeHistoryRow(const config::HistoryEntry& e, size_t index) {
+    // Registros de versiones anteriores: sin esos datos se muestra "—".
+    auto orDash = [](const std::wstring& text) { return text.empty() ? std::wstring(L"—") : text; };
     ui::ListRow row;
     row.key = HistoryKey(e, index);
+    row.cells.push_back(e.position ? std::to_wstring(e.position) : L"");
     row.cells.push_back(e.document.empty() ? Tr(S::Unknown) : e.document);
     row.cells.push_back(OutcomeText(e.outcome));
     row.cells.push_back(e.user);
     row.cells.push_back(MachineName(e.machine));
     row.cells.push_back(PrinterShortName(e.printer));
-    row.cells.push_back(e.pages ? std::to_wstring(e.pages) : L"—");
+    row.cells.push_back(!e.printPages.empty() ? e.printPages : e.pages ? std::to_wstring(e.pages) : L"—");
+    row.cells.push_back(orDash(e.paper));
+    row.cells.push_back(orDash(e.orientation));
+    row.cells.push_back(orDash(e.duplex));
+    row.cells.push_back(orDash(e.source));
     row.cells.push_back(util::FormatBytes(e.sizeBytes));
-    row.cells.push_back(util::FormatTimeIso(util::FromUnixSeconds(e.timeUnix)));
+    row.cells.push_back(e.submittedUnix ? util::FormatDateTime(util::FromUnixSeconds(e.submittedUnix)) : L"—");
+    row.cells.push_back(util::FormatDateTime(util::FromUnixSeconds(e.timeUnix)));
     row.tone = ToneForOutcome(e.outcome);
     row.glyph = e.outcome == config::JobOutcome::Printed ? ui::glyph::Completed
                 : e.outcome == config::JobOutcome::Failed ? ui::glyph::Error
