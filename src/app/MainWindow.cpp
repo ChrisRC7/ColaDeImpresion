@@ -17,6 +17,7 @@
 #include "core/Spooler.h"
 #include "i18n/Strings.h"
 #include "ui/DarkMode.h"
+#include "ui/ExportDialog.h"
 #include "ui/Gfx.h"
 #include "ui/Style.h"
 #include "util/Format.h"
@@ -1315,9 +1316,20 @@ void MainWindow::ExportHistory() {
         ShowTransient(Tr(S::ExportEmpty), ui::Tone::Warning);
         return;
     }
+    // Todo el historial o un rango de los días que tienen registros.
+    const auto days = HistoryDays(history_.Entries());
+    std::vector<ui::ExportDay> choices;
+    for (const auto& day : days) choices.push_back({DayDisplay(day.key), day.records});
+    ui::ExportChoice choice;
+    choice.to = choices.size() - 1;  // el rango propuesto abarca todo; el operador lo acota
+    if (!ui::ShowExportDialog(hwnd_, choices, choice)) return;
+    ExportPeriod period;
+    if (!choice.all) period = {days[choice.from].key, days[choice.to].key};
+    const auto entries = FilterHistory(history_.Entries(), period);
+
     std::wstring error;
     const std::wstring path =
-        RunHistoryExport(hwnd_, history_.Entries(), EffectiveColumnOrder(settings_.columnOrder), error);
+        RunHistoryExport(hwnd_, entries, EffectiveColumnOrder(settings_.columnOrder), period, error);
     if (!error.empty()) {
         const std::wstring message = util::Format(Tr(S::ExportFailed), error.c_str());
         ShowTransient(message, ui::Tone::Danger);
@@ -1326,8 +1338,7 @@ void MainWindow::ExportHistory() {
     }
     if (path.empty()) return;  // canceló el diálogo
     ShowTransient(util::Format(Tr(S::ExportDone), path.c_str()), ui::Tone::Success);
-    const std::wstring question = util::Format(Tr(S::ExportOpenNow), static_cast<unsigned>(history_.Entries().size()),
-                                               path.c_str());
+    const std::wstring question = util::Format(Tr(S::ExportOpenNow), static_cast<unsigned>(entries.size()), path.c_str());
     if (MessageBoxW(hwnd_, question.c_str(), Tr(S::AppTitle), MB_YESNO | MB_ICONINFORMATION) == IDYES)
         ShellExecuteW(hwnd_, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }

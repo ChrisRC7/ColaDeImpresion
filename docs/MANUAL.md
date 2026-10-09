@@ -266,9 +266,19 @@ Menú → *Borrar historial* lo vacía.
 ### Exportar a Excel
 
 En el historial aparece el botón **Exportar a Excel** junto a los de pausa
-(también `Ctrl+Shift+E` o menú `⋯` → *Exportar historial a Excel…*). Pide dónde
-guardar el archivo (`Historial de impresión AAAA-MM-DD.xlsx`) y ofrece abrirlo.
-El libro tiene estas hojas:
+(también `Ctrl+Shift+E` o menú `⋯` → *Exportar historial a Excel…*). Primero
+pregunta qué exportar:
+
+- **Todo el historial** (muestra cuántos registros hay y de qué fecha a qué fecha), o
+- **Solo un rango de fechas**: *Desde* y *Hasta* listan solo los días que tienen
+  registros (con cuántos tiene cada uno) y abajo se ve cuántos registros entran
+  en el rango. Se elige con el mouse o con el teclado: `Tab` pasa de un control
+  a otro, `↑`/`↓` cambian la opción o el día, `Espacio`/`F4` abren la lista de
+  días, `Enter` exporta y `Esc` cancela.
+
+Después pide dónde guardar el archivo (`Historial de impresión AAAA-MM-DD.xlsx`,
+o `… AAAA-MM-DD a AAAA-MM-DD.xlsx` con un rango) y ofrece abrirlo. El resumen
+indica el período exportado. El libro tiene estas hojas:
 
 - **Historial**: todos los registros con las columnas de la tabla, en el orden en
   que el operador las tenga, más *Servidor*. Páginas, tamaño (KB) y las fechas son

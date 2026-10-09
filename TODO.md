@@ -176,6 +176,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Cada tabla del resumen de Excel en su propia hoja ("Por resultado", "Por papel", "Por impresora", "Por usuario", "Por equipo", "Por día"...), con título y encabezados fijos, para no bajar entre tablas; "Resumen" queda con los datos generales (0.5.4)
 - [x] Hojas del resumen vacías: los trabajos liberados (`F11`, `Ctrl+R`) que se imprimían entre dos refrescos quedaban "Retirado" y la copia local de CSR se agregaba como otro registro; ahora quedan "Impreso", sin duplicados, y una tabla sin datos dice por qué (0.5.5)
 - [ ] (LAIMI) Confirmar con trabajos reales liberados con `F11` que el historial dice "Impreso" una sola vez y que el Excel trae las tablas con datos
+- [x] Elegir al exportar: todo el historial o solo un rango de fechas (Desde/Hasta entre los días con registros, con el total del rango); el resumen y el nombre del archivo indican el período (0.5.6)
+- [ ] Probar en la app el diálogo de exportación con el mouse (lista de días, cambio de opción) y con un historial largo (muchos días en la lista)
 - [ ] Probar en la app el diálogo "Guardar como" de la exportación y abrir el archivo desde el aviso (el libro se verificó abriéndolo en Excel; el diálogo no se abrió para no robar el foco)
 - [x] Archivo de configuración local (JSON) — `%APPDATA%\ColaDeImpresion` o modo portable
 
@@ -183,7 +185,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 86 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 87 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

@@ -85,9 +85,62 @@ HistorySummary SummarizeHistory(const std::vector<config::HistoryEntry>& entries
     return s;
 }
 
-std::wstring DefaultExportFileName(std::int64_t nowUnix) {
-    return util::Format(Tr(S::ExportDefaultName), util::FormatDateKey(util::FromUnixSeconds(nowUnix)).c_str()) +
-           L".xlsx";
+namespace {
+
+std::wstring DayKey(std::int64_t unix) { return util::FormatDateKey(util::FromUnixSeconds(unix)); }
+
+// "2026-10-09" -> fecha (sin hora).
+SYSTEMTIME DayFromKey(const std::wstring& key) {
+    SYSTEMTIME t{};
+    if (key.size() < 10) return t;
+    t.wYear = static_cast<WORD>(_wtoi(key.substr(0, 4).c_str()));
+    t.wMonth = static_cast<WORD>(_wtoi(key.substr(5, 2).c_str()));
+    t.wDay = static_cast<WORD>(_wtoi(key.substr(8, 2).c_str()));
+    return t;
+}
+
+}  // namespace
+
+std::vector<HistoryDay> HistoryDays(const std::vector<config::HistoryEntry>& entries) {
+    std::map<std::wstring, std::uint32_t> days;
+    for (const auto& e : entries) ++days[DayKey(e.timeUnix)];
+    std::vector<HistoryDay> out;
+    for (const auto& [key, records] : days) out.push_back({key, records});
+    return out;
+}
+
+std::wstring DayDisplay(const std::wstring& key) {
+    const SYSTEMTIME t = DayFromKey(key);
+    return util::Format(L"%02u/%02u/%04u", t.wDay, t.wMonth, t.wYear);
+}
+
+std::vector<config::HistoryEntry> FilterHistory(const std::vector<config::HistoryEntry>& entries,
+                                                const ExportPeriod& period) {
+    if (period.All()) return entries;
+    std::vector<config::HistoryEntry> out;
+    for (const auto& e : entries) {
+        const std::wstring day = DayKey(e.timeUnix);  // "AAAA-MM-DD": se compara como texto
+        if (!period.fromKey.empty() && day < period.fromKey) continue;
+        if (!period.toKey.empty() && day > period.toKey) continue;
+        out.push_back(e);
+    }
+    return out;
+}
+
+std::wstring PeriodText(const ExportPeriod& period) {
+    if (period.All()) return Tr(S::ExportAll);
+    if (period.fromKey == period.toKey) return DayDisplay(period.fromKey);
+    return util::Format(Tr(S::ExportPeriodRange), DayDisplay(period.fromKey).c_str(),
+                        DayDisplay(period.toKey).c_str());
+}
+
+std::wstring DefaultExportFileName(std::int64_t nowUnix, const ExportPeriod& period) {
+    std::wstring when = DayKey(nowUnix);
+    if (!period.All())
+        when = period.fromKey == period.toKey
+                   ? period.fromKey
+                   : util::Format(Tr(S::ExportNameRange), period.fromKey.c_str(), period.toKey.c_str());
+    return util::Format(Tr(S::ExportDefaultName), when.c_str()) + L".xlsx";
 }
 
 namespace {
@@ -204,7 +257,8 @@ const T* MaxPages(const std::map<std::wstring, T>& map, std::wstring& key) {
 }
 
 // Hoja "Resumen" con los datos generales y una hoja por cada tabla.
-std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entries, std::int64_t nowUnix) {
+std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entries, std::int64_t nowUnix,
+                                 const ExportPeriod& period) {
     const HistorySummary s = SummarizeHistory(entries);
     const Tally& printed = s.Printed();
     auto outcome = [&](config::JobOutcome o) -> const Tally& { return s.byOutcome[static_cast<int>(o)]; };
@@ -224,6 +278,7 @@ std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entrie
     sheet.rows.push_back({});
     sheet.rows.push_back({Cell::Text(Tr(S::XlsGeneral), CellStyle::Bold)});
     sheet.rows.push_back({Cell::Text(Tr(S::XlsItem), CellStyle::Header), Cell::Text(Tr(S::XlsValue), CellStyle::Header)});
+    line(S::XlsPeriod, Cell::Text(PeriodText(period)));
     line(S::XlsRecords, number(s.records));
     if (s.records) {
         line(S::XlsFrom, Cell::Number(LocalSerial(s.firstUnix), CellStyle::DateTime));
@@ -249,13 +304,8 @@ std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entrie
                                        CellStyle::Decimal));
     std::wstring key;
     if (const Tally* day = MaxPages(s.byDay, key)) {
-        SYSTEMTIME t{};
-        t.wYear = static_cast<WORD>(_wtoi(key.substr(0, 4).c_str()));
-        t.wMonth = static_cast<WORD>(_wtoi(key.substr(5, 2).c_str()));
-        t.wDay = static_cast<WORD>(_wtoi(key.substr(8, 2).c_str()));
-        const std::wstring date = util::Format(L"%02u/%02u/%04u", t.wDay, t.wMonth, t.wYear);
-        line(S::XlsBusiestDay,
-             Cell::Text(util::Format(Tr(S::XlsDayPages), date.c_str(), static_cast<unsigned long long>(day->pages))));
+        line(S::XlsBusiestDay, Cell::Text(util::Format(Tr(S::XlsDayPages), DayDisplay(key).c_str(),
+                                                       static_cast<unsigned long long>(day->pages))));
     }
     int busiestHour = -1;
     for (int h = 0; h < 24; ++h)
@@ -304,13 +354,8 @@ std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entrie
 
     // Por día (cronológico, con la fecha como fecha de Excel) y por hora.
     std::vector<std::pair<Cell, Tally>> days;
-    for (const auto& [day, tally] : s.byDay) {
-        SYSTEMTIME t{};
-        t.wYear = static_cast<WORD>(_wtoi(day.substr(0, 4).c_str()));
-        t.wMonth = static_cast<WORD>(_wtoi(day.substr(5, 2).c_str()));
-        t.wDay = static_cast<WORD>(_wtoi(day.substr(8, 2).c_str()));
-        days.push_back({Cell::Number(util::xlsx::SerialDate(t), CellStyle::Date), tally});
-    }
+    for (const auto& [day, tally] : s.byDay)
+        days.push_back({Cell::Number(util::xlsx::SerialDate(DayFromKey(day)), CellStyle::Date), tally});
     table(S::XlsSheetDay, S::XlsByDay, S::XlsDate, std::move(days));
     std::vector<std::pair<Cell, Tally>> hours;
     for (int h = 0; h < 24; ++h)
@@ -322,18 +367,19 @@ std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entrie
 }  // namespace
 
 std::vector<Sheet> BuildHistoryWorkbook(const std::vector<config::HistoryEntry>& entries, std::int64_t nowUnix,
-                                        const std::vector<std::wstring>& columnOrder) {
+                                        const std::vector<std::wstring>& columnOrder, const ExportPeriod& period) {
     std::vector<Sheet> sheets;
     sheets.push_back(HistorySheet(entries, columnOrder));
-    for (auto& sheet : SummarySheets(entries, nowUnix)) sheets.push_back(std::move(sheet));
+    for (auto& sheet : SummarySheets(entries, nowUnix, period)) sheets.push_back(std::move(sheet));
     return sheets;
 }
 
 std::wstring RunHistoryExport(HWND owner, const std::vector<config::HistoryEntry>& entries,
-                              const std::vector<std::wstring>& columnOrder, std::wstring& error) {
+                              const std::vector<std::wstring>& columnOrder, const ExportPeriod& period,
+                              std::wstring& error) {
     error.clear();
     const std::int64_t now = util::ToUnixSeconds(util::NowUtc());
-    std::wstring file = DefaultExportFileName(now);
+    std::wstring file = DefaultExportFileName(now, period);
     file.resize(4096, L'\0');
     std::wstring filter = Tr(S::ExportFilter);
     filter += L'\0';
@@ -352,7 +398,7 @@ std::wstring RunHistoryExport(HWND owner, const std::vector<config::HistoryEntry
     if (!GetSaveFileNameW(&ofn)) return L"";
     file.resize(wcslen(file.c_str()));
 
-    if (!util::xlsx::SaveWorkbook(file, BuildHistoryWorkbook(entries, now, columnOrder))) {
+    if (!util::xlsx::SaveWorkbook(file, BuildHistoryWorkbook(entries, now, columnOrder, period))) {
         error = util::Win32ErrorMessage(GetLastError());
         return L"";
     }

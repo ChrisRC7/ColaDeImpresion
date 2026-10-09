@@ -152,6 +152,12 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - EXPORTAR UN RANGO DE FECHAS (0.5.6): en el historial pulse "Exportar a
+     Excel" (o Ctrl+Shift+E). Aparece un cuadro: "Todo el historial" o
+     "Solo un rango de fechas". Elija Desde y Hasta (solo aparecen los días
+     con registros) y vea abajo cuántos registros entran. Exporte: el
+     archivo se llama "Historial de impresión <desde> a <hasta>.xlsx", la
+     hoja Historial trae solo esos días y el Resumen dice el período.
    - RESULTADO EN EL HISTORIAL (0.5.5): libere un trabajo con F11 (o
      Ctrl+R) y espere a que se imprima. En el historial (Ctrl+H) debe decir
      "Impreso" (antes quedaba como "Retirado" si se imprimía muy rápido) y

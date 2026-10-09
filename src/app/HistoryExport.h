@@ -46,18 +46,50 @@ struct HistorySummary {
 
 HistorySummary SummarizeHistory(const std::vector<config::HistoryEntry>& entries);
 
+// Día con registros en el historial (por la hora local de finalización, como
+// la tabla "Por día" del resumen).
+struct HistoryDay {
+    std::wstring key;  // "2026-10-09"
+    std::uint32_t records = 0;
+};
+
+// Días con registros, del más antiguo al más reciente.
+std::vector<HistoryDay> HistoryDays(const std::vector<config::HistoryEntry>& entries);
+
+// "2026-10-09" -> "09/10/2026".
+std::wstring DayDisplay(const std::wstring& key);
+
+// Qué se exporta: todo el historial (claves vacías) o los días entre
+// fromKey y toKey, ambos incluidos.
+struct ExportPeriod {
+    std::wstring fromKey;
+    std::wstring toKey;
+    bool All() const { return fromKey.empty() && toKey.empty(); }
+};
+
+// Registros del período, en el mismo orden.
+std::vector<config::HistoryEntry> FilterHistory(const std::vector<config::HistoryEntry>& entries,
+                                                const ExportPeriod& period);
+
+// "Todo el historial", "09/10/2026" o "Del 01/10/2026 al 09/10/2026".
+std::wstring PeriodText(const ExportPeriod& period);
+
 // Hojas del libro. columnOrder = orden efectivo de las columnas (ids
-// "history.*" de EffectiveColumnOrder); vacío = orden predeterminado.
+// "history.*" de EffectiveColumnOrder); vacío = orden predeterminado. El
+// período exportado se indica en el resumen.
 std::vector<util::xlsx::Sheet> BuildHistoryWorkbook(const std::vector<config::HistoryEntry>& entries,
                                                     std::int64_t nowUnix,
-                                                    const std::vector<std::wstring>& columnOrder = {});
+                                                    const std::vector<std::wstring>& columnOrder = {},
+                                                    const ExportPeriod& period = {});
 
-// Nombre sugerido para el archivo ("Historial de impresión 2026-10-09.xlsx").
-std::wstring DefaultExportFileName(std::int64_t nowUnix);
+// Nombre sugerido para el archivo ("Historial de impresión 2026-10-09.xlsx";
+// con un rango, "Historial de impresión 2026-10-01 a 2026-10-09.xlsx").
+std::wstring DefaultExportFileName(std::int64_t nowUnix, const ExportPeriod& period = {});
 
-// Diálogo "Guardar como" + escritura. Devuelve la ruta guardada, o vacío si
-// el operador canceló; si falla, error recibe el mensaje.
+// Diálogo "Guardar como" + escritura de los registros ya filtrados. Devuelve
+// la ruta guardada, o vacío si el operador canceló; si falla, error recibe el mensaje.
 std::wstring RunHistoryExport(HWND owner, const std::vector<config::HistoryEntry>& entries,
-                              const std::vector<std::wstring>& columnOrder, std::wstring& error);
+                              const std::vector<std::wstring>& columnOrder, const ExportPeriod& period,
+                              std::wstring& error);
 
 }  // namespace cola::app

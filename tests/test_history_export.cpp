@@ -17,6 +17,7 @@
 #include "preview/JobFacts.h"
 #include "preview/PdlSettings.h"
 #include "preview/ZipReader.h"
+#include "ui/ExportDialog.h"
 #include "util/Strings.h"
 #include "util/Xlsx.h"
 #include "util/ZipWriter.h"
@@ -307,4 +308,68 @@ TEST(HistorySummaryAndWorkbook) {
     }
     CHECK(!util::xlsx::BuildWorkbook(sheets).empty());
     CHECK(app::DefaultExportFileName(now).find(L".xlsx") != std::wstring::npos);
+}
+
+TEST(HistoryExportDateRange) {
+    i18n::SetLanguage(i18n::Language::Spanish);
+    const std::int64_t now = 1'800'000'000;
+    const std::int64_t day = 86'400;
+    std::vector<config::HistoryEntry> entries;
+    entries.push_back(Entry(now, config::JobOutcome::Printed, L"4", L"Carta", L"ana"));
+    entries.push_back(Entry(now - 60, config::JobOutcome::Printed, L"1", L"Carta", L"ana"));
+    entries.push_back(Entry(now - 2 * day, config::JobOutcome::Printed, L"2", L"A3", L"luis"));
+    entries.push_back(Entry(now - 5 * day, config::JobOutcome::Cancelled, L"3", L"Carta", L"ana"));
+
+    // Días con registros, del más antiguo al más reciente.
+    const auto days = app::HistoryDays(entries);
+    CHECK_EQ(days.size(), size_t(3));
+    if (days.size() != 3) return;
+    CHECK(days[0].key < days[1].key && days[1].key < days[2].key);
+    CHECK_EQ(days[2].records, 2u);
+    CHECK_EQ(app::DayDisplay(L"2026-10-09"), std::wstring(L"09/10/2026"));
+
+    // Todo, un rango y un solo día.
+    CHECK_EQ(app::FilterHistory(entries, {}).size(), size_t(4));
+    const app::ExportPeriod lastTwo{days[1].key, days[2].key};
+    const auto filtered = app::FilterHistory(entries, lastTwo);
+    CHECK_EQ(filtered.size(), size_t(3));
+    CHECK_EQ(filtered.front().timeUnix, now);  // conserva el orden
+    CHECK_EQ(app::FilterHistory(entries, {days[0].key, days[0].key}).size(), size_t(1));
+
+    CHECK_EQ(app::PeriodText({}), std::wstring(L"Todo el historial"));
+    CHECK_EQ(app::PeriodText({L"2026-10-01", L"2026-10-09"}), std::wstring(L"Del 01/10/2026 al 09/10/2026"));
+    CHECK_EQ(app::PeriodText({L"2026-10-09", L"2026-10-09"}), std::wstring(L"09/10/2026"));
+    CHECK_EQ(app::DefaultExportFileName(now, {L"2026-10-01", L"2026-10-09"}),
+             std::wstring(L"Historial de impresión 2026-10-01 a 2026-10-09.xlsx"));
+    CHECK_EQ(app::DefaultExportFileName(now, {L"2026-10-09", L"2026-10-09"}),
+             std::wstring(L"Historial de impresión 2026-10-09.xlsx"));
+
+    // El resumen dice qué período se exportó.
+    const auto sheets = app::BuildHistoryWorkbook(filtered, now, {}, lastTwo);
+    bool periodLine = false;
+    for (const auto& row : sheets[1].rows)
+        if (row.size() > 1 && row[0].text == L"Período exportado")
+            periodLine = row[1].text == app::PeriodText(lastTwo);
+    CHECK(periodLine);
+    CHECK_EQ(sheets[0].rows.size(), filtered.size() + 1);
+
+    // Elección del diálogo: el extremo que se cambia arrastra al otro.
+    std::vector<ui::ExportDay> choices = {{L"a", 1}, {L"b", 2}, {L"c", 4}};
+    ui::ExportChoice choice;
+    choice.all = false;
+    choice.from = 2;
+    choice.to = 1;
+    ui::NormalizeExportChoice(choice, choices.size(), true);
+    CHECK_EQ(choice.to, size_t(2));
+    choice.from = 2;
+    choice.to = 0;
+    ui::NormalizeExportChoice(choice, choices.size(), false);
+    CHECK_EQ(choice.from, size_t(0));
+    CHECK_EQ(ui::ExportChoiceRecords(choices, choice), 1u);
+    choice.to = 9;  // fuera de rango
+    ui::NormalizeExportChoice(choice, choices.size(), false);
+    CHECK_EQ(choice.to, size_t(2));
+    CHECK_EQ(ui::ExportChoiceRecords(choices, choice), 7u);
+    choice.all = true;
+    CHECK_EQ(ui::ExportChoiceRecords(choices, choice), 7u);
 }
