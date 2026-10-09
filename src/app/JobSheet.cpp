@@ -365,6 +365,7 @@ std::wstring ReasonText(Reason reason) {
         case Reason::KindUnknown: return Tr(S::ReasonKindUnknown);
         case Reason::DependsOnInputs: return Tr(S::ReasonDependsOnInputs);
         case Reason::PagesMismatch: return Tr(S::ReasonPagesMismatch);
+        case Reason::BlankBackCounted: return Tr(S::ReasonBlankBackCounted);
         default: return L"";
     }
 }

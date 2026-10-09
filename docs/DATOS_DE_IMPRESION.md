@@ -70,7 +70,7 @@ Fiabilidad: **F** = fiable, **E** = estimado, **N** = no determinable.
 | Tamaño | `JOB_INFO_2.Size` | F | F | F | Bytes recibidos por el spooler (32 bits). |
 | Tipo de datos | `JOB_INFO_2.pDatatype` | F | F | F | Es lo declarado, no el formato real. |
 | Controlador / procesador | `pDriverName`, `pPrintProcessor`, `pParameters` | F | F | F | |
-| Páginas en los datos | Conteo en los datos (EMF/XPS/DSC) o `TotalPages` | F | F | F si hay `TotalPages` o `%%Pages`; E con `EJL JI PAGES` | Páginas que generó la aplicación, **incluidas** las que repitió para hacer copias. |
+| Páginas en los datos | Conteo en los datos (EMF/XPS/DSC/`FF` de ESC/Page) o `TotalPages` | F | F | F con `%%Pages` o los `FF` de ESC/Page; si no, `TotalPages` (E en las Epson: puede traer el dorso en blanco) | Páginas que generó la aplicación, **incluidas** las que repitió para hacer copias. |
 | Páginas lógicas (una copia) | Páginas en los datos − repeticiones detectadas | F si se comparó el contenido; E si hay repetición o no se pudo comprobar | igual | E (no se puede comparar el contenido) | Una sola página siempre es F. |
 | Papel | `dmPaperSize`, `dmFormName`, `dmPaperWidth/Length` (décimas de mm) | F (DEVMODE efectivo del spool) | F si el PrintTicket coincide; E si no se leyó | F si PJL/DSC lo confirman; E si solo DEVMODE o EJL | `dmPaperWidth/Length` prevalecen sobre `dmPaperSize`. |
 | Orientación | `dmOrientation` | F | F/E | F/E | |
@@ -145,6 +145,16 @@ Hallazgos, con la prueba que los respalda (sección 8):
     `CO` no cambia nunca; las copias van en `QT`; `JI PAGES` son **hojas
     físicas** (no páginas). El intercalado no se pudo variar: el controlador lo
     fuerza.
+
+    **Páginas (0.5.2).** En el servidor (`LAIMI 1 - INK`, cola a doble cara),
+    `TotalPages` vale 2, 2 y 4 para documentos de 1, 2 y 3 páginas: cuenta el
+    dorso en blanco de la última hoja. Con 3 páginas los datos traen ese dorso
+    como una 4.ª página sin imagen (`GS 0ptE … GS 1;1pcsO FF`); con 1 página el
+    controlador pone `DX=OFF` y no lo trae. Los datos ESC/Page se pueden
+    recorrer completos: `GS <parámetros><minúsculas>[{]<MAYÚSCULA>`, los
+    comandos con `{` (p. ej. `cdb{I`, bandas de imagen) llevan tantos bytes
+    como dice su primer parámetro, y cada página termina con un `FF` fuera de
+    los comandos. La app cuenta esos `FF` sin el dorso de relleno.
 12. **Lista de trabajos incompleta desde otras PCs:** en una conexión a una
     impresora compartida (`\\vtec-laimiprint\Cola`), Windows responde
     `EnumJobs` y `GetPrinter` desde la caché del cliente (Client Side
@@ -161,7 +171,7 @@ Hallazgos, con la prueba que los respalda (sección 8):
 ## 5. Reglas de cálculo
 
 ```
-páginas en los datos  = conteo en los datos (EMF/XPS/DSC) | TotalPages | contador EJL (estimado)
+páginas en los datos  = conteo en los datos (EMF/XPS/DSC/FF de ESC/Page) | TotalPages
 páginas lógicas       = período de repetición si los datos repiten la secuencia (estimado)
                         | páginas en los datos (fiable solo si se comparó el contenido o es 1)
 copias                = DEVMODE efectivo × repeticiones hechas por la aplicación

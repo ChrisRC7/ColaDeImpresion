@@ -353,6 +353,9 @@ X(ReasonDependsOnInputs, L"Se calcula con valores estimados o no determinables."
   L"Calculated from estimated or undetermined values.")
 X(ReasonPagesMismatch, L"El spooler y los datos no coinciden en el número de páginas.",
   L"The spooler and the data disagree on the number of pages.")
+X(ReasonBlankBackCounted,
+  L"A doble cara el spooler cuenta el dorso en blanco que agrega el controlador Epson: puede ser una página menos (los datos son demasiado grandes para contarlas).",
+  L"In duplex the spooler counts the blank back side the Epson driver adds: it may be one page less (the data is too large to count them).")
 X(SummaryCopy, L"%u copia", L"%u copy")
 X(SummaryCopies, L"%u copias", L"%u copies")
 X(SummarySide, L"%u cara", L"%u side")

@@ -44,7 +44,8 @@ struct ContentFacts {
     DataKind kind = DataKind::Unknown;
     std::wstring language;  // "EMF", "XPS", "ESC/Page", "PCL"... (para mostrar)
 
-    enum class PageSource { None, EmfRecords, XpsFixedPages, PostScriptDsc };
+    // EscPageFormFeeds: fines de página (FF) contados en los comandos ESC/Page.
+    enum class PageSource { None, EmfRecords, XpsFixedPages, PostScriptDsc, EscPageFormFeeds };
     PageSource pageSource = PageSource::None;
     std::uint32_t pages = 0;
     // La secuencia de páginas se repite de forma exacta con este período
@@ -75,6 +76,10 @@ struct ContentFacts {
     Field<std::uint32_t> sheetsCounter;
     // Controlador con el que se verificó la sintaxis EJL (vacío = solo indicio).
     std::wstring verifiedDriver;
+    // ESC/Page del controlador EPSON AM-C6000 con los datos cortados por tamaño:
+    // no se pudieron contar las páginas y, a doble cara, TotalPages cuenta el
+    // dorso en blanco que completa la última hoja (medido: 1 -> 2, 2 -> 2, 3 -> 4).
+    bool spoolerCountsBlankBack = false;
 
     // EMF: DEVMODE que viaja dentro del spool (registro EMRI_DEVMODE vigente para
     // la primera página). Es el que aplica el procesador de impresión; puede no
@@ -120,6 +125,7 @@ enum class Reason {
     KindUnknown,        // no se sabe en qué formato están los datos
     DependsOnInputs,    // cálculo con alguna entrada estimada o no determinable
     PagesMismatch,      // TotalPages y el conteo de los datos no coinciden
+    BlankBackCounted,   // TotalPages par puede incluir el dorso en blanco que agrega el controlador Epson
 };
 
 struct Quantity {

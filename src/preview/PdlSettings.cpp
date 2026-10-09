@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -216,6 +217,23 @@ void ParseEjl(const std::uint8_t* data, size_t size, const std::vector<std::stri
         if (orientation == 0) facts.orientation.Set(DMORIENT_PORTRAIT);
         else if (orientation == 1) facts.orientation.Set(DMORIENT_LANDSCAPE);
     }
+    // Páginas: a doble cara (la configuración de las colas del LAIMI) el
+    // JOB_INFO_2.TotalPages del servidor cuenta el dorso en blanco que completa
+    // la última hoja (1 página => 2, 3 => 4), así que se cuentan en los datos.
+    const bool escPage = std::any_of(header.begin(), header.end(), [](const std::string& l) {
+        return l.rfind("@EJL EN LA=ESC/PAGE", 0) == 0;
+    });
+    if (escPage) {
+        const EscPageCount count = CountEscPagePages(data, size);
+        std::uint32_t pages = count.pages;
+        if (dx == "ON" && count.lastPageBlank && pages >= 2 && pages % 2 == 0) --pages;  // dorso de relleno
+        if (count.end == EscPageCount::End::Complete && pages > 0) {
+            facts.pageSource = core::ContentFacts::PageSource::EscPageFormFeeds;
+            facts.pages = pages;
+        }
+        // Datos cortados por tamaño (no inválidos): TotalPages puede traer ese dorso.
+        facts.spoolerCountsBlankBack = VerifiedEpsonDriver(driver) && count.end == EscPageCount::End::Truncated;
+    }
     // "@EJL JI PAGES="2"" al final: hojas físicas que calculó el controlador
     // (1 pág. x 10 copias = 10; 2 págs. a doble cara = 1).
     for (const auto& line : trailer) {
@@ -297,6 +315,65 @@ void ParseDsc(const std::uint8_t* data, size_t size, bool complete, core::Conten
 }
 
 }  // namespace
+
+EscPageCount CountEscPagePages(const std::uint8_t* data, size_t size) {
+    using End = EscPageCount::End;
+    EscPageCount out;
+    if (!data) return out;
+    // Los comandos empiezan después de la línea "@EJL EN LA=ESC/PAGE...".
+    std::string_view text(reinterpret_cast<const char*>(data), std::min(size, kHeaderWindow));
+    size_t enter = text.find("@EJL EN LA=ESC/PAGE");
+    if (enter == std::string_view::npos) return out;
+    size_t pos = text.find('\n', enter);
+    if (pos == std::string_view::npos) return out;
+    ++pos;
+    auto isLower = [](std::uint8_t c) { return c >= 'a' && c <= 'z'; };
+    auto isUpper = [](std::uint8_t c) { return c >= 'A' && c <= 'Z'; };
+    auto isParam = [](std::uint8_t c) { return (c >= '0' && c <= '9') || c == ';' || c == '.' || c == '-'; };
+    bool pageHasData = false;  // la página actual trajo algún comando con datos (imagen)
+    while (pos < size) {
+        const std::uint8_t c = data[pos];
+        if (c == 0x0c) {  // FF: fin de página
+            ++out.pages;
+            out.lastPageBlank = !pageHasData;
+            pageHasData = false;
+            ++pos;
+            continue;
+        }
+        if (c == 0x1b) {  // ESC 01 @EJL: vuelve al EJL del final del trabajo
+            if (size - pos < 6) break;
+            out.end = std::memcmp(data + pos + 1, "\x01@EJL", 5) == 0 ? End::Complete : End::Invalid;
+            return out;
+        }
+        if (c != 0x1d) return out;  // ni comando ni FF: no es lo que se conoce
+        // GS <parámetros> <minúsculas> [{] <mayúscula>
+        size_t p = pos + 1;
+        const size_t params = p;
+        while (p < size && p - params < 64 && isParam(data[p])) ++p;
+        const size_t paramsEnd = p;
+        const size_t name = p;
+        while (p < size && p - name < 8 && isLower(data[p])) ++p;
+        const bool hasData = p < size && data[p] == '{';
+        if (hasData) ++p;
+        if (p >= size) break;
+        if (p == name || !isUpper(data[p])) return out;
+        ++p;
+        if (hasData) {
+            // El primer parámetro es el largo de los datos que siguen.
+            std::uint64_t length = 0;
+            size_t q = params;
+            for (; q < paramsEnd && data[q] >= '0' && data[q] <= '9' && length <= size; ++q)
+                length = length * 10 + (data[q] - '0');
+            if (q == params) return out;
+            if (length > size - p) break;  // los datos siguen más allá de lo leído
+            p += static_cast<size_t>(length);
+            pageHasData = true;
+        }
+        pos = p;
+    }
+    out.end = End::Truncated;
+    return out;
+}
 
 void ParsePdlSettings(const std::uint8_t* data, size_t size, bool complete, core::ContentFacts& facts) {
     if (!data || size == 0) return;

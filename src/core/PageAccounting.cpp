@@ -212,10 +212,15 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
     const bool contentCounted = facts && facts->complete && facts->pages > 0 &&
                                 (facts->pageSource == ContentFacts::PageSource::EmfRecords ||
                                  facts->pageSource == ContentFacts::PageSource::XpsFixedPages ||
-                                 facts->pageSource == ContentFacts::PageSource::PostScriptDsc);
+                                 facts->pageSource == ContentFacts::PageSource::PostScriptDsc ||
+                                 facts->pageSource == ContentFacts::PageSource::EscPageFormFeeds);
     if (contentCounted) {
         acc.dataPages = Make(facts->pages, Reliability::Reliable, Basis::ContentPages);
         acc.pagesMismatch = job.totalPages != 0 && job.totalPages != facts->pages && !spooling;
+    } else if (job.totalPages > 1 && job.totalPages % 2 == 0 && !spooling && facts && facts->spoolerCountsBlankBack) {
+        // Puede ser una página menos (impar + dorso en blanco): no se puede saber sin contarlas.
+        acc.dataPages = Make(job.totalPages, Reliability::Estimated, Basis::SpoolerTotalPages,
+                             Reason::BlankBackCounted);
     } else if (job.totalPages > 0 && !spooling) {
         acc.dataPages = Make(job.totalPages, Reliability::Reliable, Basis::SpoolerTotalPages);
     } else if (job.totalPages > 0) {

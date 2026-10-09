@@ -152,6 +152,13 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - PÁGINAS DE LAS EPSON (0.5.2): envíe a LAIMI 1 - INK documentos de 1, 2
+     y 3 páginas. La columna Páginas debe decir 1, 2 y 3 (antes decía 2, 2
+     y 4: Windows cuenta el dorso en blanco de la última hoja a doble cara).
+     En la pestaña Configuración (F7), "Páginas en los datos" dice "Páginas
+     contadas en los datos (ESC/Page)" y, si difiere, cuánto informa el
+     spooler. Documentos de más de 16 MB (unas 20 páginas) siguen usando el
+     número del spooler, marcado como estimado.
    - PÁGINAS EN EL HISTORIAL (0.5.1): libere un trabajo de 2 páginas x 2
      copias (o 4 páginas a doble cara) y espere a que se imprima. En el
      historial (Ctrl+H) la columna Páginas debe decir lo mismo que decía en la

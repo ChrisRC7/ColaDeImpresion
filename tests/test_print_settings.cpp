@@ -398,6 +398,108 @@ TEST(EpsonAmC6000OnePageTenCopies) {
     CHECK(acc.sheets.basis == core::Basis::DriverSheets);
 }
 
+// Datos ESC/Page como los del controlador AM-C6000: encabezado EJL, comandos
+// "GS ...", bandas de imagen "GS n;...cdb{I" + n bytes y un FF por página.
+std::string EscPageJob(int pages, bool duplex, bool blankBack) {
+    std::string data =
+        "\x1b\x01@EJL \n@EJL JI USER=\"x\" MACHINE=\"\\\\PC\" DOCUMENT=\"d\" DRIVER=\"EPSON AM-C6000 Series\"\n"
+        "@EJL SE LA=ESC/PAGE\n@EJL SET PS=LT DX=" + std::string(duplex ? "ON" : "OFF") +
+        " BD=LE CO=1 QT=1\n@EJL EN LA=ESC/PAGE-COLOR\n"
+        "\x1d" "10pmE\x1d" "rhE\x1d" "0;.12muE\x1d" "30psE\x1d" "0poE\x1d" "7;0;2;3cam{E";
+    data += std::string("\x0a\x00\x00\x00\x00\x00\x00", 7);
+    for (int p = 0; p < pages; ++p) {
+        data += "\x1d" "0ptE\x1d" "2pcsO\x1d" "0;10;1;1lbaI\x1d" "6;0;0;1cdb{I";
+        data += std::string("\x0c\x1b\x1d\x00\x0c\xff", 6);  // los datos pueden traer FF, ESC y GS
+        data += "\x0c";
+    }
+    // Dorso en blanco de la última hoja (así llega al servidor a doble cara con páginas impares).
+    if (blankBack) data += "\x1d" "0ptE\x1d" "0feE\x1d" "0iidE\x1d" "1;1pcsO\x0c";
+    data += "\x1b\x01@EJL \n@EJL JI PAGES=\"" + std::to_string(duplex ? (pages + 1) / 2 : pages) +
+            "\"\n\x1b\x01@EJL \n@EJL EJ \n\x1b\x01@EJL \n";
+    return data;
+}
+
+TEST(EpsonEscPagePagesCountedInData) {
+    // Medido en el servidor con el AM-C6000 y la cola a doble cara: TotalPages
+    // cuenta el dorso en blanco de la última hoja (1 -> 2, 2 -> 2, 3 -> 4). Con 1
+    // página el controlador pone DX=OFF; con 3 agrega una página en blanco.
+    struct Case {
+        int pages;
+        bool duplex;
+        bool blankBack;
+        std::uint32_t totalPages;
+    };
+    for (const Case& c : {Case{1, false, false, 2}, Case{2, true, false, 2}, Case{3, true, true, 4}}) {
+        auto bytes = Bytes(EscPageJob(c.pages, c.duplex, c.blankBack));
+        auto count = preview::CountEscPagePages(bytes.data(), bytes.size());
+        CHECK(count.end == preview::EscPageCount::End::Complete);
+        CHECK_EQ(count.pages, static_cast<std::uint32_t>(c.pages + (c.blankBack ? 1 : 0)));
+        CHECK_EQ(count.lastPageBlank, c.blankBack);
+
+        core::ContentFacts f;
+        f.analyzed = f.complete = true;
+        f.kind = core::DataKind::Pdl;
+        preview::ParsePdlSettings(bytes.data(), bytes.size(), true, f);
+        CHECK(f.pageSource == core::ContentFacts::PageSource::EscPageFormFeeds);
+        CHECK_EQ(f.pages, static_cast<std::uint32_t>(c.pages));
+
+        core::JobInfo job;
+        job.datatype = L"RAW";
+        job.totalPages = c.totalPages;
+        auto acc = core::ComputePageAccounting(job, &f);
+        CHECK_EQ(acc.dataPages.value, static_cast<std::uint32_t>(c.pages));
+        CHECK(acc.dataPages.reliability == Reliability::Reliable);
+        CHECK(acc.dataPages.basis == core::Basis::ContentPages);
+        CHECK_EQ(acc.pagesMismatch, c.totalPages != static_cast<std::uint32_t>(c.pages));
+        CHECK_EQ(acc.printPages.value, static_cast<std::uint32_t>(c.pages));
+        CHECK(acc.printPages.reliability == Reliability::Reliable);
+    }
+    // A una cara, una página en blanco del documento sí cuenta.
+    auto simplex = Bytes(EscPageJob(3, false, true));
+    core::ContentFacts s;
+    s.analyzed = s.complete = true;
+    preview::ParsePdlSettings(simplex.data(), simplex.size(), true, s);
+    CHECK_EQ(s.pages, 4u);
+}
+
+TEST(EpsonEscPageTruncatedOrInvalid) {
+    // Cortado por tamaño: no se cuentan y TotalPages (par) queda estimado.
+    std::string full = EscPageJob(3, true, true);
+    auto cut = Bytes(full.substr(0, full.size() - 100));
+    auto count = preview::CountEscPagePages(cut.data(), cut.size());
+    CHECK(count.end == preview::EscPageCount::End::Truncated);
+    CHECK_EQ(count.pages, 2u);
+    core::ContentFacts f;
+    f.analyzed = true;
+    f.kind = core::DataKind::Pdl;
+    preview::ParsePdlSettings(cut.data(), cut.size(), false, f);
+    CHECK(f.pageSource == core::ContentFacts::PageSource::None);
+    CHECK(f.spoolerCountsBlankBack);
+    core::JobInfo job;
+    job.datatype = L"RAW";
+    job.totalPages = 4;
+    auto acc = core::ComputePageAccounting(job, &f);
+    CHECK_EQ(acc.dataPages.value, 4u);
+    CHECK(acc.dataPages.reliability == Reliability::Estimated);
+    CHECK(acc.dataPages.reason == core::Reason::BlankBackCounted);
+    job.totalPages = 5;  // impar: no trae dorso de relleno
+    CHECK(core::ComputePageAccounting(job, &f).dataPages.reliability == Reliability::Reliable);
+    job.totalPages = 4;
+
+    // Algo que no es ESC/Page conocido: se queda TotalPages.
+    std::string bad = full;
+    bad.insert(bad.find("\x1d" "0ptE"), "XYZ");
+    auto badBytes = Bytes(bad);
+    CHECK(preview::CountEscPagePages(badBytes.data(), badBytes.size()).end == preview::EscPageCount::End::Invalid);
+    core::ContentFacts g;
+    g.analyzed = g.complete = true;
+    g.kind = core::DataKind::Pdl;
+    preview::ParsePdlSettings(badBytes.data(), badBytes.size(), true, g);
+    CHECK(g.pageSource == core::ContentFacts::PageSource::None);
+    CHECK(!g.spoolerCountsBlankBack);
+    CHECK_EQ(core::ComputePageAccounting(job, &g).dataPages.value, 4u);
+}
+
 TEST(EpsonPaperSourceShowsNames) {
     i18n::SetLanguage(i18n::Language::Spanish);
     // Datos del controlador AM-C6000: bandeja en "GS n;m iuE" y papel en PS.
