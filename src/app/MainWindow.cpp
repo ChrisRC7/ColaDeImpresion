@@ -13,6 +13,7 @@
 #include "config/Autostart.h"
 #include "config/Paths.h"
 #include "core/JobStatus.h"
+#include "core/PageAccounting.h"
 #include "core/Spooler.h"
 #include "i18n/Strings.h"
 #include "ui/DarkMode.h"
@@ -903,8 +904,12 @@ std::vector<std::wstring> MainWindow::JobDetails(const core::JobInfo& job, const
     if (!machine.empty()) who += (who.empty() ? L"" : L" · ") + machine;
     lines.push_back(who);
 
+    // Las páginas contadas en los datos mandan sobre TotalPages (en las Epson
+    // cuenta el dorso en blanco de la última hoja), igual que en la ficha.
+    const core::PageAccounting acc = core::ComputePageAccounting(job, doc ? &doc->facts : nullptr);
     std::uint32_t pages = job.totalPages;
-    if (doc) pages = std::max(pages, doc->totalPages);
+    if (acc.dataPages.basis == core::Basis::ContentPages) pages = acc.dataPages.value;
+    else if (doc) pages = std::max(pages, doc->totalPages);
     core::JobInfo copy = job;
     copy.totalPages = pages;
     lines.push_back(PagesText(copy) + L" · " + util::FormatBytes(job.sizeBytes) + L" · " +

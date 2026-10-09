@@ -95,7 +95,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] `cola_jobinspect` (ficha en consola, `--hold`, `--release`, `--csv`) y serie de pruebas de Word (`tools/pruebas`)
 - [x] Matriz de pruebas con Word, Acrobat, Chrome, Edge y RAW (`docs/DATOS_DE_IMPRESION.md`)
 - [x] Significado del EJL del controlador EPSON AM-C6000 verificado sin papel (`QT` copias, `JI PAGES` hojas, `DX`/`BD`, `PS`, `poE`): copias y hojas de trabajos de otras PCs fiables
-- [x] Documentos de 1 página que aparecían con 2 en las Epson: las páginas de los trabajos ESC/Page se cuentan en los datos (`FF`), sin el dorso en blanco que agrega el controlador a doble cara; `TotalPages` del servidor daba 2/2/4 para 1/2/3 páginas (0.5.2)
+- [x] Documentos de 1 página que aparecían con 2 en las Epson: las páginas de los trabajos ESC/Page se cuentan en los datos (`FF`), sin el dorso en blanco que agrega el controlador a doble cara; `TotalPages` del servidor daba 2/2/4 para 1/2/3 páginas (0.5.2; el encabezado del panel de detalles, en la 0.5.3)
 - [ ] (LAIMI) Confirmar con trabajos reales de estudiantes (PDF, Word, navegador; 1, 2 y 3 páginas, a una y a doble cara) que la columna Páginas coincide con el documento
 - [ ] Trabajos ESC/Page de más de 16 MB (unas 20 páginas): las páginas no se cuentan y `TotalPages` puede traer el dorso de relleno (se muestra estimado); evaluar recorrer los datos completos sin guardarlos
 - [ ] (LAIMI) Pruebas P6–P8 (Lexmark, etiquetas, operador sin permisos)
