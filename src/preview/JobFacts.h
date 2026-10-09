@@ -7,9 +7,11 @@
 //
 // Cada trabajo se lee una sola vez con la API del spooler (como máximo
 // kMaxBytes: el encabezado trae las opciones) y el resultado queda en caché
-// hasta que el trabajo cambia de tamaño o sale de la cola. Los trabajos que
-// todavía se reciben se analizan al terminar. No se renderiza nada ni se
-// guarda contenido: solo los ContentFacts.
+// hasta que el trabajo sale de la cola. Los trabajos que todavía se reciben se
+// analizan al terminar. Al liberarlo (pasa a imprimirse) sus datos siguen
+// valiendo aunque el spooler informe otro tamaño, para que la fila y el
+// historial muestren lo mismo que mientras estaba retenido. No se renderiza
+// nada ni se guarda contenido: solo los ContentFacts.
 
 #include <functional>
 #include <map>
@@ -32,7 +34,8 @@ public:
 
     explicit JobFactsService(ReadyCallback onReady);
 
-    // Datos analizados del trabajo, o nullptr si todavía no se analizó.
+    // Datos analizados del trabajo, o nullptr si todavía no se analizó. Si su
+    // tamaño cambió después de recibirse (al imprimirse), los últimos analizados.
     std::shared_ptr<const core::ContentFacts> Find(const core::JobInfo& job);
 
     // Encola el análisis de los trabajos que falten y olvida los que ya no están.
@@ -43,15 +46,21 @@ public:
 
     void Clear();
 
-    // Clave: impresora, id, tamaño y si todavía se recibe (cambia si el trabajo cambia).
+    // Clave: impresora, id, tamaño y si todavía se recibe (cambia si el trabajo
+    // cambia). No incluye el estado: pausado o imprimiéndose es el mismo trabajo.
     static std::wstring Key(const core::JobInfo& job);
 
     static constexpr std::uint64_t kMaxBytes = 16ull * 1024 * 1024;
 
 private:
+    // Impresora e id: identifica el trabajo mientras está en la cola.
+    static std::wstring IdKey(const core::JobInfo& job);
+    void Remember(const core::JobInfo& job, const std::shared_ptr<const core::ContentFacts>& facts);
+
     ReadyCallback onReady_;
     std::mutex mutex_;
     std::map<std::wstring, std::shared_ptr<const core::ContentFacts>> cache_;
+    std::map<std::wstring, std::shared_ptr<const core::ContentFacts>> latest_;  // por IdKey: último análisis con datos
     std::set<std::wstring> pending_;
     util::WorkQueue worker_{true};  // COM para el XPS Object Model; último miembro: se destruye primero
 };

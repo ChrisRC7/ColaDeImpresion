@@ -13,31 +13,61 @@ JobFactsService::JobFactsService(ReadyCallback onReady) : onReady_(std::move(onR
 
 std::wstring JobFactsService::Key(const core::JobInfo& job) {
     const unsigned spooling = (job.rawStatus & JOB_STATUS_SPOOLING) ? 1u : 0u;
-    // Si se puede leer forma parte de la clave: al volver a pausarlo se analiza.
-    const unsigned readable = core::CanReadJobData(job.rawStatus) ? 1u : 0u;
-    return util::Format(L"%ls#%u|%llu|%u|%u", job.printer.c_str(), job.id,
-                        static_cast<unsigned long long>(job.sizeBytes), spooling, readable);
+    // Si se puede leer NO forma parte de la clave: al liberar el trabajo (pasa a
+    // imprimirse) sus datos analizados deben seguir valiendo, para la fila y
+    // para el historial cuando sale de la cola.
+    return util::Format(L"%ls#%u|%llu|%u", job.printer.c_str(), job.id,
+                        static_cast<unsigned long long>(job.sizeBytes), spooling);
+}
+
+std::wstring JobFactsService::IdKey(const core::JobInfo& job) {
+    return util::Format(L"%ls#%u", job.printer.c_str(), job.id);
+}
+
+void JobFactsService::Remember(const core::JobInfo& job, const std::shared_ptr<const core::ContentFacts>& facts) {
+    if (!facts || !facts->analyzed) return;
+    auto& slot = latest_[IdKey(job)];
+    if (!slot || !slot->complete || facts->complete) slot = facts;
 }
 
 std::shared_ptr<const core::ContentFacts> JobFactsService::Find(const core::JobInfo& job) {
     std::lock_guard lock(mutex_);
     auto it = cache_.find(Key(job));
-    return it == cache_.end() ? nullptr : it->second;
+    std::shared_ptr<const core::ContentFacts> exact = it == cache_.end() ? nullptr : it->second;
+    if (exact && exact->analyzed) return exact;
+    // Mientras se imprime, el spooler puede informar otro tamaño (0 bytes al
+    // final): sigue siendo el mismo trabajo, ya recibido, y valen sus datos.
+    if (!(job.rawStatus & JOB_STATUS_SPOOLING)) {
+        auto last = latest_.find(IdKey(job));
+        if (last != latest_.end()) return last->second;
+    }
+    return exact;
 }
 
 void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std::wstring& server,
                               const std::wstring& overrideDir) {
     std::lock_guard lock(mutex_);
     // Olvida los trabajos que ya no están (o que cambiaron: su clave es otra).
-    std::set<std::wstring> alive;
-    for (const auto& job : jobs) alive.insert(Key(job));
+    std::set<std::wstring> alive, aliveIds;
+    for (const auto& job : jobs) {
+        alive.insert(Key(job));
+        aliveIds.insert(IdKey(job));
+    }
     for (auto it = cache_.begin(); it != cache_.end();) it = alive.count(it->first) ? std::next(it) : cache_.erase(it);
+    for (auto it = latest_.begin(); it != latest_.end();)
+        it = aliveIds.count(it->first) ? std::next(it) : latest_.erase(it);
 
     for (const auto& job : jobs) {
-        // Recibiéndose (ReadPrinter esperaría) o sin pausar (la lectura le quitaría
-        // datos a la impresora): se analiza cuando se pueda.
-        if (!core::CanReadJobData(job.rawStatus)) continue;
         const std::wstring key = Key(job);
+        // Recibiéndose (ReadPrinter esperaría) o sin pausar (la lectura le quitaría
+        // datos a la impresora): se analiza cuando se pueda. Un análisis vacío
+        // (lectura cortada al reanudarlo, sin permiso...) se olvida para
+        // reintentarlo si se vuelve a pausar; uno bueno se conserva.
+        if (!core::CanReadJobData(job.rawStatus)) {
+            auto it = cache_.find(key);
+            if (it != cache_.end() && !it->second->analyzed) cache_.erase(it);
+            continue;
+        }
         if (cache_.count(key) || pending_.count(key)) continue;
         pending_.insert(key);
         worker_.Post([this, job, key, server, overrideDir] {
@@ -50,6 +80,7 @@ void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std:
             {
                 std::lock_guard lock(mutex_);
                 pending_.erase(key);
+                Remember(job, facts);
                 cache_[key] = std::move(facts);
             }
             if (onReady_) onReady_();
@@ -63,6 +94,7 @@ void JobFactsService::Store(const core::JobInfo& job, const core::ContentFacts& 
     auto& slot = cache_[Key(job)];
     // Un análisis completo (vista previa) reemplaza al parcial, no al revés.
     if (!slot || !slot->complete || facts.complete) slot = std::make_shared<core::ContentFacts>(facts);
+    Remember(job, slot);
 }
 
 void JobFactsService::Clear() {
@@ -70,6 +102,7 @@ void JobFactsService::Clear() {
     worker_.Clear();
     pending_.clear();
     cache_.clear();
+    latest_.clear();
 }
 
 }  // namespace cola::preview

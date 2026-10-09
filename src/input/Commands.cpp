@@ -45,6 +45,7 @@ const CommandInfo kCommandTable[] = {
     // --- Buscar, impresoras y servidor ---
     {Command::Find, L"find", S::CmdFind, L"Ctrl+F"},
     {Command::History, L"history", S::CmdHistory, L"Ctrl+H"},
+    {Command::ExportHistory, L"exportHistory", S::CmdExportHistory, L"Ctrl+Shift+E"},
     {Command::ChoosePrinter, L"choosePrinter", S::CmdChoosePrinter, L"Ctrl+E"},
     {Command::NextPrinter, L"nextPrinter", S::CmdNextPrinter, L"Ctrl+Tab"},
     {Command::PrevPrinter, L"prevPrinter", S::CmdPrevPrinter, L"Ctrl+Shift+Tab"},

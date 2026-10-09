@@ -485,6 +485,36 @@ std::vector<std::wstring> PrintersOf(const std::vector<core::JobInfo>& jobs) {
     return printers;
 }
 
+PagesTotal SumPrintPages(const std::vector<const core::JobInfo*>& jobs, const FactsLookup& facts) {
+    PagesTotal total;
+    for (const auto* job : jobs) {
+        ++total.jobs;
+        const PrintTotal pages = TotalPrintPages(*job, facts ? facts(*job) : nullptr);
+        if (pages.reliability == core::Reliability::Unknown || pages.value == 0) ++total.unknown;
+        else total.pages += pages.value;
+    }
+    return total;
+}
+
+PagesTotal SumHistoryPages(const std::vector<const config::HistoryEntry*>& entries) {
+    PagesTotal total;
+    for (const auto* entry : entries) {
+        ++total.jobs;
+        const std::uint32_t pages = entry->PrintPagesCount();
+        if (pages) total.pages += pages;
+        else ++total.unknown;
+    }
+    return total;
+}
+
+std::wstring SelectionText(const PagesTotal& total, bool history) {
+    if (total.jobs == 0) return L"";
+    std::wstring text = util::Format(Tr(history ? S::StatusSelectionHistory : S::StatusSelection), total.jobs,
+                                     static_cast<unsigned long long>(total.pages));
+    if (total.unknown) text += util::Format(Tr(S::StatusSelectionUnknown), total.unknown);
+    return text;
+}
+
 QueueSummary Summarize(const std::vector<const core::JobInfo*>& jobs) {
     QueueSummary s;
     for (const auto* job : jobs) {

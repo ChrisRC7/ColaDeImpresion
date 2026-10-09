@@ -33,8 +33,13 @@ struct HistoryEntry {
     std::wstring duplex;
     std::wstring source;            // origen del papel
     std::int64_t submittedUnix = 0;  // "Enviado" (UTC)
+
+    // Páginas que mostraba la columna "Páginas" (páginas × copias). En registros
+    // anteriores a esa columna, las del spooler. 0 = no determinable ("—").
+    std::uint32_t PrintPagesCount() const;
 };
 
+// Las estadísticas cuentan las páginas como la columna "Páginas" (PrintPagesCount).
 struct HistoryStats {
     std::uint64_t pagesToday = 0;
     std::uint64_t pagesWeek = 0;  // últimos 7 días incluyendo hoy

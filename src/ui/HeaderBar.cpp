@@ -57,7 +57,7 @@ void HeaderBar::OnStyleChanged() {
 void HeaderBar::UpdateTooltips() {
     const S texts[] = {S::TipPrinter, S::TipHistory, S::TipHelp, S::TipTheme, S::TipMenu, S::TipDetails};
     static_assert(sizeof(texts) / sizeof(texts[0]) == static_cast<size_t>(HeaderButton::PauseJobs),
-                  "un texto por botón fijo; los de pausa traen el suyo");
+                  "un texto por botón fijo; los de pausa y exportar traen el suyo");
     for (int i = 0; i < static_cast<int>(HeaderButton::Count_); ++i) {
         TTTOOLINFOW ti{};
         ti.cbSize = sizeof(ti);
@@ -66,7 +66,9 @@ void HeaderBar::UpdateTooltips() {
         ti.rect = buttons_[i];
         const auto button = static_cast<HeaderButton>(i);
         const bool pause = button == HeaderButton::PauseJobs || button == HeaderButton::PausePrinter;
-        ti.lpszText = const_cast<LPWSTR>(pause ? PauseState(button).tooltip.c_str() : Tr(texts[i]));
+        ti.lpszText = const_cast<LPWSTR>(pause                              ? PauseState(button).tooltip.c_str()
+                                         : button == HeaderButton::Export ? exportTooltip_.c_str()
+                                                                          : Tr(texts[i]));
         SendMessageW(tooltip_, TTM_NEWTOOLRECTW, 0, reinterpret_cast<LPARAM>(&ti));
         SendMessageW(tooltip_, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
     }
@@ -87,8 +89,26 @@ void HeaderBar::SetPrinterLabel(const std::wstring& title, const std::wstring& s
 }
 
 void HeaderBar::SetHistoryActive(bool active) {
+    if (historyActive_ == active) return;
     historyActive_ = active;
+    Layout();  // el botón "Exportar a Excel" solo ocupa lugar en el historial
     Invalidate();
+}
+
+void HeaderBar::SetExportTooltip(const std::wstring& text) {
+    if (text == exportTooltip_) return;
+    exportTooltip_ = text;
+    UpdateTooltips();
+}
+
+int HeaderBar::ExportButtonWidth() const {
+    const auto& style = Style::Get();
+    if (!historyActive_) return 0;
+    if (!pauseLabels_) return style.Px(36);  // solo el ícono
+    HDC dc = GetDC(hwnd_);
+    const LONG text = gfx::MeasureText(dc, Tr(S::BtnExport), style.fonts().normal).cx;
+    ReleaseDC(hwnd_, dc);
+    return style.Px(10 + 20 + 6) + static_cast<int>(text) + style.Px(12);
 }
 
 void HeaderBar::SetDetailsActive(bool active) {
@@ -199,11 +219,17 @@ void HeaderBar::Layout() {
     // pausa a su derecha. Si no alcanza, los botones quedan solo con el ícono.
     int left = buttons_[static_cast<int>(HeaderButton::Printer)].right + style.Px(12);
     const int gap = style.Px(6);
+    // En el historial se suma el botón "Exportar a Excel" a la derecha de los de pausa.
+    auto buttonsWidth = [&] {
+        const int exportW = ExportButtonWidth();
+        return PauseButtonWidth(HeaderButton::PauseJobs) + gap + PauseButtonWidth(HeaderButton::PausePrinter) +
+               (exportW ? gap + exportW : 0);
+    };
     pauseLabels_ = true;
-    int pauseW = PauseButtonWidth(HeaderButton::PauseJobs) + gap + PauseButtonWidth(HeaderButton::PausePrinter);
+    int pauseW = buttonsWidth();
     if (rightLimit - left - pauseW - gap < style.Px(200)) {
         pauseLabels_ = false;
-        pauseW = PauseButtonWidth(HeaderButton::PauseJobs) + gap + PauseButtonWidth(HeaderButton::PausePrinter);
+        pauseW = buttonsWidth();
     }
     int width = std::min(rightLimit - left - pauseW - style.Px(8), style.Px(480));
     if (width < style.Px(80)) width = 0;
@@ -214,6 +240,9 @@ void HeaderBar::Layout() {
         buttons_[static_cast<int>(b)] = {px, cy - style.Px(17), px + w, cy + style.Px(17)};
         px += w + gap;
     }
+    const int exportW = ExportButtonWidth();
+    buttons_[static_cast<int>(HeaderButton::Export)] =
+        exportW ? RECT{px, cy - style.Px(17), px + exportW, cy + style.Px(17)} : RECT{};
 
     HFONT font = style.fonts().normal;
     dc = GetDC(hwnd_);
@@ -265,6 +294,7 @@ void HeaderBar::Paint(HDC dc, const RECT& client) {
 
     PaintPauseButton(dc, HeaderButton::PauseJobs, pauseJobs_);
     PaintPauseButton(dc, HeaderButton::PausePrinter, pausePrinter_);
+    PaintExportButton(dc);
 
     // Botones de ícono.
     struct IconButton {
@@ -317,6 +347,25 @@ void HeaderBar::PaintPauseButton(HDC dc, HeaderButton id, const PauseButtonState
                          : (state.resume ? S::BtnResumePrinter : S::BtnPausePrinter);
     RECT text{icon.right + style.Px(6), r.top, r.right - style.Px(8), r.bottom};
     gfx::Text(dc, Tr(label), text, fonts.normal, textColor,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+}
+
+void HeaderBar::PaintExportButton(HDC dc) {
+    const auto& style = Style::Get();
+    const auto& pal = style.palette();
+    const auto& fonts = style.fonts();
+    const RECT r = buttons_[static_cast<int>(HeaderButton::Export)];
+    if (gfx::Width(r) <= 0) return;
+    gfx::FillRounded(dc, r, style.Px(8), hover_ == static_cast<int>(HeaderButton::Export) ? pal.hover : pal.surface);
+    gfx::StrokeRounded(dc, r, style.Px(8), pal.border);
+    if (!pauseLabels_) {
+        gfx::Glyph(dc, glyph::Export, r, fonts.iconSmall, pal.accent);
+        return;
+    }
+    RECT icon{r.left + style.Px(10), r.top, r.left + style.Px(30), r.bottom};
+    gfx::Glyph(dc, glyph::Export, icon, fonts.iconSmall, pal.accent);
+    RECT text{icon.right + style.Px(6), r.top, r.right - style.Px(8), r.bottom};
+    gfx::Text(dc, Tr(S::BtnExport), text, fonts.normal, pal.text,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
 }
 

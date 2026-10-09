@@ -21,6 +21,17 @@ JobOutcome JobOutcomeFromString(const std::wstring& text) {
     return JobOutcome::Printed;
 }
 
+std::uint32_t HistoryEntry::PrintPagesCount() const {
+    if (printPages.empty()) return pages;  // registro de una versión anterior
+    std::uint64_t value = 0;
+    for (wchar_t c : printPages) {
+        if (c < L'0' || c > L'9') return 0;  // "—": no determinable
+        value = value * 10 + static_cast<std::uint64_t>(c - L'0');
+        if (value > 0xFFFFFFFFull) return 0;
+    }
+    return static_cast<std::uint32_t>(value);
+}
+
 History::History(std::wstring path, size_t limit) : path_(std::move(path)), limit_(limit) {}
 
 bool History::Load() {
@@ -108,15 +119,16 @@ HistoryStats History::ComputeStats(std::int64_t nowUnix) const {
     const std::int64_t weekAgo = nowUnix - 7 * 24 * 3600;
     for (const auto& e : entries_) {
         if (e.outcome != JobOutcome::Printed) continue;
+        const std::uint32_t pages = e.PrintPagesCount();
         std::wstring day = util::FormatDateKey(util::FromUnixSeconds(e.timeUnix));
-        stats.pagesPerDay[day] += e.pages;
+        stats.pagesPerDay[day] += pages;
         if (day == today) {
-            stats.pagesToday += e.pages;
+            stats.pagesToday += pages;
             ++stats.jobsToday;
         }
         if (e.timeUnix > weekAgo) {
-            stats.pagesWeek += e.pages;
-            stats.pagesPerUser[e.user] += e.pages;
+            stats.pagesWeek += pages;
+            stats.pagesPerUser[e.user] += pages;
         }
     }
     return stats;

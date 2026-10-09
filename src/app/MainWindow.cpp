@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <climits>
+#include <set>
 
+#include "app/HistoryExport.h"
 #include "app/JobSheet.h"
 #include "app/RowBuilder.h"
 #include "config/Autostart.h"
@@ -62,6 +64,7 @@ enum MenuId : UINT {
     ID_SHORTCUTS,
     ID_OPEN_DATA,
     ID_CLEAR_HISTORY,
+    ID_EXPORT_HISTORY,
     ID_RUN_AS_ADMIN,
     ID_EXIT,
     ID_AUTO_HOLD,
@@ -187,6 +190,7 @@ bool MainWindow::Create(const StartupOptions& options) {
                                    case ui::HeaderButton::Details: Execute(Command::TogglePane); break;
                                    case ui::HeaderButton::PauseJobs: Execute(Command::Pause); break;
                                    case ui::HeaderButton::PausePrinter: Execute(Command::PausePrinter); break;
+                                   case ui::HeaderButton::Export: ExportHistory(); break;
                                    default: break;
                                }
                            },
@@ -197,6 +201,7 @@ bool MainWindow::Create(const StartupOptions& options) {
     list_.Create(hwnd_, {[this] {
                              UpdatePreview();
                              UpdatePauseButtons();
+                             UpdateSelectionTotal();
                          },
                          [this](POINT pt) { ShowJobContextMenu(pt); }, [this] { ToggleQuickLook(); },
                          [this](int sortId) { OnColumnClicked(sortId); },
@@ -669,6 +674,33 @@ void MainWindow::RebuildRows() {
         else list_.SetEmptyText(Tr(S::EmptyQueueTitle), Tr(S::EmptyQueueHint), ui::glyph::Printer);
     }
     list_.SetRows(std::move(rows));
+    UpdateSelectionTotal();
+}
+
+void MainWindow::UpdateSelectionTotal() {
+    const auto keys = list_.SelectedKeys();
+    PagesTotal total;
+    if (historyView_) {
+        const std::set<std::wstring> wanted(keys.begin(), keys.end());
+        const auto& all = history_.Entries();
+        std::vector<const config::HistoryEntry*> entries;
+        for (size_t i = 0; i < all.size() && entries.size() < wanted.size(); ++i)
+            if (wanted.count(HistoryKey(all[i], i))) entries.push_back(&all[i]);
+        total = SumHistoryPages(entries);
+    } else {
+        std::vector<const core::JobInfo*> jobs;
+        for (const auto& key : keys)
+            if (const auto* job = FindJob(key)) jobs.push_back(job);
+        // Los datos analizados se retienen mientras se suman.
+        std::vector<std::shared_ptr<const core::ContentFacts>> held;
+        FactsLookup lookup = [&](const core::JobInfo& job) -> const core::ContentFacts* {
+            if (!facts_) return nullptr;
+            held.push_back(facts_->Find(job));
+            return held.back().get();
+        };
+        total = SumPrintPages(jobs, lookup);
+    }
+    status_.SetSelection(SelectionText(total, historyView_));
 }
 
 void MainWindow::UpdateHeader() {
@@ -724,6 +756,7 @@ void MainWindow::UpdatePauseButtons() {
                                   Command::PausePrinter);
     }
     header_.SetPauseButtons(jobs, printer);
+    header_.SetExportTooltip(withKey(Tr(S::TipExport), Command::ExportHistory));
 }
 
 void MainWindow::ShowColumnHeaderMenu(POINT screen) {
@@ -986,6 +1019,7 @@ void MainWindow::Execute(Command command) {
         }
         case Command::Connect: header_.BeginServerInput(settings_.activeServer); break;
         case Command::History: ToggleHistory(); break;
+        case Command::ExportHistory: ExportHistory(); break;
         case Command::NextPage: preview_.NextPage(); break;
         case Command::PrevPage: preview_.PrevPage(); break;
         case Command::ZoomIn: preview_.ZoomIn(); break;
@@ -1263,6 +1297,28 @@ void MainWindow::ToggleHistory() {
     SetFocus(list_.hwnd());
 }
 
+void MainWindow::ExportHistory() {
+    if (history_.Entries().empty()) {
+        ShowTransient(Tr(S::ExportEmpty), ui::Tone::Warning);
+        return;
+    }
+    std::wstring error;
+    const std::wstring path =
+        RunHistoryExport(hwnd_, history_.Entries(), EffectiveColumnOrder(settings_.columnOrder), error);
+    if (!error.empty()) {
+        const std::wstring message = util::Format(Tr(S::ExportFailed), error.c_str());
+        ShowTransient(message, ui::Tone::Danger);
+        MessageBoxW(hwnd_, message.c_str(), Tr(S::AppTitle), MB_OK | MB_ICONWARNING);
+        return;
+    }
+    if (path.empty()) return;  // canceló el diálogo
+    ShowTransient(util::Format(Tr(S::ExportDone), path.c_str()), ui::Tone::Success);
+    const std::wstring question = util::Format(Tr(S::ExportOpenNow), static_cast<unsigned>(history_.Entries().size()),
+                                               path.c_str());
+    if (MessageBoxW(hwnd_, question.c_str(), Tr(S::AppTitle), MB_YESNO | MB_ICONINFORMATION) == IDYES)
+        ShellExecuteW(hwnd_, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 void MainWindow::SetFilter(const std::wstring& filter) {
     filter_ = util::Trim(filter);
     RebuildRows();
@@ -1425,6 +1481,8 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_SHORTCUTS, keyed(S::MenuShortcuts, Command::Help).c_str());
     AppendMenuW(menu, MF_STRING, ID_OPEN_DATA, Tr(S::MenuOpenDataFolder));
+    AppendMenuW(menu, MF_STRING | (history_.Entries().empty() ? MF_GRAYED : 0), ID_EXPORT_HISTORY,
+                keyed(S::MenuExportHistory, Command::ExportHistory).c_str());
     AppendMenuW(menu, MF_STRING, ID_CLEAR_HISTORY, Tr(S::MenuClearHistory));
     if (!IsElevated()) AppendMenuW(menu, MF_STRING, ID_RUN_AS_ADMIN, Tr(S::MenuRunAsAdmin));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
@@ -1598,6 +1656,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
         case ID_OPEN_DATA:
             ShellExecuteW(hwnd_, L"open", config::DataDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             break;
+        case ID_EXPORT_HISTORY: ExportHistory(); break;
         case ID_CLEAR_HISTORY:
             history_.Clear();
             history_.Save();
@@ -1794,6 +1853,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             while (PeekMessageW(&pending, hwnd_, WM_APP_FACTS, WM_APP_FACTS, PM_REMOVE)) {
             }
             if (!historyView_) RebuildRows();
+            UpdateSelectionTotal();
             return 0;
         }
         case WM_APP_ACTION: {

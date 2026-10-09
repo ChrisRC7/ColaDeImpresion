@@ -1,6 +1,7 @@
 #pragma once
-// Barra de estado inferior: resumen de la cola a la izquierda e indicadores
-// (problemas de la impresora, permisos, modo en vivo/sondeo) a la derecha.
+// Barra de estado inferior: total de páginas de la selección y resumen de la
+// cola a la izquierda e indicadores (problemas de la impresora, permisos, modo
+// en vivo/sondeo) a la derecha.
 
 #include <string>
 #include <vector>
@@ -22,6 +23,8 @@ public:
     int PreferredHeight() const;
 
     void SetSummary(const std::wstring& text);
+    // Total de la selección: se muestra primero y destacado (vacío = sin selección).
+    void SetSelection(const std::wstring& text);
     void SetItems(std::vector<StatusItem> items);
     void OnStyleChanged() { Invalidate(); }
 
@@ -32,6 +35,7 @@ private:
     void Paint(HDC dc, const RECT& client);
 
     std::wstring summary_;
+    std::wstring selection_;
     std::vector<StatusItem> items_;
 };
 

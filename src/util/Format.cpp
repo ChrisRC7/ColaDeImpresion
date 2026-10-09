@@ -17,11 +17,13 @@ std::wstring FormatBytes(std::uint64_t bytes) {
     return Format(value >= 100.0 ? L"%.0f %ls" : L"%.1f %ls", value, units[unit]);
 }
 
-static SYSTEMTIME ToLocal(const SYSTEMTIME& utc) {
+SYSTEMTIME ToLocalTime(const SYSTEMTIME& utc) {
     SYSTEMTIME local{};
     if (!SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) local = utc;
     return local;
 }
+
+static SYSTEMTIME ToLocal(const SYSTEMTIME& utc) { return ToLocalTime(utc); }
 
 std::wstring FormatTimeShort(const SYSTEMTIME& utc) {
     if (utc.wYear == 0) return L"";

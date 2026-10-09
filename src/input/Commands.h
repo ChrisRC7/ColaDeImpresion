@@ -45,6 +45,7 @@ enum class Command {
     // Buscar, impresoras y servidor
     Find,
     History,
+    ExportHistory,
     ChoosePrinter,
     NextPrinter,
     PrevPrinter,

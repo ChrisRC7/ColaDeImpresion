@@ -1,5 +1,7 @@
 #include "core/JobTracker.h"
 
+#include <algorithm>
+
 #include "core/JobStatus.h"
 
 namespace cola::core {
@@ -29,7 +31,15 @@ std::vector<JobEvent> JobTracker::Update(const QueueSnapshot& snapshot) {
 
     std::unordered_map<std::wstring, JobInfo> current;
     current.reserve(snapshot.jobs.size());
-    for (const auto& job : snapshot.jobs) current.emplace(job.Key(), job);
+    for (const auto& job : snapshot.jobs) {
+        JobInfo& kept = current.emplace(job.Key(), job).first->second;
+        // Al imprimirse el spooler puede informar menos bytes o páginas (0 al
+        // final): el historial describe el trabajo completo, no su avance.
+        if (auto it = last_.find(kept.Key()); it != last_.end()) {
+            kept.sizeBytes = std::max(kept.sizeBytes, it->second.sizeBytes);
+            kept.totalPages = std::max(kept.totalPages, it->second.totalPages);
+        }
+    }
 
     // Si el servidor no respondió, no interpretamos la lista vacía como "todo terminó".
     const bool reliable = snapshot.error.empty();

@@ -118,6 +118,18 @@ std::vector<ui::PrinterChip> BuildQuickAccess(const core::QueueSnapshot& snapsho
 std::vector<std::wstring> TogglePinned(std::vector<std::wstring> favorites, const std::wstring& printer);
 bool IsPinned(const std::vector<std::wstring>& favorites, const std::wstring& printer);
 
+// Total de páginas de la selección (barra inferior): las mismas que muestra la
+// columna "Páginas". `unknown` = trabajos con "—", que no suman.
+struct PagesTotal {
+    unsigned jobs = 0;
+    std::uint64_t pages = 0;
+    unsigned unknown = 0;
+};
+PagesTotal SumPrintPages(const std::vector<const core::JobInfo*>& jobs, const FactsLookup& facts = {});
+PagesTotal SumHistoryPages(const std::vector<const config::HistoryEntry*>& entries);
+// "Selección: 2 trabajo(s) · 8 páginas a imprimir (1 sin determinar)"; vacío sin selección.
+std::wstring SelectionText(const PagesTotal& total, bool history);
+
 // Resumen para la barra de estado.
 struct QueueSummary {
     unsigned total = 0;

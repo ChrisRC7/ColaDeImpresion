@@ -41,6 +41,7 @@ constexpr wchar_t ZoomIn = 0xE8A3;
 constexpr wchar_t ZoomOut = 0xE71F;
 constexpr wchar_t OpenPane = 0xE8A0;
 constexpr wchar_t ClosePane = 0xE89F;
+constexpr wchar_t Export = 0xEDE1;
 }  // namespace glyph
 
 struct Fonts {

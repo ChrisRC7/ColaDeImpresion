@@ -17,7 +17,9 @@ namespace cola::core {
 struct JobEvent {
     enum class Kind { Added, EnteredError, Finished };
     Kind kind = Kind::Added;
-    JobInfo job;  // último estado conocido del trabajo
+    // Último estado conocido del trabajo, con el mayor tamaño y la mayor
+    // cantidad de páginas que tuvo (al imprimirse el spooler puede bajarlos).
+    JobInfo job;
     config::JobOutcome outcome = config::JobOutcome::Printed;  // solo para Finished
 };
 

@@ -8,9 +8,14 @@
 4. Bajo la cabecera está la **barra de acceso rápido**: los botones de las impresoras que se hayan fijado, con la cantidad de trabajos de cada una (ver §3.1).
 5. A la derecha de la búsqueda hay dos botones: **Pausar / Reanudar trabajos** (los seleccionados, igual que `Ctrl+P`) y **Pausar / Reanudar impresora** (igual que `F9`; en la vista "Todas" actúa sobre todas). Su texto dice lo que harán: si todo lo elegido está en pausa dicen *Reanudar* (con ▶ resaltado). Sin trabajos seleccionados el primero queda gris. En ventanas angostas muestran solo íconos (documento o impresora + ⏸/▶); al pasar el mouse se ve la descripción con el atajo.
 
-La barra inferior resume la cola (trabajos, imprimiendo, en pausa, con error),
-el servidor, problemas de impresoras y si la actualización es **en vivo** o por
-**sondeo**.
+La barra inferior empieza con el **total de la selección**: al elegir uno o
+varios trabajos muestra cuántos son y la suma de las páginas que se van a
+imprimir (la columna *Páginas*, es decir páginas × copias), por ejemplo
+*Selección: 3 trabajo(s) · 11 páginas a imprimir*. Si alguno tiene "—" (no se
+pudo determinar) se indica aparte: *(1 sin determinar)*. En el historial suma las
+páginas de los registros elegidos. Después resume la cola (trabajos, imprimiendo,
+en pausa, con error), el servidor, problemas de impresoras y si la actualización
+es **en vivo** o por **sondeo**.
 
 ## 2. Trabajos
 
@@ -252,8 +257,30 @@ que se viera imprimir). Cada trabajo conserva las mismas columnas que tenía en 
 cola (`#`, páginas × copias, papel, orientación, doble cara, origen del papel,
 tamaño, enviado) y además la hora en que terminó (*Finalizado*). Los registros
 guardados con versiones anteriores a la 0.5.0 muestran "—" en las columnas que
-no tenían. La barra de estado muestra páginas impresas hoy y en los últimos 7
-días. Menú → *Borrar historial* lo vacía.
+no tenían. Las páginas son las mismas que se veían en la cola **también cuando el
+trabajo se liberó y se imprimió** (antes de la 0.5.1 un trabajo de 2 páginas × 2
+copias liberado pasaba al historial como 2). La barra de estado muestra páginas
+impresas hoy y en los últimos 7 días (contadas como la columna *Páginas*).
+Menú → *Borrar historial* lo vacía.
+
+### Exportar a Excel
+
+En el historial aparece el botón **Exportar a Excel** junto a los de pausa
+(también `Ctrl+Shift+E` o menú `⋯` → *Exportar historial a Excel…*). Pide dónde
+guardar el archivo (`Historial de impresión AAAA-MM-DD.xlsx`) y ofrece abrirlo.
+El libro tiene dos hojas:
+
+- **Historial**: todos los registros con las columnas de la tabla, en el orden en
+  que el operador las tenga, más *Servidor*. Páginas, tamaño (KB) y las fechas son
+  números y fechas de Excel (se pueden sumar, filtrar y ordenar); la primera fila
+  queda fija y con filtros.
+- **Resumen**: datos generales (registros, período, trabajos y páginas impresas,
+  promedio por trabajo y por día, cancelados, con error, retirados, usuarios,
+  equipos e impresoras distintos, día y hora con más páginas, usuario con más
+  páginas, trabajo más grande, tamaño total) y tablas de **páginas impresas por
+  tipo de papel, impresora, doble cara, orientación, origen del papel, usuario,
+  equipo, día y hora**, con su porcentaje, además de los trabajos por resultado.
+  Las tablas por categoría cuentan solo los trabajos impresos.
 
 ## 7. Apariencia e idioma
 

@@ -11,7 +11,7 @@
 .EXAMPLE
     .\scripts\build.ps1                 # Release + pruebas
     .\scripts\build.ps1 -Config Debug   # Debug
-    .\scripts\build.ps1 -Package        # además copia el .exe y la documentación a dist\
+    .\scripts\build.ps1 -Package        # además arma dist\ limpia (sin logs ni historial) y "dist\ColaDeImpresion <versión>.zip"
     .\scripts\build.ps1 -Installer      # además compila el instalador (requiere Inno Setup 6)
 #>
 param(
@@ -65,13 +65,22 @@ Write-Host "`nEjecutable: $($exe.FullName)"
 # --- Carpeta de distribución -------------------------------------------------
 if ($Package -or $Installer) {
     $dist = Join-Path $root "dist"
+    $thirdParty = Join-Path $root "third_party\renderers"
+    # third_party no se versiona: si falta pero el paquete anterior trae los
+    # renderizadores, se rescatan antes de borrar dist\ (si no, el paquete nuevo
+    # quedaría sin vista previa de PCL/PostScript/XPS).
+    $oldRenderers = Join-Path $dist "renderers"
+    if (-not (Test-Path (Join-Path $thirdParty "gswin64c.exe")) -and (Test-Path (Join-Path $oldRenderers "gswin64c.exe"))) {
+        New-Item -ItemType Directory $thirdParty -Force | Out-Null
+        Copy-Item (Join-Path $oldRenderers "*") $thirdParty
+        Write-Host "Renderizadores recuperados del paquete anterior en $thirdParty"
+    }
     if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
     New-Item -ItemType Directory $dist | Out-Null
     Copy-Item $exe.FullName $dist
     Copy-Item (Join-Path $root "README.md") $dist
     Copy-Item (Join-Path $root "docs\MANUAL.md") $dist -ErrorAction SilentlyContinue
     New-Item -ItemType Directory (Join-Path $dist "renderers") | Out-Null
-    $thirdParty = Join-Path $root "third_party\renderers"
     if (Test-Path (Join-Path $thirdParty "gswin64c.exe")) {
         # Preparados con scripts\get-renderers.ps1
         Copy-Item (Join-Path $thirdParty "*") (Join-Path $dist "renderers")
@@ -143,6 +152,18 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - PÁGINAS EN EL HISTORIAL (0.5.1): libere un trabajo de 2 páginas x 2
+     copias (o 4 páginas a doble cara) y espere a que se imprima. En el
+     historial (Ctrl+H) la columna Páginas debe decir lo mismo que decía en la
+     cola (4), y el Tamaño no debe quedar en "—".
+   - TOTAL DE LA SELECCIÓN (0.5.1): seleccione uno o varios trabajos (Ctrl+A,
+     Mayús+clic o arrastrando). Abajo a la izquierda aparece "Selección: N
+     trabajo(s) · X páginas a imprimir" con la suma de la columna Páginas.
+     También funciona en el historial.
+   - EXPORTAR A EXCEL (0.5.1): en el historial, botón "Exportar a Excel"
+     (o Ctrl+Shift+E). Guarde el archivo y ábralo: hoja "Historial" con todos
+     los registros y hoja "Resumen" con páginas impresas por papel,
+     impresora, doble cara, usuario, equipo, día y hora.
    - HISTORIAL COMPLETO: imprima o cancele un trabajo y abra el historial
      (Ctrl+H). Debe tener las mismas columnas que tenía en la cola (#,
      Páginas = páginas x copias, Papel, Orientación, Doble cara, Origen del
@@ -217,7 +238,28 @@ OPCIONAL
     herramientas\cola_jobinspect.exe "\\vtec-laimiprint\NOMBRE-IMPRESORA" --data --csv pruebas.csv --label "1 pag x 10 copias"
   Ver la sección "Pruebas pendientes en el LAIMI" de DATOS_DE_IMPRESION.md.
 "@
-    Write-Host "Distribución lista en $dist"
+    # Paquete limpio: sin configuración, historial ni logs de pruebas (en modo
+    # portable se crean junto al .exe la primera vez que se abre).
+    Get-ChildItem $dist -Recurse -File -Include "app.log*", "historial.json", "config.json" | Remove-Item -Force
+
+    # .zip con todo el contenido de dist\ (dentro, una carpeta con la versión).
+    # Las rutas internas se escriben con "/" (CreateFromDirectory de .NET
+    # Framework usa "\", que otros descompresores no entienden).
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    $version = ([regex]::Match((Get-Content (Join-Path $root "CMakeLists.txt") -Raw),
+                               "project\(ColaDeImpresion VERSION ([0-9.]+)")).Groups[1].Value
+    $zipName = "ColaDeImpresion $version.zip"
+    $files = Get-ChildItem $dist -Recurse -File
+    $zipPath = Join-Path $dist $zipName
+    $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in $files) {
+            $relative = $file.FullName.Substring($dist.Length + 1).Replace("\", "/")
+            [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName,
+                "ColaDeImpresion $version/$relative", [IO.Compression.CompressionLevel]::Optimal)
+        }
+    } finally { $zip.Dispose() }
+    Write-Host "Distribución lista en $dist (y $zipName)"
 }
 
 if ($Installer) {

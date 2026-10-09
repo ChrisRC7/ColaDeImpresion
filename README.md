@@ -27,7 +27,7 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 - **Configuración de impresión por trabajo** (`F7`): papel, orientación, doble cara, copias, intercalado, color, páginas lógicas, caras y hojas previstas, cada valor con su origen y su fiabilidad (*Fiable / Estimado / No determinable*). Ver [docs/DATOS_DE_IMPRESION.md](docs/DATOS_DE_IMPRESION.md).
 - **Atajos de teclado configurables** (F1 muestra y permite reasignarlos).
 - **Modo claro / oscuro** (sigue al sistema o manual), contraste verificado WCAG AA.
-- **Historial** con estadísticas de páginas por día/semana, **notificaciones**, **bandeja del sistema**, **inicio con Windows**, **español / inglés**.
+- **Historial** con las mismas columnas que la cola, estadísticas de páginas por día/semana y **exportación a Excel** (hoja con el historial completo y hoja de resumen por papel, impresora, usuario, día...); **total de páginas de la selección** en la barra inferior; **notificaciones**, **bandeja del sistema**, **inicio con Windows**, **español / inglés**.
 
 ## Uso rápido
 
@@ -51,6 +51,7 @@ otra impresora, todo desde el teclado y con modo claro/oscuro.
 | `Ctrl+O` | Conectar a un servidor |
 | `Ctrl+F` | Buscar / filtrar |
 | `Ctrl+H` | Historial |
+| `Ctrl+Shift+E` | Exportar el historial a Excel |
 | `Ctrl+Shift+H` | Activar / desactivar la retención de trabajos nuevos |
 | `Ctrl+D` | Modo claro / oscuro |
 | `F1` o `?` | Todos los atajos (y reasignarlos con teclado o clic) |

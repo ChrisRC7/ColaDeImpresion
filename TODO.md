@@ -141,6 +141,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Mover las columnas arrastrando su título como en la cola de Windows (línea que marca dónde quedan, desplazamiento automático en los bordes); el orden predeterminado es el de siempre y el de cada operador se guarda en su `config.json` (`columnOrder`) y se conserva al abrir; "Restablecer el orden de las columnas"
 - [x] Ninguna columna desaparece al achicar la ventana o abrir el panel de detalles (antes se ocultaba Enviado, entre otras): aparece la barra horizontal
 - [x] La cabecera (búsqueda, botones de pausa e íconos) y la barra de impresoras se redibujan mientras se cambia el tamaño de la ventana (antes se encimaban hasta soltar el borde)
+- [x] Total de páginas de la selección en la barra inferior ("Selección: 3 trabajo(s) · 11 páginas a imprimir", suma de la columna Páginas, con los "—" aparte); también en el historial (0.5.1)
 - [ ] Verificar en la app el arrastre de columnas (cola, vista "Todas" con Impresora, historial y con barra horizontal); no se abrió la app en la PC personal porque al iniciar pausa las impresoras
 - [x] Botones junto a la búsqueda para pausar / reanudar los trabajos seleccionados y la impresora (texto según lo que harán; solo íconos en ventanas angostas)
 - [x] Indicadores visuales claros de estado (colores + íconos por estado)
@@ -166,13 +167,17 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Guardar historial reciente de trabajos impresos (con resultado y estadísticas)
 - [x] El historial guarda y muestra las mismas columnas que la cola (#, páginas × copias, papel, orientación, doble cara, origen, enviado) además del resultado y la hora en que terminó
 - [ ] (LAIMI) Verificar con trabajos reales que el historial conserva papel, doble cara, origen y páginas × copias de trabajos de otras PCs
+- [x] Páginas × copias se perdían al liberar el trabajo (2 págs. × 2 copias pasaba al historial como 2): la caché de datos analizados ya no depende del estado ni del tamaño que informa el spooler al imprimir, y el historial guarda el mayor tamaño y páginas vistos (0.5.1)
+- [ ] (LAIMI) Confirmar con un trabajo de 2 páginas × 2 copias y uno de 4 páginas a doble cara de una PC del laboratorio que el historial dice 4, igual que la cola
+- [x] Exportar el historial a Excel (`.xlsx` propio, sin dependencias): hoja "Historial" con todas las columnas en el orden del operador y hoja "Resumen" (totales, páginas por papel, impresora, doble cara, orientación, origen, usuario, equipo, día y hora); botón en el historial, `Ctrl+Shift+E` y menú (0.5.1)
+- [ ] Probar en la app el diálogo "Guardar como" de la exportación y abrir el archivo desde el aviso (el libro se verificó abriéndolo en Excel; el diálogo no se abrió para no robar el foco)
 - [x] Archivo de configuración local (JSON) — `%APPDATA%\ColaDeImpresion` o modo portable
 
 ---
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 76 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 83 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)
@@ -189,6 +194,7 @@ Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
 - [x] Crear instalador para Windows → script Inno Setup `installer/ColaDeImpresion.iss` (`scripts\build.ps1 -Installer`)
 - [ ] Compilar el instalador y probarlo (requiere Inno Setup 6 instalado)
 - [x] Paquete portable para probar en el LAIMI desde USB (`scripts\build.ps1 -Package` → `dist\`)
+- [x] `-Package` deja `dist\` limpia (sin `app.log`, `historial.json` ni `config.json`) y crea `dist\ColaDeImpresion <versión>.zip` con todo su contenido; rescata los renderizadores del paquete anterior si falta `third_party\renderers`. Se regenera al terminar cada tarea (regla en `AGENTS.md`)
 - [x] Incluir Ghostscript / GhostPCL / GhostXPS en el paquete (`scripts\get-renderers.ps1`); vista previa PCL, PS y XPS verificada
 - [x] Configurar la app para iniciar con Windows (opcional, desde el menú o el instalador)
 - [x] Definir si reemplaza el ícono de la bandeja del sistema del spooler original → **no** (Windows no lo permite); la app tiene su propio ícono (D14)
@@ -205,7 +211,7 @@ Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
 - [x] Estadísticas de uso (páginas impresas hoy / últimos 7 días, por usuario)
 - [x] Soporte multi-idioma (español / inglés)
 - [x] Modo "silencioso" que minimiza la app a la bandeja del sistema
-- [ ] Exportar historial/estadísticas a CSV
+- [x] Exportar historial/estadísticas → a Excel (`.xlsx`) con hoja de resumen (0.5.1)
 - [ ] Vista de estadísticas más completa (gráfico por día, ranking por usuario)
 - [ ] Notificaciones tipo toast de Windows con acciones (cancelar/reanudar)
 - [ ] Registro de qué operador realizó cada acción (auditoría)

@@ -23,6 +23,9 @@ std::wstring FormatTimeIso(const SYSTEMTIME& utc);
 // Fecha local "2026-09-19" (clave de estadísticas por día).
 std::wstring FormatDateKey(const SYSTEMTIME& utc);
 
+// Hora local de una hora UTC (la misma si falla la conversión).
+SYSTEMTIME ToLocalTime(const SYSTEMTIME& utc);
+
 // Hora UTC actual.
 SYSTEMTIME NowUtc();
 

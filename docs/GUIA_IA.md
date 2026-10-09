@@ -44,7 +44,20 @@ de trabajo. El **qué** (estado del proyecto, decisiones, arquitectura) está en
    ```
 5. **Verificar en la app real** cuando el cambio es visible (ver §7).
 6. **Documentar**: actualizar `TODO.md`, `docs/CONTEXTO.md` (bitácora + lo que corresponda) y, si cambia el uso, `README.md` / `docs/MANUAL.md`.
-7. **Commit** (ver §8). Un commit por unidad lógica de trabajo.
+7. **Empaquetar** (siempre que la tarea cambie la app, sin esperar a que el usuario lo pida):
+   subir la versión (`CMakeLists.txt`, `res/app.rc` —4 textos y 2 números—,
+   `installer/ColaDeImpresion.iss`), agregar las novedades a probar en el texto
+   del LEEME dentro de `scripts/build.ps1` y ejecutar
+   ```powershell
+   .\scripts\build.ps1 -Package
+   ```
+   Resultado: `dist\` lista para ejecutar el .exe (portable, renderizadores,
+   documentación, `herramientas\`), **sin** `app.log`, `historial.json` ni
+   `config.json`, y `dist\ColaDeImpresion <versión>.zip` con todo lo de `dist\`
+   (dentro, la carpeta `ColaDeImpresion <versión>\`). `dist\` no se versiona. Si
+   falta `third_party\renderers`, el script los rescata del `dist\` anterior antes
+   de borrarlo.
+8. **Commit** (ver §8). Un commit por unidad lógica de trabajo.
 
 ## 4. Arquitectura en capas
 
@@ -130,6 +143,9 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **No leer un trabajo que el spooler puede estar enviando**: usar `core::CanReadJobData` (solo en pausa o impreso). Las lecturas comparten el avance del trabajo con el procesador de impresión.
 - **Probar contra el servidor con la configuración predeterminada** retiene trabajos reales de estudiantes en todas las colas al iniciar: avisar al operador o desactivar `autoHoldNewJobs`/`pauseAllOnStart` en el `config.json` de prueba si no hace falta la retención.
 - **Vista "Este equipo"**: incluye las conexiones a impresoras del servidor, así que muestra (y puede leer) trabajos reales de estudiantes.
+- **`Size` y `TotalPages` bajan mientras se imprime** (con "Microsoft Print to PDF" el tamaño llega a 0 al final): no usarlos para reconocer un trabajo. `JobFactsService` guarda los datos analizados también por impresora + id (`IdKey`) y `JobTracker` conserva el mayor tamaño y páginas vistos, así el historial guarda lo que se veía con el trabajo retenido. Tampoco poner el estado del trabajo (pausado/imprimiéndose) en la clave de la caché: fue el bug de la 0.4.9 (páginas × copias se perdían al liberarlo).
+- **Barras invertidas en el Bash de esta PC**: en los heredocs (`<<'EOF'`) las barras dobles llegan a la mitad (`"\\\\SRV"` queda `"\\SRV"`). Para código o scripts con rutas UNC o escapes, escribir el archivo con la herramienta de escritura y ejecutarlo.
+- **Probar con clics simulados**: `Mayús`/`Ctrl` se leen del teclado real (`GetKeyState`), así que un `PostMessage` con `MK_SHIFT` no hace selección múltiple; usar el arrastre (rectángulo) con `WM_LBUTTONDOWN` + `WM_MOUSEMOVE` + `WM_LBUTTONUP`.
 
 ## 7. Cómo verificar en la app real
 
@@ -155,4 +171,5 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 
 Una tarea está terminada cuando: compila sin warnings en Debug y Release, las
 pruebas pasan, se verificó en la app si es visible, `TODO.md` y `CONTEXTO.md`
-reflejan el cambio y está commiteada.
+reflejan el cambio, `dist\` y su `.zip` están regenerados con la versión nueva
+(§3 paso 7) y está commiteada.

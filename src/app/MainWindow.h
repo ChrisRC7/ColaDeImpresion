@@ -83,6 +83,8 @@ private:
     void RebuildRows();
     void UpdateHeader();
     void UpdateStatus();
+    // Total de páginas de los trabajos seleccionados en la barra inferior.
+    void UpdateSelectionTotal();
     void UpdateTitle();
     const core::JobInfo* FindJob(const std::wstring& key) const;
     std::vector<core::JobInfo> SelectedJobs() const;
@@ -120,6 +122,8 @@ private:
     void OnActionResult(const ActionResult& result);
     void ToggleQuickLook();
     void ToggleHistory();
+    // Pide dónde guardar y exporta todo el historial a un libro de Excel.
+    void ExportHistory();
     void ToggleTheme();
     void SetFilter(const std::wstring& filter);
     // Orden de la cola (equipo, hora, usuario...). delta rota entre criterios.

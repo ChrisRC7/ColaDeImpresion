@@ -1,7 +1,7 @@
 #pragma once
 // Barra superior: selector de impresora, cuadro de búsqueda, los botones de
-// pausa (trabajos seleccionados e impresora, junto a la búsqueda) y botones de
-// acción (detalles, historial, ayuda, tema, menú). El cuadro de texto también sirve para
+// pausa (trabajos seleccionados e impresora, junto a la búsqueda), en el
+// historial el botón "Exportar a Excel", y botones de acción (detalles, historial, ayuda, tema, menú). El cuadro de texto también sirve para
 // escribir el nombre de un servidor ("modo servidor", Ctrl+O).
 
 #include <functional>
@@ -13,7 +13,8 @@ namespace cola::ui {
 
 // Details = mostrar u ocultar el panel de detalles (vista previa y configuración).
 // PauseJobs / PausePrinter = pausar o reanudar los trabajos seleccionados / la impresora.
-enum class HeaderButton { Printer, History, Help, Theme, Menu, Details, PauseJobs, PausePrinter, Count_ };
+// Export = exportar el historial a Excel (solo visible en el historial).
+enum class HeaderButton { Printer, History, Help, Theme, Menu, Details, PauseJobs, PausePrinter, Export, Count_ };
 
 // Estado de un botón de pausa: qué hará al pulsarlo y su descripción.
 struct PauseButtonState {
@@ -37,6 +38,7 @@ public:
     void SetHistoryActive(bool active);
     void SetDetailsActive(bool active);
     void SetPauseButtons(const PauseButtonState& jobs, const PauseButtonState& printer);
+    void SetExportTooltip(const std::wstring& text);
 
     void FocusSearch();
     bool IsEditFocused() const { return GetFocus() == edit_; }
@@ -64,6 +66,8 @@ private:
     // Ancho de un botón de pausa con el texto más largo de sus dos estados (o solo el ícono).
     int PauseButtonWidth(HeaderButton id) const;
     const PauseButtonState& PauseState(HeaderButton id) const;
+    int ExportButtonWidth() const;
+    void PaintExportButton(HDC dc);
 
     Callbacks callbacks_;
     HWND edit_ = nullptr;
@@ -77,6 +81,7 @@ private:
     bool detailsActive_ = false;
     PauseButtonState pauseJobs_;
     PauseButtonState pausePrinter_;
+    std::wstring exportTooltip_;
     bool pauseLabels_ = true;  // con poco espacio los botones de pausa muestran solo el ícono
     bool serverMode_ = false;
     std::wstring savedSearch_;
