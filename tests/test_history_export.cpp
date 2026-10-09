@@ -229,6 +229,11 @@ TEST(XlsxHelpers) {
     CHECK(bytes.find("&lt;&amp;&gt; \xC3\xB1") != std::string::npos);  // escapado y en UTF-8
     CHECK(bytes.find("<v>1.5</v>") != std::string::npos);
     CHECK(bytes.find("_xlnm._FilterDatabase") != std::string::npos);
+
+    // Filas fijas: título + encabezados.
+    sheet.frozenRows = 2;
+    const std::string frozen = util::xlsx::BuildWorkbook({sheet});
+    CHECK(frozen.find("ySplit=\"2\" topLeftCell=\"A3\"") != std::string::npos);
 }
 
 TEST(HistorySummaryAndWorkbook) {
@@ -261,7 +266,9 @@ TEST(HistorySummaryAndWorkbook) {
     for (const auto& c : app::HistoryColumns()) order.push_back(c.id);
     std::swap(order[0], order[1]);
     auto sheets = app::BuildHistoryWorkbook(entries, now, order);
-    CHECK_EQ(sheets.size(), size_t(2));
+    // Historial, Resumen y una hoja por tabla (resultado, papel, impresora, doble
+    // cara, orientación, origen, usuario, equipo, día y hora).
+    CHECK_EQ(sheets.size(), size_t(12));
     CHECK_EQ(sheets[0].rows.size(), entries.size() + 1);
     CHECK_EQ(sheets[0].rows[0][0].text, std::wstring(L"Documento"));
     CHECK_EQ(sheets[0].rows[0].back().text, std::wstring(L"Servidor"));
@@ -272,11 +279,23 @@ TEST(HistorySummaryAndWorkbook) {
     CHECK(sheets[0].rows[1][pagesColumn].kind == util::xlsx::Cell::Kind::Number);
     CHECK(sheets[0].rows[1][pagesColumn].number == 4.0);
     CHECK_EQ(sheets[0].rows[3][pagesColumn].text, std::wstring(L"—"));
-    // El resumen tiene la tabla por tipo de papel.
-    bool paperTable = false;
+    // El resumen general ya no lleva las tablas: cada una está en su hoja.
+    CHECK_EQ(sheets[1].name, std::wstring(L"Resumen"));
     for (const auto& row : sheets[1].rows)
-        if (!row.empty() && row[0].text == L"Páginas impresas por tipo de papel") paperTable = true;
-    CHECK(paperTable);
+        CHECK(row.empty() || row[0].text != L"Páginas impresas por tipo de papel");
+    const util::xlsx::Sheet* paper = nullptr;
+    for (const auto& sheet : sheets)
+        if (sheet.name == L"Por papel") paper = &sheet;
+    CHECK(paper != nullptr);
+    if (paper) {
+        CHECK_EQ(paper->frozenRows, 2);
+        CHECK_EQ(paper->rows[0][0].text, std::wstring(L"Páginas impresas por tipo de papel"));
+        CHECK_EQ(paper->rows[1][0].text, std::wstring(L"Papel"));
+        CHECK_EQ(paper->rows.size(), size_t(2 + 3 + 1));  // título, encabezados, A3/Carta/sin dato, total
+        CHECK_EQ(paper->rows[2][0].text, std::wstring(L"A3"));  // la de más páginas primero
+        CHECK(paper->rows.back()[2].number == 16.0);
+    }
+    for (const auto& sheet : sheets) CHECK(util::xlsx::SafeSheetName(sheet.name) == sheet.name);
     CHECK(!util::xlsx::BuildWorkbook(sheets).empty());
     CHECK(app::DefaultExportFileName(now).find(L".xlsx") != std::wstring::npos);
 }

@@ -152,6 +152,12 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - RESUMEN DE EXCEL EN HOJAS (0.5.4): exporte el historial (Ctrl+Shift+E)
+     y abra el archivo. La hoja "Resumen" tiene solo los datos generales y
+     cada tabla está en su propia hoja: "Por resultado", "Por papel", "Por
+     impresora", "Por doble cara", "Por orientación", "Por origen del papel",
+     "Por usuario", "Por equipo", "Por día" y "Por hora". Al bajar en una
+     lista larga (usuarios, equipos) el título y los encabezados quedan fijos.
    - PÁGINAS DE LAS EPSON (0.5.2 y 0.5.3): envíe a LAIMI 1 - INK documentos
      de 1, 2 y 3 páginas. La columna Páginas debe decir 1, 2 y 3 (antes decía 2, 2
      y 4: Windows cuenta el dorso en blanco de la última hoja a doble cara).
@@ -170,8 +176,9 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      También funciona en el historial.
    - EXPORTAR A EXCEL (0.5.1): en el historial, botón "Exportar a Excel"
      (o Ctrl+Shift+E). Guarde el archivo y ábralo: hoja "Historial" con todos
-     los registros y hoja "Resumen" con páginas impresas por papel,
-     impresora, doble cara, usuario, equipo, día y hora.
+     los registros, hoja "Resumen" con los datos generales y una hoja por
+     tabla (páginas impresas por papel, impresora, doble cara, usuario,
+     equipo, día y hora).
    - HISTORIAL COMPLETO: imprima o cancele un trabajo y abra el historial
      (Ctrl+H). Debe tener las mismas columnas que tenía en la cola (#,
      Páginas = páginas x copias, Papel, Orientación, Doble cara, Origen del

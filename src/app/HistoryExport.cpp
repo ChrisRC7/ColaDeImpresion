@@ -107,7 +107,7 @@ Sheet HistorySheet(const std::vector<config::HistoryEntry>& entries, const std::
 
     Sheet sheet;
     sheet.name = Tr(S::XlsSheetHistory);
-    sheet.freezeFirstRow = true;
+    sheet.frozenRows = 1;
     sheet.autoFilter = true;
     Row header;
     for (size_t i : order) {
@@ -151,11 +151,15 @@ Sheet HistorySheet(const std::vector<config::HistoryEntry>& entries, const std::
     return sheet;
 }
 
-// Agrega al resumen una tabla "categoría | trabajos | páginas | %".
-void AddTable(Sheet& sheet, S title, const std::wstring& categoryTitle, std::vector<std::pair<Cell, Tally>> rows,
-              std::uint64_t totalPages, std::uint64_t totalJobs) {
-    sheet.rows.push_back({});
-    sheet.rows.push_back({Cell::Text(Tr(title), CellStyle::Bold)});
+// Hoja con una tabla "categoría | trabajos | páginas | %": el título y los
+// encabezados quedan fijos para recorrer listas largas (usuarios, equipos, días).
+Sheet TableSheet(S name, S title, const std::wstring& categoryTitle, std::vector<std::pair<Cell, Tally>> rows,
+                 std::uint64_t totalPages, std::uint64_t totalJobs) {
+    Sheet sheet;
+    sheet.name = Tr(name);
+    sheet.columnWidths = {46, 12, 12, 18};
+    sheet.frozenRows = 2;
+    sheet.rows.push_back({Cell::Text(Tr(title), CellStyle::Title)});
     sheet.rows.push_back({Cell::Text(categoryTitle, CellStyle::Header), Cell::Text(Tr(S::XlsJobs), CellStyle::Header),
                           Cell::Text(Tr(S::XlsPages), CellStyle::Header),
                           Cell::Text(Tr(totalPages ? S::XlsShare : S::XlsShareJobs), CellStyle::Header)});
@@ -170,6 +174,7 @@ void AddTable(Sheet& sheet, S title, const std::wstring& categoryTitle, std::vec
     sheet.rows.push_back({Cell::Text(Tr(S::XlsTotal), CellStyle::Bold),
                           Cell::Number(static_cast<double>(totalJobs), CellStyle::Integer),
                           Cell::Number(static_cast<double>(totalPages), CellStyle::Integer)});
+    return sheet;
 }
 
 // Categorías ordenadas de más a menos páginas (a igualdad, más trabajos y luego por nombre).
@@ -196,14 +201,15 @@ const T* MaxPages(const std::map<std::wstring, T>& map, std::wstring& key) {
     return best;
 }
 
-Sheet SummarySheet(const std::vector<config::HistoryEntry>& entries, std::int64_t nowUnix) {
+// Hoja "Resumen" con los datos generales y una hoja por cada tabla.
+std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entries, std::int64_t nowUnix) {
     const HistorySummary s = SummarizeHistory(entries);
     const Tally& printed = s.Printed();
     auto outcome = [&](config::JobOutcome o) -> const Tally& { return s.byOutcome[static_cast<int>(o)]; };
 
     Sheet sheet;
     sheet.name = Tr(S::XlsSheetSummary);
-    sheet.columnWidths = {46, 18, 14, 16};
+    sheet.columnWidths = {46, 40};
     sheet.rows.push_back({Cell::Text(Tr(S::XlsTitle), CellStyle::Title)});
     sheet.rows.push_back({Cell::Text(
         util::Format(Tr(S::XlsGenerated), util::FormatDateTime(util::FromUnixSeconds(nowUnix)).c_str()),
@@ -265,6 +271,9 @@ Sheet SummarySheet(const std::vector<config::HistoryEntry>& entries, std::int64_
                                                        s.largestUser.c_str(), s.largestPages)));
     line(S::XlsPrintedSize, Cell::Number(static_cast<double>(s.printedBytes) / (1024.0 * 1024.0), CellStyle::Decimal));
 
+    std::vector<Sheet> sheets;
+    sheets.push_back(std::move(sheet));
+
     // Por resultado (todos los trabajos).
     std::vector<std::pair<Cell, Tally>> outcomes;
     std::uint64_t allJobs = 0, allPages = 0;
@@ -275,16 +284,21 @@ Sheet SummarySheet(const std::vector<config::HistoryEntry>& entries, std::int64_
         allPages += outcome(o).pages;
     }
     // El porcentaje de esta tabla es sobre los trabajos (incluye los no impresos).
-    AddTable(sheet, S::XlsByOutcome, Tr(S::ColResult), std::move(outcomes), 0, allJobs);
-    sheet.rows.back()[2] = Cell::Number(static_cast<double>(allPages), CellStyle::Integer);
+    sheets.push_back(TableSheet(S::XlsSheetOutcome, S::XlsByOutcome, Tr(S::ColResult), std::move(outcomes), 0,
+                                allJobs));
+    sheets.back().rows.back()[2] = Cell::Number(static_cast<double>(allPages), CellStyle::Integer);
 
-    AddTable(sheet, S::XlsByPaper, Tr(S::ColPaper), ByPages(s.byPaper), printed.pages, printed.jobs);
-    AddTable(sheet, S::XlsByPrinter, Tr(S::ColPrinter), ByPages(s.byPrinter), printed.pages, printed.jobs);
-    AddTable(sheet, S::XlsByDuplex, Tr(S::ColDuplex), ByPages(s.byDuplex), printed.pages, printed.jobs);
-    AddTable(sheet, S::XlsByOrientation, Tr(S::ColOrientation), ByPages(s.byOrientation), printed.pages, printed.jobs);
-    AddTable(sheet, S::XlsBySource, Tr(S::ColSource), ByPages(s.bySource), printed.pages, printed.jobs);
-    AddTable(sheet, S::XlsByUser, Tr(S::ColUser), ByPages(s.byUser), printed.pages, printed.jobs);
-    AddTable(sheet, S::XlsByMachine, Tr(S::ColMachine), ByPages(s.byMachine), printed.pages, printed.jobs);
+    // Las demás tablas: porcentaje sobre las páginas impresas.
+    auto table = [&](S name, S title, S category, std::vector<std::pair<Cell, Tally>> rows) {
+        sheets.push_back(TableSheet(name, title, Tr(category), std::move(rows), printed.pages, printed.jobs));
+    };
+    table(S::XlsSheetPaper, S::XlsByPaper, S::ColPaper, ByPages(s.byPaper));
+    table(S::XlsSheetPrinter, S::XlsByPrinter, S::ColPrinter, ByPages(s.byPrinter));
+    table(S::XlsSheetDuplex, S::XlsByDuplex, S::ColDuplex, ByPages(s.byDuplex));
+    table(S::XlsSheetOrientation, S::XlsByOrientation, S::ColOrientation, ByPages(s.byOrientation));
+    table(S::XlsSheetSource, S::XlsBySource, S::ColSource, ByPages(s.bySource));
+    table(S::XlsSheetUser, S::XlsByUser, S::ColUser, ByPages(s.byUser));
+    table(S::XlsSheetMachine, S::XlsByMachine, S::ColMachine, ByPages(s.byMachine));
 
     // Por día (cronológico, con la fecha como fecha de Excel) y por hora.
     std::vector<std::pair<Cell, Tally>> days;
@@ -295,12 +309,12 @@ Sheet SummarySheet(const std::vector<config::HistoryEntry>& entries, std::int64_
         t.wDay = static_cast<WORD>(_wtoi(day.substr(8, 2).c_str()));
         days.push_back({Cell::Number(util::xlsx::SerialDate(t), CellStyle::Date), tally});
     }
-    AddTable(sheet, S::XlsByDay, Tr(S::XlsDate), std::move(days), printed.pages, printed.jobs);
+    table(S::XlsSheetDay, S::XlsByDay, S::XlsDate, std::move(days));
     std::vector<std::pair<Cell, Tally>> hours;
     for (int h = 0; h < 24; ++h)
         if (s.byHour[h].jobs) hours.push_back({Cell::Text(util::Format(Tr(S::XlsHourRange), h, h)), s.byHour[h]});
-    AddTable(sheet, S::XlsByHour, Tr(S::XlsHour), std::move(hours), printed.pages, printed.jobs);
-    return sheet;
+    table(S::XlsSheetHour, S::XlsByHour, S::XlsHour, std::move(hours));
+    return sheets;
 }
 
 }  // namespace
@@ -309,7 +323,7 @@ std::vector<Sheet> BuildHistoryWorkbook(const std::vector<config::HistoryEntry>&
                                         const std::vector<std::wstring>& columnOrder) {
     std::vector<Sheet> sheets;
     sheets.push_back(HistorySheet(entries, columnOrder));
-    sheets.push_back(SummarySheet(entries, nowUnix));
+    for (auto& sheet : SummarySheets(entries, nowUnix)) sheets.push_back(std::move(sheet));
     return sheets;
 }
 

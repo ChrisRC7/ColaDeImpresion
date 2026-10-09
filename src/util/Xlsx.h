@@ -1,7 +1,7 @@
 #pragma once
 // Escritor mínimo de libros de Excel (.xlsx, Office Open XML): hojas con texto,
-// números y fechas, un juego fijo de estilos, anchos de columna, fila de
-// títulos fija y autofiltro. Sin dependencias (el ZIP lo arma ZipWriter).
+// números y fechas, un juego fijo de estilos, anchos de columna, filas de
+// títulos fijas y autofiltro. Sin dependencias (el ZIP lo arma ZipWriter).
 
 #include <windows.h>
 
@@ -31,7 +31,7 @@ struct Sheet {
     std::wstring name;                 // máx. 31 caracteres; se limpian los no permitidos
     std::vector<double> columnWidths;  // en caracteres; 0 = predeterminado
     std::vector<Row> rows;
-    bool freezeFirstRow = false;
+    int frozenRows = 0;  // filas de arriba que quedan fijas al desplazarse
     bool autoFilter = false;  // sobre la primera fila y todas las columnas usadas
 };
 

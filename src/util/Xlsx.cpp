@@ -119,9 +119,10 @@ std::string SheetXml(const Sheet& sheet, bool selected) {
     x += "\">";
     x += "<sheetViews><sheetView workbookViewId=\"0\"";
     if (selected) x += " tabSelected=\"1\"";
-    if (sheet.freezeFirstRow)
-        x += "><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/>"
-             "<selection pane=\"bottomLeft\"/></sheetView>";
+    if (sheet.frozenRows > 0)
+        x += "><pane ySplit=\"" + std::to_string(sheet.frozenRows) + "\" topLeftCell=\"A" +
+             std::to_string(sheet.frozenRows + 1) +
+             "\" activePane=\"bottomLeft\" state=\"frozen\"/><selection pane=\"bottomLeft\"/></sheetView>";
     else
         x += "/>";
     x += "</sheetViews><sheetFormatPr defaultRowHeight=\"15\"/>";

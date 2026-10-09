@@ -268,7 +268,7 @@ Menú → *Borrar historial* lo vacía.
 En el historial aparece el botón **Exportar a Excel** junto a los de pausa
 (también `Ctrl+Shift+E` o menú `⋯` → *Exportar historial a Excel…*). Pide dónde
 guardar el archivo (`Historial de impresión AAAA-MM-DD.xlsx`) y ofrece abrirlo.
-El libro tiene dos hojas:
+El libro tiene estas hojas:
 
 - **Historial**: todos los registros con las columnas de la tabla, en el orden en
   que el operador las tenga, más *Servidor*. Páginas, tamaño (KB) y las fechas son
@@ -277,10 +277,14 @@ El libro tiene dos hojas:
 - **Resumen**: datos generales (registros, período, trabajos y páginas impresas,
   promedio por trabajo y por día, cancelados, con error, retirados, usuarios,
   equipos e impresoras distintos, día y hora con más páginas, usuario con más
-  páginas, trabajo más grande, tamaño total) y tablas de **páginas impresas por
-  tipo de papel, impresora, doble cara, orientación, origen del papel, usuario,
-  equipo, día y hora**, con su porcentaje, además de los trabajos por resultado.
-  Las tablas por categoría cuentan solo los trabajos impresos.
+  páginas, trabajo más grande, tamaño total).
+- **Una hoja por tabla**, para no tener que bajar entre una y otra: *Por
+  resultado* (trabajos impresos, cancelados, con error y retirados) y **páginas
+  impresas** *Por papel*, *Por impresora*, *Por doble cara*, *Por orientación*,
+  *Por origen del papel*, *Por usuario*, *Por equipo*, *Por día* y *Por hora*,
+  con trabajos, páginas, porcentaje y total. El título y los encabezados quedan
+  fijos al desplazarse. Las tablas por categoría cuentan solo los trabajos
+  impresos.
 
 ## 7. Apariencia e idioma
 

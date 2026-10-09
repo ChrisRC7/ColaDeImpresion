@@ -173,6 +173,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Páginas × copias se perdían al liberar el trabajo (2 págs. × 2 copias pasaba al historial como 2): la caché de datos analizados ya no depende del estado ni del tamaño que informa el spooler al imprimir, y el historial guarda el mayor tamaño y páginas vistos (0.5.1)
 - [ ] (LAIMI) Confirmar con un trabajo de 2 páginas × 2 copias y uno de 4 páginas a doble cara de una PC del laboratorio que el historial dice 4, igual que la cola
 - [x] Exportar el historial a Excel (`.xlsx` propio, sin dependencias): hoja "Historial" con todas las columnas en el orden del operador y hoja "Resumen" (totales, páginas por papel, impresora, doble cara, orientación, origen, usuario, equipo, día y hora); botón en el historial, `Ctrl+Shift+E` y menú (0.5.1)
+- [x] Cada tabla del resumen de Excel en su propia hoja ("Por resultado", "Por papel", "Por impresora", "Por usuario", "Por equipo", "Por día"...), con título y encabezados fijos, para no bajar entre tablas; "Resumen" queda con los datos generales (0.5.4)
 - [ ] Probar en la app el diálogo "Guardar como" de la exportación y abrir el archivo desde el aviso (el libro se verificó abriéndolo en Excel; el diálogo no se abrió para no robar el foco)
 - [x] Archivo de configuración local (JSON) — `%APPDATA%\ColaDeImpresion` o modo portable
 

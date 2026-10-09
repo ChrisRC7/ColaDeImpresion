@@ -1,7 +1,8 @@
 #pragma once
 // Exportación del historial a Excel: una hoja con el historial completo (las
-// mismas columnas y valores que la tabla, en el orden del operador) y otra con
-// el resumen (páginas impresas por papel, impresora, usuario, día...).
+// mismas columnas y valores que la tabla, en el orden del operador), otra con
+// el resumen general y una hoja por cada tabla del resumen (páginas impresas
+// por papel, impresora, usuario, día...), para no tener que bajar entre tablas.
 // El armado del libro es lógica pura (se prueba en tests/); RunHistoryExport
 // pide el archivo con el diálogo de Windows y lo guarda.
 
