@@ -597,5 +597,7 @@ X(XlsShare, L"% de las páginas", L"% of pages")
 X(XlsShareJobs, L"% de los trabajos", L"% of jobs")
 X(XlsTotal, L"Total", L"Total")
 X(XlsNoData, L"Sin dato", L"No data")
+X(XlsNoPrinted, L"No hay trabajos impresos en el historial: esta tabla cuenta solo los impresos (ver la hoja \"Por resultado\").",
+  L"There are no printed jobs in the history: this table counts printed jobs only (see the \"By result\" sheet).")
 X(XlsDate, L"Fecha", L"Date")
 X(XlsHour, L"Hora", L"Hour")

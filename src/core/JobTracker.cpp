@@ -6,12 +6,16 @@
 
 namespace cola::core {
 
-config::JobOutcome GuessOutcome(const JobInfo& last, std::uint32_t printerProblems, bool cancelledByUs) {
+config::JobOutcome GuessOutcome(const JobInfo& last, std::uint32_t printerProblems, bool cancelledByUs,
+                                bool releasedByUs) {
     using config::JobOutcome;
     if (cancelledByUs || last.state == JobState::Deleting) return JobOutcome::Cancelled;
     if (last.state == JobState::Printing || last.state == JobState::Printed || last.pagesPrinted > 0)
         return JobOutcome::Printed;
     if (last.state == JobState::Error) return JobOutcome::Failed;
+    // El operador lo liberó y salió de la cola: se imprimió (aunque lo último
+    // que se vio fuera "en pausa" con la impresora en pausa).
+    if (releasedByUs) return JobOutcome::Printed;
     // Trabajo corto que se imprimió entre dos refrescos: era el primero de la
     // cola y la impresora estaba operativa.
     const std::uint32_t blocking = ProblemOffline | ProblemPaused | ProblemNotAvailable | ProblemError |
@@ -32,6 +36,10 @@ std::vector<JobEvent> JobTracker::Update(const QueueSnapshot& snapshot) {
     std::unordered_map<std::wstring, JobInfo> current;
     current.reserve(snapshot.jobs.size());
     for (const auto& job : snapshot.jobs) {
+        // La copia local de Client Side Rendering no es otro trabajo: es el
+        // mismo que esta PC todavía envía al servidor (que aparece aparte).
+        // Contarla duplicaba el trabajo en el historial como "retirado".
+        if (job.rawStatus & kJobStatusRenderingLocally) continue;
         JobInfo& kept = current.emplace(job.Key(), job).first->second;
         // Al imprimirse el spooler puede informar menos bytes o páginas (0 al
         // final): el historial describe el trabajo completo, no su avance.
@@ -60,8 +68,9 @@ std::vector<JobEvent> JobTracker::Update(const QueueSnapshot& snapshot) {
             const PrinterInfo* printer = snapshot.FindPrinter(job.printer);
             if (!printer || (printer->problems & ProblemNotAvailable)) continue;
             auto problems = printerProblems_.count(job.printer) ? printerProblems_[job.printer] : 0u;
-            bool ours = cancelledByUs_.erase(key) > 0;
-            events.push_back({JobEvent::Kind::Finished, job, GuessOutcome(job, problems, ours)});
+            const bool ours = cancelledByUs_.erase(key) > 0;
+            const bool released = releasedByUs_.erase(key) > 0;
+            events.push_back({JobEvent::Kind::Finished, job, GuessOutcome(job, problems, ours, released)});
         }
     }
 
@@ -78,6 +87,7 @@ void JobTracker::Reset() {
     last_.clear();
     printerProblems_.clear();
     cancelledByUs_.clear();
+    releasedByUs_.clear();
     initialized_ = false;
 }
 

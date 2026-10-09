@@ -128,6 +128,36 @@ TEST(JobTrackerEvents) {
     CHECK(tracker.Update(broken).empty());
 }
 
+TEST(ReleasedJobsAndLocalCopiesInHistory) {
+    // Caso real del LAIMI (0.5.4): trabajo retenido con la impresora en pausa;
+    // el operador lo libera (F11) y se imprime antes del siguiente refresco.
+    core::JobTracker tracker;
+    auto held = MakeJob(221, core::JobState::Paused, 1);
+    auto other = MakeJob(222, core::JobState::Paused, 2);
+    // Copia local de Client Side Rendering del mismo documento (otra id).
+    auto local = MakeJob(5, core::JobState::Spooling, 29999);
+    local.rawStatus = core::kJobStatusRenderingLocally;
+    tracker.Update(MakeSnapshot({held, other, local}, core::ProblemPaused));
+    auto events = tracker.Update(MakeSnapshot({held, other}, core::ProblemPaused));
+    CHECK(events.empty());  // la copia local no cuenta como trabajo terminado
+
+    tracker.MarkReleasedByUser(held.Key());
+    events = tracker.Update(MakeSnapshot({}, core::ProblemPaused));
+    CHECK_EQ(events.size(), size_t(2));
+    for (auto& e : events) {
+        if (e.job.id == 221) CHECK(e.outcome == config::JobOutcome::Printed);
+        if (e.job.id == 222) CHECK(e.outcome == config::JobOutcome::Removed);  // nadie lo liberó
+    }
+
+    // Una copia local que aparece en medio tampoco genera "nuevo trabajo".
+    events = tracker.Update(MakeSnapshot({local}));
+    CHECK(events.empty());
+    CHECK(core::GuessOutcome(MakeJob(1, core::JobState::Paused, 1), core::ProblemPaused, false, true) ==
+          config::JobOutcome::Printed);
+    CHECK(core::GuessOutcome(MakeJob(1, core::JobState::Paused, 1), core::ProblemPaused, true, true) ==
+          config::JobOutcome::Cancelled);
+}
+
 TEST(GuessOutcomeHeuristics) {
     using config::JobOutcome;
     CHECK(core::GuessOutcome(MakeJob(1, core::JobState::Deleting), 0, false) == JobOutcome::Cancelled);

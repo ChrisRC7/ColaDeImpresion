@@ -98,6 +98,8 @@ private:
     // --- Comandos ---
     void Execute(input::Command command);
     void RunOnSelection(JobAction action);
+    // Ejecuta una acción sobre trabajos y le avisa al historial cuáles liberó el operador.
+    void RunJobAction(JobAction action, std::vector<core::JobInfo> jobs);
     // Pausa o reanuda los trabajos seleccionados (y opcionalmente la impresora).
     void TogglePauseSelection(bool alsoPrinter);
     // Reanuda los trabajos seleccionados y sus impresoras; cada impresora se

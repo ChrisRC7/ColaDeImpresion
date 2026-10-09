@@ -296,6 +296,15 @@ TEST(HistorySummaryAndWorkbook) {
         CHECK(paper->rows.back()[2].number == 16.0);
     }
     for (const auto& sheet : sheets) CHECK(util::xlsx::SafeSheetName(sheet.name) == sheet.name);
+
+    // Sin trabajos impresos las tablas por categoría no quedan en blanco: dicen por qué.
+    std::vector<config::HistoryEntry> removed = {Entry(now, config::JobOutcome::Removed, L"3", L"Carta", L"ana")};
+    auto empty = app::BuildHistoryWorkbook(removed, now);
+    for (const auto& sheet : empty) {
+        if (sheet.name != L"Por papel") continue;
+        CHECK_EQ(sheet.rows.size(), size_t(4));  // título, encabezados, aviso, total
+        CHECK(sheet.rows[2][0].text.find(L"No hay trabajos impresos") == 0);
+    }
     CHECK(!util::xlsx::BuildWorkbook(sheets).empty());
     CHECK(app::DefaultExportFileName(now).find(L".xlsx") != std::wstring::npos);
 }

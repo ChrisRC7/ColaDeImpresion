@@ -152,6 +152,13 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - RESULTADO EN EL HISTORIAL (0.5.5): libere un trabajo con F11 (o
+     Ctrl+R) y espere a que se imprima. En el historial (Ctrl+H) debe decir
+     "Impreso" (antes quedaba como "Retirado" si se imprimía muy rápido) y
+     debe aparecer UNA sola vez (antes la copia que esta PC envía al
+     servidor se agregaba como otro registro "Retirado", con equipo
+     \\PC y tamaño 0). Al exportar a Excel, las hojas "Por papel", "Por
+     usuario", etc. tienen datos; si no hay impresos, lo dicen.
    - RESUMEN DE EXCEL EN HOJAS (0.5.4): exporte el historial (Ctrl+Shift+E)
      y abra el archivo. La hoja "Resumen" tiene solo los datos generales y
      cada tabla está en su propia hoja: "Por resultado", "Por papel", "Por

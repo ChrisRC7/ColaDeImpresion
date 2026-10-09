@@ -1076,7 +1076,7 @@ void MainWindow::TogglePauseSelection(bool alsoPrinter) {
     }
     // Si alguno está corriendo se pausa todo; si todos están en pausa, se reanuda.
     const bool pause = ShouldPauseJobs(jobs);
-    actions_->Run(pause ? JobAction::Pause : JobAction::Resume, jobs);
+    RunJobAction(pause ? JobAction::Pause : JobAction::Resume, jobs);
     // El combinado deja la(s) impresora(s) de esos trabajos en el mismo estado.
     if (alsoPrinter) SetPrintersPaused(pause, PrintersOf(jobs));
 }
@@ -1094,7 +1094,7 @@ void MainWindow::PrintSelectionAndRepause() {
     }
     // El mismo hilo de acciones reanuda primero los trabajos y después las
     // impresoras: así no se cuela otro trabajo de la cola entre ambos pasos.
-    actions_->Run(JobAction::Resume, jobs);
+    RunJobAction(JobAction::Resume, jobs);
     std::vector<std::wstring> paused;
     for (const auto& name : PrintersOf(jobs))
         if (const auto* p = snapshot_->FindPrinter(name); p && (p->problems & core::ProblemPaused)) paused.push_back(name);
@@ -1122,6 +1122,14 @@ void MainWindow::RunOnSelection(JobAction action) {
     if (jobs.empty()) {
         ShowTransient(Tr(S::NoJobSelected), ui::Tone::Warning);
         return;
+    }
+    RunJobAction(action, std::move(jobs));
+}
+
+void MainWindow::RunJobAction(JobAction action, std::vector<core::JobInfo> jobs) {
+    for (const auto& job : jobs) {
+        if (action == JobAction::Resume || action == JobAction::Restart) tracker_.MarkReleasedByUser(job.Key());
+        else if (action == JobAction::Pause) tracker_.ForgetReleasedByUser(job.Key());
     }
     actions_->Run(action, std::move(jobs));
 }

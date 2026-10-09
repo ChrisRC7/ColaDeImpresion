@@ -163,6 +163,8 @@ Sheet TableSheet(S name, S title, const std::wstring& categoryTitle, std::vector
     sheet.rows.push_back({Cell::Text(categoryTitle, CellStyle::Header), Cell::Text(Tr(S::XlsJobs), CellStyle::Header),
                           Cell::Text(Tr(S::XlsPages), CellStyle::Header),
                           Cell::Text(Tr(totalPages ? S::XlsShare : S::XlsShareJobs), CellStyle::Header)});
+    // Sin filas la hoja parecería mal exportada: se dice por qué está vacía.
+    if (rows.empty()) sheet.rows.push_back({Cell::Text(Tr(S::XlsNoPrinted), CellStyle::Muted)});
     for (auto& [label, tally] : rows) {
         const double share = totalPages ? static_cast<double>(tally.pages) / static_cast<double>(totalPages)
                              : totalJobs ? static_cast<double>(tally.jobs) / static_cast<double>(totalJobs)
