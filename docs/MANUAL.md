@@ -300,7 +300,7 @@ indica el período exportado. El libro tiene estas hojas:
 
 - `Ctrl+D` o el botón sol/luna: alterna claro/oscuro. En el menú: *Tema: seguir al sistema / claro / oscuro*.
 - Menú → *Language: English / Idioma: Español*.
-- Botón **!** en un círculo (a la derecha del sol/luna) o menú → *Acerca de…*: versión y autores principales. Un clic en un correo abre el programa de correo (si no hay, lo copia); el botón de copiar de cada autor lo copia al portapapeles. `Esc` cierra.
+- Botón **!** en un círculo (a la derecha del sol/luna) o menú → *Acerca de…*: versión y autores principales. `Esc` o *Cerrar* la cierran.
 
 ## 8. Atajos de teclado
 

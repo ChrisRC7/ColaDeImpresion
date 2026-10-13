@@ -623,12 +623,8 @@ X(MenuAbout, L"Acerca de…", L"About…")
 X(AboutTitle, L"Acerca de Cola de Impresión", L"About Print Queue")
 X(AboutAppName, L"Cola de Impresión", L"Print Queue")
 X(AboutVersion, L"Versión %ls", L"Version %ls")
-X(AboutDescription,
-  L"Gestor de colas de impresión del LAIMI, Instituto Tecnológico de Costa Rica: ver, retener, liberar, "
-  L"reordenar y previsualizar los trabajos del servidor de impresión.",
-  L"Print queue manager for LAIMI, Costa Rica Institute of Technology: view, hold, release, reorder and "
-  L"preview the print server's jobs.")
+X(AboutDescription, L"Gestor de colas de impresión del LAIMI, Instituto Tecnológico de Costa Rica.",
+  L"Print queue manager for LAIMI, Costa Rica Institute of Technology.")
 X(AboutAuthors, L"AUTORES PRINCIPALES", L"MAIN AUTHORS")
-X(AboutCopied, L"Correo copiado al portapapeles", L"Email address copied to the clipboard")
-X(AboutFooter, L"© 2026 · Hecho para el LAIMI · TEC", L"© 2026 · Made for LAIMI · TEC")
+X(AboutFooter, L"© 2026 · Desarrollado para el LAIMI", L"© 2026 · Developed for LAIMI")
 X(AboutClose, L"Cerrar", L"Close")

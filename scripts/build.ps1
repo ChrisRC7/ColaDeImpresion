@@ -152,12 +152,10 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
-   - ACERCA DE (0.5.7): en la cabecera, a la derecha del botón de modo
-     claro/oscuro, hay un botón con un signo "!" en un círculo. Abre la
-     ventana "Acerca de" con la versión y los autores. Un clic en un correo
-     abre el programa de correo (si no hay, lo copia); el botón de la
-     derecha de cada autor copia el correo. También está en el menú (F10) >
-     "Acerca de…". Esc o Cerrar la cierran.
+   - ACERCA DE (0.5.7 y 0.5.8): en la cabecera, a la derecha del botón de
+     modo claro/oscuro, hay un botón con un signo "!" en un círculo. Abre la
+     ventana "Acerca de" con la versión y los autores principales. También
+     está en el menú (F10) > "Acerca de…". Esc o Cerrar la cierran.
    - EXPORTAR UN RANGO DE FECHAS (0.5.6): en el historial pulse "Exportar a
      Excel" (o Ctrl+Shift+E). Aparece un cuadro: "Todo el historial" o
      "Solo un rango de fechas". Elija Desde y Hasta (solo aparecen los días
