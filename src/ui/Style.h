@@ -42,6 +42,7 @@ constexpr wchar_t ZoomOut = 0xE71F;
 constexpr wchar_t OpenPane = 0xE8A0;
 constexpr wchar_t ClosePane = 0xE89F;
 constexpr wchar_t Export = 0xEDE1;
+constexpr wchar_t About = 0xE783;  // signo de exclamación en un círculo
 }  // namespace glyph
 
 struct Fonts {

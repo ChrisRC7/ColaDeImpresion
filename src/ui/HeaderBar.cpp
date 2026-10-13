@@ -55,7 +55,7 @@ void HeaderBar::OnStyleChanged() {
 }
 
 void HeaderBar::UpdateTooltips() {
-    const S texts[] = {S::TipPrinter, S::TipHistory, S::TipHelp, S::TipTheme, S::TipMenu, S::TipDetails};
+    const S texts[] = {S::TipPrinter, S::TipHistory, S::TipHelp, S::TipTheme, S::TipMenu, S::TipDetails, S::TipAbout};
     static_assert(sizeof(texts) / sizeof(texts[0]) == static_cast<size_t>(HeaderButton::PauseJobs),
                   "un texto por botón fijo; los de pausa y exportar traen el suyo");
     for (int i = 0; i < static_cast<int>(HeaderButton::Count_); ++i) {
@@ -196,9 +196,10 @@ void HeaderBar::Layout() {
     const int btn = style.Px(36);
     const int cy = (client.top + client.bottom) / 2;
 
-    // Botones a la derecha (de derecha a izquierda: menú, tema, ayuda, historial, detalles).
+    // Botones a la derecha (de derecha a izquierda: menú, acerca de, tema, ayuda,
+    // historial, detalles).
     int x = client.right - pad;
-    for (HeaderButton b : {HeaderButton::Menu, HeaderButton::Theme, HeaderButton::Help, HeaderButton::History,
+    for (HeaderButton b : {HeaderButton::Menu, HeaderButton::About, HeaderButton::Theme, HeaderButton::Help, HeaderButton::History,
                            HeaderButton::Details}) {
         buttons_[static_cast<int>(b)] = {x - btn, cy - btn / 2, x, cy + btn / 2};
         x -= btn + style.Px(2);
@@ -307,6 +308,7 @@ void HeaderBar::Paint(HDC dc, const RECT& client) {
         {HeaderButton::History, glyph::History, historyActive_},
         {HeaderButton::Help, glyph::Keyboard, false},
         {HeaderButton::Theme, style.dark() ? glyph::Sun : glyph::Moon, false},
+        {HeaderButton::About, glyph::About, false},
         {HeaderButton::Menu, glyph::More, false},
     };
     for (const auto& b : icons) {

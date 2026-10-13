@@ -1,7 +1,7 @@
 #pragma once
 // Barra superior: selector de impresora, cuadro de búsqueda, los botones de
 // pausa (trabajos seleccionados e impresora, junto a la búsqueda), en el
-// historial el botón "Exportar a Excel", y botones de acción (detalles, historial, ayuda, tema, menú). El cuadro de texto también sirve para
+// historial el botón "Exportar a Excel", y botones de acción (detalles, historial, ayuda, tema, acerca de, menú). El cuadro de texto también sirve para
 // escribir el nombre de un servidor ("modo servidor", Ctrl+O).
 
 #include <functional>
@@ -14,7 +14,8 @@ namespace cola::ui {
 // Details = mostrar u ocultar el panel de detalles (vista previa y configuración).
 // PauseJobs / PausePrinter = pausar o reanudar los trabajos seleccionados / la impresora.
 // Export = exportar el historial a Excel (solo visible en el historial).
-enum class HeaderButton { Printer, History, Help, Theme, Menu, Details, PauseJobs, PausePrinter, Export, Count_ };
+// About = ventana "Acerca de" (autores).
+enum class HeaderButton { Printer, History, Help, Theme, Menu, Details, About, PauseJobs, PausePrinter, Export, Count_ };
 
 // Estado de un botón de pausa: qué hará al pulsarlo y su descripción.
 struct PauseButtonState {

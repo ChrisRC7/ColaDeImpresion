@@ -147,6 +147,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Total de páginas de la selección en la barra inferior ("Selección: 3 trabajo(s) · 11 páginas a imprimir", suma de la columna Páginas, con los "—" aparte); también en el historial (0.5.1)
 - [ ] Verificar en la app el arrastre de columnas (cola, vista "Todas" con Impresora, historial y con barra horizontal); no se abrió la app en la PC personal porque al iniciar pausa las impresoras
 - [x] Botones junto a la búsqueda para pausar / reanudar los trabajos seleccionados y la impresora (texto según lo que harán; solo íconos en ventanas angostas)
+- [x] Ventana "Acerca de" con los autores principales y su correo (botón "!" en un círculo a la derecha del de claro/oscuro y menú *Acerca de…*); clic en el correo = programa de correo, botón para copiarlo (0.5.7)
+- [ ] (LAIMI) Ver la ventana "Acerca de" en el servidor: si no hay programa de correo, el clic en el correo debe copiarlo (en la PC de desarrollo no se probó el clic real)
 - [x] Indicadores visuales claros de estado (colores + íconos por estado)
 - [x] Evitar menús anidados; priorizar acciones directas y atajos (un único menú plano)
 - [x] Soporte de DPI alto (Per-Monitor V2)

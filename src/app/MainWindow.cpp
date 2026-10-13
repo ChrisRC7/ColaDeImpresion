@@ -17,6 +17,7 @@
 #include "core/Spooler.h"
 #include "i18n/Strings.h"
 #include "ui/DarkMode.h"
+#include "ui/AboutDialog.h"
 #include "ui/ExportDialog.h"
 #include "ui/Gfx.h"
 #include "ui/Style.h"
@@ -82,6 +83,7 @@ enum MenuId : UINT {
     ID_CHIP_PAUSE,
     ID_CHIP_RESUME,
     ID_CHIP_PURGE,
+    ID_ABOUT,
     ID_CTX_PAUSE = 2101,
     ID_CTX_PAUSE_BOTH,
     ID_CTX_PRINT_REPAUSE,
@@ -193,6 +195,7 @@ bool MainWindow::Create(const StartupOptions& options) {
                                    case ui::HeaderButton::PauseJobs: Execute(Command::Pause); break;
                                    case ui::HeaderButton::PausePrinter: Execute(Command::PausePrinter); break;
                                    case ui::HeaderButton::Export: ExportHistory(); break;
+                                   case ui::HeaderButton::About: ui::ShowAboutDialog(hwnd_); break;
                                    default: break;
                                }
                            },
@@ -1509,6 +1512,7 @@ void MainWindow::ShowMainMenu(POINT screen) {
                 keyed(S::MenuExportHistory, Command::ExportHistory).c_str());
     AppendMenuW(menu, MF_STRING, ID_CLEAR_HISTORY, Tr(S::MenuClearHistory));
     if (!IsElevated()) AppendMenuW(menu, MF_STRING, ID_RUN_AS_ADMIN, Tr(S::MenuRunAsAdmin));
+    AppendMenuW(menu, MF_STRING, ID_ABOUT, Tr(S::MenuAbout));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_EXIT, Tr(S::MenuExit));
 
@@ -1688,6 +1692,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
             UpdateStatus();
             break;
         case ID_RUN_AS_ADMIN: RestartAsAdmin(); break;
+        case ID_ABOUT: ui::ShowAboutDialog(hwnd_); break;
         case ID_EXIT: Quit(); break;
         default: break;
     }
