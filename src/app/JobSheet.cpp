@@ -295,7 +295,11 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
         const wchar_t* text = acc.duplex.value == DMDUP_VERTICAL     ? Tr(S::ValueDuplexLongShort)
                               : acc.duplex.value == DMDUP_HORIZONTAL ? Tr(S::ValueDuplexShortShort)
                                                                      : Tr(S::ValueSimplex);
-        out.duplex = Marked(acc.duplex.reliability, text);
+        // Epson con datos sin leer (o ilegibles): el DEVMODE del servidor es el
+        // predeterminado de la cola (D29), no lo que eligió el usuario: "—".
+        const bool queueDefault = acc.kind == core::DataKind::Pdl && !(facts && facts->duplex.valid) &&
+                                  IsVerifiedEpsonDriver(job.driver);
+        out.duplex = Marked(queueDefault ? Reliability::Unknown : acc.duplex.reliability, text);
     }
     // Origen del papel: en los datos (ESC/Page "iuE") o en el DEVMODE (en RAW
     // este puede ser el predeterminado de la cola). Con el nombre del controlador.

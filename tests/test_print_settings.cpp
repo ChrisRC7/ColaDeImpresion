@@ -559,6 +559,49 @@ TEST(EpsonPaperSourceShowsNames) {
     CHECK(core::FindPaper(0) == nullptr);
 }
 
+TEST(EpsonDuplexWithoutDataIsNotShown) {
+    i18n::SetLanguage(i18n::Language::Spanish);
+    // Caso real (Doc1.pdf en LAIMI 1 - INK): el DEVMODE del servidor es el de la
+    // cola (doble cara) y los datos dicen DX=OFF. Sin leer los datos no se sabe.
+    DEVMODEW dm = MakeDevMode();
+    dm.dmFields = DM_DUPLEX;
+    dm.dmDuplex = DMDUP_VERTICAL;
+    core::JobInfo job = EmfJob(2, dm);
+    job.datatype = L"RAW";
+    job.printProcessor = L"EPSON AM-C6000 Series";
+    job.driver = L"EPSON AM-C6000 Series";
+    CHECK_EQ(app::ResolveListSettings(job, nullptr).duplex, std::wstring(L"—"));
+    core::ContentFacts unread;  // lectura incompleta: formato desconocido, sin opciones
+    unread.analyzed = true;
+    unread.kind = core::DataKind::Pdl;
+    CHECK_EQ(app::ResolveListSettings(job, &unread).duplex, std::wstring(L"—"));
+
+    std::string data =
+        "\x1b\x01@EJL \n@EJL JI DRIVER=\"EPSON AM-C6000 Series\"\n@EJL SET PS=LT DX=OFF BD=LE CO=1 QT=1\n"
+        "@EJL EN LA=ESC/PAGE-COLOR\n\x0c\x0c\x1b\x01@EJL \n@EJL EJ \n";
+    auto bytes = Bytes(data);
+    core::ContentFacts read;
+    read.analyzed = read.complete = true;
+    read.kind = core::DataKind::Pdl;
+    preview::ParsePdlSettings(bytes.data(), bytes.size(), true, read);
+    CHECK_EQ(app::ResolveListSettings(job, &read).duplex, std::wstring(L"Una cara"));
+
+    // Otro controlador RAW: se sigue mostrando el DEVMODE (estimado).
+    job.driver = L"HP Universal Printing PCL 6";
+    CHECK_EQ(app::ResolveListSettings(job, nullptr).duplex, std::wstring(L"Borde largo"));
+}
+
+TEST(IncompleteReadIsDetected) {
+    // Dos copias de la app leyendo a la vez: cada una se queda con bloques sueltos.
+    CHECK(preview::ReadLooksIncomplete(5112491, 1310720, false));
+    CHECK(preview::ReadLooksIncomplete(2064121, 1277689, false));
+    CHECK(!preview::ReadLooksIncomplete(2632, 2632, false));
+    // Cortada a propósito por tamaño (16 MB): no es incompleta.
+    CHECK(!preview::ReadLooksIncomplete(40ull << 20, 16ull << 20, true));
+    // Sin tamaño informado: no se puede saber.
+    CHECK(!preview::ReadLooksIncomplete(0, 100, false));
+}
+
 TEST(PostScriptDscIsParsed) {
     // Fragmentos reales de PSCRIPT5 (Word -> CutePDF) y de Acrobat ("%%Pages: (atend)").
     std::string ps =

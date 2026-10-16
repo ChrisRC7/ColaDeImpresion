@@ -51,6 +51,11 @@ public:
     static std::wstring Key(const core::JobInfo& job);
 
     static constexpr std::uint64_t kMaxBytes = 16ull * 1024 * 1024;
+    // Lectura incompleta (otra copia de la app leía el mismo trabajo): se vuelve
+    // a intentar en otra ronda, como mucho kIncompleteRounds veces y no antes de
+    // kIncompleteRetryMs. Siempre con el trabajo en pausa (CanReadJobData).
+    static constexpr int kIncompleteRounds = 3;
+    static constexpr std::uint64_t kIncompleteRetryMs = 15000;
 
 private:
     // Impresora e id: identifica el trabajo mientras está en la cola.
@@ -62,6 +67,11 @@ private:
     std::map<std::wstring, std::shared_ptr<const core::ContentFacts>> cache_;
     std::map<std::wstring, std::shared_ptr<const core::ContentFacts>> latest_;  // por IdKey: último análisis con datos
     std::set<std::wstring> pending_;
+    struct Retry {
+        int rounds = 0;
+        std::uint64_t notBefore = 0;  // GetTickCount64()
+    };
+    std::map<std::wstring, Retry> retries_;  // por Key: lecturas incompletas
     util::WorkQueue worker_{true};  // COM para el XPS Object Model; último miembro: se destruye primero
 };
 

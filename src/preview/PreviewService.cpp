@@ -11,6 +11,15 @@ DocumentPtr PreviewService::Find(const std::wstring& key) {
     std::lock_guard lock(mutex_);
     auto it = index_.find(key);
     if (it == index_.end()) return nullptr;
+    // Lectura incompleta (otra copia de la app leía el trabajo): pasado un rato
+    // se olvida para que el próximo refresco la vuelva a pedir.
+    const auto& doc = it->second->second;
+    if (doc->readIncomplete && GetTickCount64() - doc->builtTick > kIncompleteRetryMs) {
+        used_ -= std::min(used_, doc->MemoryBytes());
+        lru_.erase(it->second);
+        index_.erase(it);
+        return nullptr;
+    }
     lru_.splice(lru_.begin(), lru_, it->second);  // marca como usado recientemente
     return it->second->second;
 }

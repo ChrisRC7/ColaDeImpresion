@@ -30,6 +30,7 @@ struct SpoolData {
     unsigned long apiError = 0;      // error de la API del spooler si no se pudo usar
     bool stillSpooling = false;      // no se leyó: el trabajo todavía se está recibiendo
     bool notHeld = false;            // no se leyó: no está en pausa (leerlo dañaría la impresión)
+    bool incomplete = false;         // se leyó solo una parte: otro programa lo leía a la vez (se descartó)
     std::wstring path;               // archivo leído (vacío si vino por la API)
     std::vector<std::uint8_t> bytes;
     std::uint64_t fileSize = 0;      // tamaño real (bytes puede estar recortado)
@@ -80,11 +81,19 @@ SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const st
 //   3. archivo de spool en la carpeta del servidor (respaldo).
 // Un trabajo que todavía se está recibiendo no se lee (ReadPrinter esperaría),
 // y tampoco uno que no esté en pausa (core::CanReadJobData): la lectura le
-// quitaría datos al procesador de impresión.
+// quitaría datos al procesador de impresión. Una lectura incompleta
+// (ReadLooksIncomplete) se reintenta unas veces con espera; si no se logra
+// completa se descarta (incomplete = true) en vez de analizar bloques sueltos.
 // allowFile = false: solo la API del spooler (para análisis en segundo plano,
 // donde buscar en la carpeta de spool solo sumaría esperas y errores).
 SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes,
                        bool allowFile = true);
+
+// Una lectura por la API llegó incompleta: no se cortó por tamaño (truncated)
+// y trae menos bytes que JOB_INFO_2.Size. Pasa cuando otro programa (otra
+// copia de la app en otra PC) lee el mismo trabajo a la vez: las lecturas
+// comparten el avance y cada una se queda con bloques sueltos.
+bool ReadLooksIncomplete(std::uint64_t jobSize, std::uint64_t bytesRead, bool truncated);
 
 // Lee un archivo cualquiera (hasta maxBytes) compartiendo lectura/escritura.
 bool ReadFileShared(const std::wstring& path, std::uint64_t maxBytes, std::vector<std::uint8_t>& out,

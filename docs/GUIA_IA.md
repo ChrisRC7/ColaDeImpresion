@@ -130,6 +130,7 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **Renderizadores**: `third_party/` no se versiona; regenerar con `scripts/get-renderers.ps1` (necesita 7-Zip).
 - **Macro `CHECK_EQ`**: copia sus argumentos; no cambiarla a referencias (en Release se leían temporales destruidos).
 - **Datos de un trabajo**: usar `core::spooler::ReadJobData` (API), no la carpeta de spool. Nunca llamarla con un trabajo en `JOB_STATUS_SPOOLING`: `ReadPrinter` se queda esperando datos.
+- **Varias copias de la app leyendo el mismo trabajo**: las lecturas comparten el avance y cada una recibe bloques sueltos (sin error). Comparar lo leído con `JOB_INFO_2.Size` (`ReadLooksIncomplete`) y no analizar lo incompleto (D48). Los reintentos solo con el trabajo en pausa (D39).
 - **`JOB_INFO_2.pDevMode` no siempre es lo aplicado**: en EMF manda el `EMRI_DEVMODE` del spool (Word lo cambia tras `StartDoc`). Usar `core::EffectiveDevMode`.
 - **`pDatatype` no dice el formato real**: un driver v4 declara `RAW` y envía OpenXPS; detectar siempre por contenido (`DetectFormat`).
 - **Pruebas con "imprimir a archivo"** (`lpszOutput`): si el trabajo queda pausado, `EndDoc` de la aplicación se bloquea hasta que se reanude. Con `cola_jobinspect --hold` usar `--release`.

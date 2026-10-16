@@ -53,6 +53,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] (LAIMI) Confirmar con trabajos reales que ya no faltan trabajos (en `app.log` aparece "los trabajos se consultan en \\…estudiantes.tec.cr\…" al iniciar y "la caché del cliente muestra N trabajo(s) y el servidor M" cuando la corrección actúa)
 - [x] Hojas en blanco / impresora que se reinicia con documentos grandes enviados con la app abierta: la retención ya no pausa la copia local de Client Side Rendering (`RENDERING_LOCALLY`) y los datos solo se leen de trabajos en pausa o impresos (0.4.9, D39)
 - [ ] (LAIMI) Confirmar con "50 pag.pdf" desde una PC del laboratorio que llega con ~70,9 MB, queda retenido y se imprime bien al liberarlo con la 0.4.9
+- [x] Varias copias de la app conectadas al servidor se repartían los datos de cada trabajo (lecturas incompletas → "RAW" y doble cara de la cola): se detecta, se reintenta y no se analiza lo incompleto; Epson sin datos leídos = "—" en Doble cara (0.5.9, D48)
+- [ ] (LAIMI) Confirmar con dos copias abiertas y un PDF de varios MB a una cara que ambas muestran "Una cara" y que se imprime bien
 - [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
 - [ ] (LAIMI) Verificar reordenamiento y reenvío con impresoras físicas del laboratorio
 

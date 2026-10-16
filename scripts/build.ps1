@@ -152,6 +152,14 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - VARIAS COPIAS ABIERTAS (0.5.9): con la app abierta en dos PCs a la vez,
+     envíe un PDF de varios MB a una cara a una Epson. En las dos PCs la
+     columna Doble cara debe decir "Una cara" (antes una de ellas podía
+     marcarlo como RAW y mostrar "Borde largo", la configuración de la cola).
+     En app.log puede aparecer "Datos del trabajo N incompletos": es normal,
+     se reintenta solo. Mientras no se pudieron leer los datos de una Epson,
+     Doble cara muestra "—". Al liberarlo (F11) debe imprimirse bien, sin
+     hojas en blanco.
    - ACERCA DE (0.5.7 y 0.5.8): en la cabecera, a la derecha del botón de
      modo claro/oscuro, hay un botón con un signo "!" en un círculo. Abre la
      ventana "Acerca de" con la versión y los autores principales. También

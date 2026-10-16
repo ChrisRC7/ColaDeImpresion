@@ -79,6 +79,10 @@ struct PreviewDocument {
     std::uint32_t totalPages = 0;  // total real si se conoce (puede ser > pages.size())
     std::uint64_t dataBytes = 0;   // tamaño del spool leído
     bool truncated = false;        // solo se renderizó una parte
+    // Los datos llegaron incompletos (otro programa los leía a la vez): la caché
+    // la olvida pasado un rato para volver a intentarlo (PreviewService::Find).
+    bool readIncomplete = false;
+    std::uint64_t builtTick = 0;   // GetTickCount64() al generarla
     // Lo que se averiguó de los datos (páginas, repeticiones, opciones PJL/EJL/PrintTicket).
     core::ContentFacts facts;
     std::wstring dataOrigin;       // cómo se obtuvieron los datos (API del spooler / archivo)

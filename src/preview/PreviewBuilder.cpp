@@ -184,6 +184,10 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
         doc->message = Tr(S::PreviewStillSpooling);
     } else if (spool.notHeld) {
         doc->message = Tr(S::PreviewNotHeld);
+    } else if (spool.incomplete) {
+        doc->message = Tr(S::PreviewReadIncomplete);
+        doc->readIncomplete = true;
+        doc->builtTick = GetTickCount64();
     } else if (spool.error == 0 && spool.bytes.empty()) {
         // Los datos existen pero todavía están vacíos: el trabajo sigue llegando.
         doc->message = Tr(S::PreviewSpoolEmpty);

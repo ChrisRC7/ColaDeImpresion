@@ -281,10 +281,29 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
     // 2. API del spooler.
     bool truncated = false;
     core::OpResult api = core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated);
-    // 0 bytes de un trabajo que sí tiene datos: otro programa lo estaba leyendo a la vez. Se reintenta.
-    for (int attempt = 0; api.ok && data.bytes.empty() && job.sizeBytes > 0 && attempt < 3; ++attempt) {
-        Sleep(250);
+    // 0 bytes o bloques sueltos de un trabajo que sí tiene datos: otro programa
+    // (otra copia de la app) lo estaba leyendo a la vez. Se reintenta con esperas
+    // crecientes y algo de azar para que las copias no vuelvan a coincidir. Cada
+    // intento pasa por ReadJobData, que comprueba que siga en pausa: si lo
+    // liberan no se vuelve a leer (D39).
+    auto partial = [&] {
+        if (!api.ok) return false;
+        return data.bytes.empty() ? job.sizeBytes > 0 : ReadLooksIncomplete(job.sizeBytes, data.bytes.size(), truncated);
+    };
+    for (DWORD wait : {250, 500, 1000, 2000, 4000}) {
+        if (!partial()) break;
+        Sleep(wait + (GetTickCount() ^ GetCurrentProcessId()) % 300);
         api = core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated);
+    }
+    if (partial()) {
+        // Analizar bloques sueltos daría un formato desconocido y opciones equivocadas.
+        util::LogInfo(L"Datos del trabajo %u incompletos (%llu de %llu bytes): otro programa lo leía a la vez",
+                      job.id, static_cast<unsigned long long>(data.bytes.size()),
+                      static_cast<unsigned long long>(job.sizeBytes));
+        data.bytes.clear();
+        data.incomplete = true;
+        data.error = ERROR_INVALID_DATA;
+        return data;
     }
     if (api.ok) {
         data.origin = SpoolOrigin::SpoolerApi;
@@ -348,6 +367,10 @@ size_t SkipPjlHeader(const std::uint8_t* data, size_t size) {
         }
     }
     return pos;
+}
+
+bool ReadLooksIncomplete(std::uint64_t jobSize, std::uint64_t bytesRead, bool truncated) {
+    return !truncated && bytesRead < jobSize;
 }
 
 DataFormat DetectFormat(const std::uint8_t* data, size_t size) {

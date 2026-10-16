@@ -23,8 +23,10 @@ public:
 
     explicit PreviewService(ReadyCallback onReady, size_t memoryBudgetBytes = 384ull * 1024 * 1024);
 
-    // Devuelve la vista previa cacheada o nullptr.
+    // Devuelve la vista previa cacheada o nullptr. Una con lectura incompleta
+    // vale kIncompleteRetryMs; después se olvida y el próximo refresco la pide de nuevo.
     DocumentPtr Find(const std::wstring& key);
+    static constexpr std::uint64_t kIncompleteRetryMs = 15000;
 
     // Encola la generación si no está cacheada ni pendiente.
     // urgent = descarta las solicitudes pendientes anteriores (el usuario cambió de trabajo).

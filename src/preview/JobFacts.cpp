@@ -56,6 +56,9 @@ void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std:
     for (auto it = cache_.begin(); it != cache_.end();) it = alive.count(it->first) ? std::next(it) : cache_.erase(it);
     for (auto it = latest_.begin(); it != latest_.end();)
         it = aliveIds.count(it->first) ? std::next(it) : latest_.erase(it);
+    for (auto it = retries_.begin(); it != retries_.end();)
+        it = alive.count(it->first) ? std::next(it) : retries_.erase(it);
+    const std::uint64_t now = GetTickCount64();
 
     for (const auto& job : jobs) {
         const std::wstring key = Key(job);
@@ -69,6 +72,7 @@ void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std:
             continue;
         }
         if (cache_.count(key) || pending_.count(key)) continue;
+        if (auto r = retries_.find(key); r != retries_.end() && now < r->second.notBefore) continue;
         pending_.insert(key);
         worker_.Post([this, job, key, server, overrideDir] {
             auto facts = std::make_shared<core::ContentFacts>();
@@ -76,10 +80,18 @@ void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std:
             SpoolData spool = ReadJobSpool(search, job, kMaxBytes, false);
             if (spool.error == 0 && !spool.bytes.empty()) AnalyzeSpoolData(spool, *facts);
             // Sin datos (sin permiso, trabajo ya impreso...) se guarda igual el
-            // resultado vacío para no reintentar en cada refresco.
+            // resultado vacío para no reintentar en cada refresco. Una lectura
+            // incompleta no: se reintenta más tarde unas pocas veces.
             {
                 std::lock_guard lock(mutex_);
                 pending_.erase(key);
+                if (spool.incomplete) {
+                    Retry& retry = retries_[key];
+                    if (++retry.rounds < kIncompleteRounds) {
+                        retry.notBefore = GetTickCount64() + kIncompleteRetryMs;
+                        return;
+                    }
+                }
                 Remember(job, facts);
                 cache_[key] = std::move(facts);
             }
@@ -101,6 +113,7 @@ void JobFactsService::Clear() {
     std::lock_guard lock(mutex_);
     worker_.Clear();
     pending_.clear();
+    retries_.clear();
     cache_.clear();
     latest_.clear();
 }
