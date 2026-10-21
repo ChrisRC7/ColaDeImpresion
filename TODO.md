@@ -183,6 +183,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] Probar en la app el diálogo de exportación con el mouse (lista de días, cambio de opción) y con un historial largo (muchos días en la lista)
 - [ ] Probar en la app el diálogo "Guardar como" de la exportación y abrir el archivo desde el aviso (el libro se verificó abriéndolo en Excel; el diálogo no se abrió para no robar el foco)
 - [x] Archivo de configuración local (JSON) — `%APPDATA%\ColaDeImpresion` o modo portable
+- [x] `config.json` por usuario de Windows en `%LOCALAPPDATA%\ColaDeImpresion` también en modo portable (PCs institucionales compartidas); la primera vez se copia la configuración anterior; `--config RUTA` para desarrollo (0.5.10, D49)
+- [ ] (LAIMI) Confirmar con dos usuarios en la misma PC que cada uno conserva sus preferencias
 
 ---
 

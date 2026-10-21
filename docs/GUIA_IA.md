@@ -137,7 +137,7 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **Manifiesto con MinGW**: GCC enlaza `default-manifest.o` y el .exe quedaba con dos `RT_MANIFEST` (aviso `.rsrc merge failure: multiple non-default manifests`). `CMakeLists.txt` lo reemplaza por uno vacío con `-B`; si reaparece el aviso, revisar eso.
 - **Macro `near`** de `windows.h`: no usar ese nombre para variables o lambdas.
 - **Word por COM desde PowerShell 5.1**: los métodos exigen `[ref]` y los valores llegan envueltos en `PSObject`; usar `InvokeMember` con valores desenvueltos (ver `tools/pruebas/word_jobs.ps1`) y guardar los `.ps1` con BOM UTF-8.
-- **Probar una compilación con la versión de producción abierta**: la app es de instancia única; usar `--instancia-adicional` con `build\portable.txt` y un `config.json` propio (escribirlo con una biblioteca JSON: las barras invertidas de las rutas se rompen fácilmente). Con la configuración por defecto la app activa la retención y pausa impresoras al iniciar.
+- **Probar una compilación con la versión de producción abierta**: la app es de instancia única; usar `--instancia-adicional` con `--config RUTA\config.json` (un `config.json` propio; sin `--config` se usaría el del usuario en `%LOCALAPPDATA%`) (escribirlo con una biblioteca JSON: las barras invertidas de las rutas se rompen fácilmente). Con la configuración por defecto la app activa la retención y pausa impresoras al iniciar.
 - **Caché de las conexiones a impresoras compartidas**: por el nombre de la conexión (`\\srv\Cola`) `EnumJobs`/`GetPrinter` responden desde la caché del cliente aunque se use `PRINTER_OPTION_NO_CACHE`; para la verdad del servidor abrir con el nombre DNS completo (`spooler::CacheBypassName`). Medir el tiempo de la llamada delata la caché (< 1 ms).
 - **Capturas de la app sin robar el foco**: si el usuario está escribiendo, una ventana que se abre en primer plano recibe sus teclas (`Espacio`/`Enter` abren la vista rápida). Lanzar con `--instancia-adicional --tray` y mostrar la ventana con `ShowWindow(h, SW_SHOWNOACTIVATE)` antes de `PrintWindow`.
 - **Client Side Rendering y la caché**: un trabajo con `JOB_STATUS_RENDERING_LOCALLY` (0x4000) es la copia local que esta PC todavía convierte y envía al servidor (en EMF, mucho más pesada). **Nunca** pausarlo, leerlo ni actuar sobre él: pausarlo deja al servidor con datos incompletos (hojas en blanco). Se actúa sobre el trabajo del servidor.
@@ -152,7 +152,7 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 
 ## 7. Cómo verificar en la app real
 
-1. Compilar Debug y crear `build\portable.txt` para que la configuración quede en `build\` y no en `%APPDATA%`.
+1. Compilar Debug, crear `build\portable.txt` (historial y log en `build\`) y abrir con `--config build\config.json` para no tocar la configuración propia en `%LOCALAPPDATA%` (D49).
 2. Crear trabajos de prueba que quedan en cola sin imprimir:
    ```powershell
    .\build\cola_testjob.exe "Microsoft Print to PDF" --jobs 3 --pages 5 --seconds 300 --pause `

@@ -90,8 +90,11 @@ cmake --build build
 ```
 
 El ejecutable es autónomo (sin DLLs adicionales). Para usarlo sin instalar,
-basta copiar `ColaDeImpresion.exe`; si junto a él existe `portable.txt`, la
-configuración se guarda en esa misma carpeta.
+basta copiar `ColaDeImpresion.exe`; si junto a él existe `portable.txt`, el
+historial y `app.log` se guardan en esa misma carpeta. Las preferencias
+(`config.json`) son siempre de cada usuario de Windows y van en
+`%LOCALAPPDATA%\ColaDeImpresion`, para que en las PCs compartidas una persona
+no sobrescriba la configuración de otra.
 
 ## Vista previa de PCL / PostScript / PDF / XPS (opcional)
 

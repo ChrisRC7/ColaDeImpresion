@@ -96,9 +96,10 @@ C:\Program Files\gs\.
     }
 
     # --- Extras para llevar en USB y probar en el LAIMI (el instalador los ignora) ---
-    # Modo portable: config, historial y app.log quedan junto al .exe.
+    # Modo portable: historial y app.log quedan junto al .exe (config.json
+    # siempre va en %LOCALAPPDATA% de cada usuario).
     Set-Content -Path (Join-Path $dist "portable.txt") -Encoding utf8 -Value `
-        "Si este archivo existe, la configuración, el historial y app.log se guardan en esta carpeta."
+        "Si este archivo existe, el historial y app.log se guardan en esta carpeta. La configuración (config.json) es de cada usuario: está en %LOCALAPPDATA%\ColaDeImpresion."
     # Lanzador que conecta directo al servidor del laboratorio.
     Set-Content -Path (Join-Path $dist "Abrir vtec-laimiprint.bat") -Encoding ascii -Value @"
 @echo off
@@ -152,6 +153,13 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - CONFIGURACIÓN DE CADA PERSONA (0.5.10): las preferencias (config.json)
+     ya no se guardan junto al .exe sino en la carpeta de cada usuario de
+     Windows (%LOCALAPPDATA%\ColaDeImpresion). Abra la app con su usuario,
+     cambie algo (tema, columnas, impresoras de acceso rápido) y ciérrela;
+     al abrirla con otro usuario en la misma PC no debe ver esos cambios.
+     Menú > "Abrir carpeta de configuración" abre esa carpeta. La primera
+     vez se parte de la configuración que había antes.
    - VARIAS COPIAS ABIERTAS (0.5.9): con la app abierta en dos PCs a la vez,
      envíe un PDF de varios MB a una cara a una Epson. En las dos PCs la
      columna Doble cara debe decir "Una cara" (antes una de ellas podía
@@ -249,8 +257,9 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
    F1 muestra todos los atajos de teclado.
 
 7. Al terminar, cierre la app desde el ícono de la bandeja (clic derecho > Salir)
-   y traiga de vuelta esta carpeta: app.log, config.json e historial.json
-   sirven para revisar cualquier problema.
+   y traiga de vuelta esta carpeta: app.log e historial.json sirven para
+   revisar cualquier problema (y config.json, que está en
+   %LOCALAPPDATA%\ColaDeImpresion: Menú > "Abrir carpeta de configuración").
 
 VISTA PREVIA
 - La carpeta "renderers" trae Ghostscript, GhostPCL y GhostXPS para ver los

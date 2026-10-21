@@ -325,7 +325,9 @@ le quita a ese y se avisa.
 
 ## 10. Configuración avanzada (`config.json`)
 
-Menú → *Abrir carpeta de configuración*. Con la app cerrada se puede editar:
+Cada usuario de Windows tiene su propio `config.json` en
+`%LOCALAPPDATA%\ColaDeImpresion` (también en modo portable). Menú → *Abrir
+carpeta de configuración*. Con la app cerrada se puede editar:
 
 ```json
 {

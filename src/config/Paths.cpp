@@ -50,7 +50,64 @@ std::wstring DataDir() {
     return dir;
 }
 
-std::wstring SettingsFile() { return DataDir() + L"\\config.json"; }
+namespace {
+
+std::wstring& SettingsFileOverride() {
+    static std::wstring path;
+    return path;
+}
+
+std::wstring KnownFolderSubdir(REFKNOWNFOLDERID folder) {
+    std::wstring result;
+    PWSTR base = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(folder, 0, nullptr, &base))) {
+        result = std::wstring(base) + L"\\ColaDeImpresion";
+        CoTaskMemFree(base);
+    }
+    return result;
+}
+
+bool FileExists(const std::wstring& path) {
+    DWORD attrs = GetFileAttributesW(path.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+}  // namespace
+
+void SetSettingsFileOverride(const std::wstring& path) { SettingsFileOverride() = path; }
+
+std::wstring SettingsFile() {
+    static std::wstring file = [] {
+        if (!SettingsFileOverride().empty()) return SettingsFileOverride();
+        std::wstring dir = KnownFolderSubdir(FOLDERID_LocalAppData);
+        if (dir.empty()) return DataDir() + L"\\config.json";
+        EnsureDirectory(dir);
+        std::wstring result = dir + L"\\config.json";
+        // Primera vez con la configuración por usuario: se parte de la que se
+        // usaba antes (%APPDATA% o, en modo portable, la de junto al .exe).
+        if (!FileExists(result)) {
+            std::wstring roaming = KnownFolderSubdir(FOLDERID_RoamingAppData);
+            if (!roaming.empty()) roaming += L"\\config.json";
+            std::wstring portable = ExecutableDir() + L"\\config.json";
+            if (!roaming.empty() && FileExists(roaming)) {
+                CopyFileW(roaming.c_str(), result.c_str(), TRUE);
+            } else if (IsPortableMode() && FileExists(portable)) {
+                CopyFileW(portable.c_str(), result.c_str(), TRUE);
+            }
+        }
+        return result;
+    }();
+    return file;
+}
+
+std::wstring SettingsDir() {
+    std::wstring file = SettingsFile();
+    size_t slash = file.find_last_of(L"\\/");
+    std::wstring dir = slash == std::wstring::npos ? L"." : file.substr(0, slash);
+    EnsureDirectory(dir);
+    return dir;
+}
+
 std::wstring HistoryFile() { return DataDir() + L"\\historial.json"; }
 std::wstring LogFile() { return DataDir() + L"\\app.log"; }
 

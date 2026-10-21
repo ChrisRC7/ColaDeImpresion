@@ -38,6 +38,7 @@ Arguments ParseArguments() {
         if (a == L"--tray") args.startup.startInTray = true;
         else if (a == L"--elevated-restart") args.elevatedRestart = true;
         else if (a == L"--instancia-adicional") args.additionalInstance = true;
+        else if (a == L"--config" && i + 1 < argc) config::SetSettingsFileOverride(argv[++i]);
         else if (a == L"--server" && i + 1 < argc) {
             args.startup.server = argv[++i];
             args.startup.hasServer = true;

@@ -1682,7 +1682,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
             break;
         case ID_SHORTCUTS: help_.Open(); break;
         case ID_OPEN_DATA:
-            ShellExecuteW(hwnd_, L"open", config::DataDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            ShellExecuteW(hwnd_, L"open", config::SettingsDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             break;
         case ID_EXPORT_HISTORY: ExportHistory(); break;
         case ID_CLEAR_HISTORY:
