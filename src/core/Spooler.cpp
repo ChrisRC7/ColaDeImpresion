@@ -241,19 +241,31 @@ std::wstring CacheBypassName(const std::wstring& printerName) {
     const std::wstring host = printerName.substr(2, slash - 2);
     if (IsLocalServer(L"\\\\" + host)) return L"";  // colas de este equipo: no hay caché de cliente
 
-    // La resolución DNS se hace una vez por servidor.
+    // La resolución DNS se hace una vez por servidor. Si falla (red o DNS que
+    // todavía no responden, p. ej. al iniciar con Windows) se reintenta pasado
+    // un minuto, sin repetir la consulta en cada llamada mientras tanto.
+    struct Resolution {
+        std::wstring canonical;
+        ULONGLONG retryAt = 0;
+    };
     static std::mutex mutex;
-    static std::map<std::wstring, std::wstring> resolved;
+    static std::map<std::wstring, Resolution> resolved;
+    const std::wstring key = util::ToLower(host);
     std::wstring canonical;
+    bool known = false;
     {
         std::lock_guard lock(mutex);
-        auto it = resolved.find(util::ToLower(host));
-        if (it != resolved.end()) canonical = it->second;
+        auto it = resolved.find(key);
+        if (it != resolved.end() && (!it->second.canonical.empty() || GetTickCount64() < it->second.retryAt)) {
+            canonical = it->second.canonical;
+            known = true;
+        }
     }
-    if (canonical.empty()) {
+    if (!known) {
         canonical = CanonicalHostName(host);
         std::lock_guard lock(mutex);
-        resolved[util::ToLower(host)] = canonical;
+        resolved[key] = {canonical, GetTickCount64() + 60000};
+        if (canonical.empty()) util::LogError(L"No se pudo resolver el nombre completo de %ls; se reintentará", host.c_str());
     }
     // Si la conexión ya usa el nombre completo, no hay otro nombre que evite la caché.
     if (canonical.empty() || util::EqualsInsensitive(canonical, host)) return L"";

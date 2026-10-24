@@ -376,6 +376,12 @@ X(ConfirmRedirectRaw,
 X(ActionFailed, L"No se pudo completar la acción: %ls", L"The action could not be completed: %ls")
 X(ActionDenied, L"Acceso denegado. Gestionar trabajos de otros usuarios o reordenar la cola requiere el permiso \"Administrar documentos\" en la impresora (o ejecutar como administrador).",
   L"Access denied. Managing other users' jobs or reordering the queue requires the \"Manage documents\" permission on the printer (or running as administrator).")
+X(ActionSkippedLocalCopy,
+  L"No se tocaron %u trabajo(s): esta PC todavía los envía al servidor y cortarlos dejaría hojas en blanco. Actúe sobre el trabajo del servidor cuando aparezca.",
+  L"%u job(s) were left untouched: this PC is still sending them to the server and interrupting them would print blank pages. Act on the server job once it appears.")
+X(RedirectLocalCopy,
+  L"No se reenvía: esta PC todavía envía el trabajo al servidor y cortarlo dejaría hojas en blanco. Reenvíe el trabajo del servidor cuando aparezca.",
+  L"Not redirected: this PC is still sending the job to the server and interrupting it would print blank pages. Redirect the server job once it appears.")
 X(PrintersPaused, L"Impresoras en pausa: %u", L"Printers paused: %u")
 X(PrintersResumed, L"Impresoras reanudadas: %u", L"Printers resumed: %u")
 X(NoPrinters, L"No hay impresoras en este servidor.", L"There are no printers on this server.")
@@ -403,6 +409,7 @@ X(NotifyHeldJob, L"Trabajo retenido de %ls: %ls (Ctrl+R para liberarlo)", L"Job 
 X(MenuConnect, L"Conectar a servidor…\tCtrl+O", L"Connect to server…\tCtrl+O")
 X(MenuServers, L"Servidores recientes", L"Recent servers")
 X(MenuRefresh, L"Actualizar", L"Refresh")
+X(MenuConnectLaimi, L"Conectar al servidor del LAIMI (%ls)", L"Connect to the LAIMI server (%ls)")
 X(MenuHistory, L"Ver historial", L"Show history")
 X(MenuQueue, L"Ver cola", L"Show queue")
 X(MenuPausePrinter, L"Pausar / reanudar impresora", L"Pause / resume printer")

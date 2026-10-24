@@ -205,27 +205,35 @@ void HeaderBar::Layout() {
         x -= btn + style.Px(2);
     }
     const int rightLimit = x - style.Px(10);
-
-    // Selector de impresora a la izquierda (ancho según el texto).
-    HDC dc = GetDC(hwnd_);
-    SIZE titleSize = gfx::MeasureText(dc, printerTitle_, style.fonts().semibold);
-    SIZE subSize = gfx::MeasureText(dc, printerSubtitle_, style.fonts().small);
-    ReleaseDC(hwnd_, dc);
-    int printerW = style.Px(12 + 24 + 8) + static_cast<int>(std::max(titleSize.cx, subSize.cx)) + style.Px(28);
-    printerW = std::clamp(printerW, style.Px(160), std::max(style.Px(160), (rightLimit - pad) / 2));
-    buttons_[static_cast<int>(HeaderButton::Printer)] = {client.left + pad, cy - style.Px(20),
-                                                         client.left + pad + printerW, cy + style.Px(20)};
-
-    // Búsqueda: el espacio restante (máx. 480 dip), con los dos botones de
-    // pausa a su derecha. Si no alcanza, los botones quedan solo con el ícono.
-    int left = buttons_[static_cast<int>(HeaderButton::Printer)].right + style.Px(12);
     const int gap = style.Px(6);
-    // En el historial se suma el botón "Exportar a Excel" a la derecha de los de pausa.
+    // Botones de pausa a la derecha de la búsqueda; en el historial se suma el
+    // botón "Exportar a Excel" a la derecha de los de pausa.
     auto buttonsWidth = [&] {
         const int exportW = ExportButtonWidth();
         return PauseButtonWidth(HeaderButton::PauseJobs) + gap + PauseButtonWidth(HeaderButton::PausePrinter) +
                (exportW ? gap + exportW : 0);
     };
+    pauseLabels_ = false;
+    const int compactW = buttonsWidth();  // solo con íconos: lo mínimo que ocupan
+
+    // Selector de impresora a la izquierda (ancho según el texto). Con la ventana
+    // angosta se achica (el texto se recorta con "…") para que los botones de
+    // pausa y exportar no se monten sobre los de la derecha.
+    HDC dc = GetDC(hwnd_);
+    SIZE titleSize = gfx::MeasureText(dc, printerTitle_, style.fonts().semibold);
+    SIZE subSize = gfx::MeasureText(dc, printerSubtitle_, style.fonts().small);
+    ReleaseDC(hwnd_, dc);
+    int printerW = style.Px(12 + 24 + 8) + static_cast<int>(std::max(titleSize.cx, subSize.cx)) + style.Px(28);
+    const int room = rightLimit - client.left - pad - style.Px(12) - compactW;
+    const int maxW = std::min(std::max(style.Px(160), (rightLimit - pad) / 2), room);
+    const int minW = std::min(style.Px(160), maxW);
+    printerW = std::clamp(printerW, std::max(minW, style.Px(96)), std::max(maxW, style.Px(96)));
+    buttons_[static_cast<int>(HeaderButton::Printer)] = {client.left + pad, cy - style.Px(20),
+                                                         client.left + pad + printerW, cy + style.Px(20)};
+
+    // Búsqueda: el espacio restante (máx. 480 dip), con los botones de pausa a
+    // su derecha. Si no alcanza, los botones quedan solo con el ícono.
+    int left = buttons_[static_cast<int>(HeaderButton::Printer)].right + style.Px(12);
     pauseLabels_ = true;
     int pauseW = buttonsWidth();
     if (rightLimit - left - pauseW - gap < style.Px(200)) {

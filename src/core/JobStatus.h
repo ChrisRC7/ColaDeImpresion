@@ -19,6 +19,13 @@ std::uint32_t PrinterProblemsFromFlags(std::uint32_t printerStatus, std::uint32_
 // imprime, se borra, se reinicia o que esta PC todavía procesa (CSR).
 bool CanReadJobData(std::uint32_t jobStatus);
 
+// true si el trabajo es la copia local de Client Side Rendering
+// (JOB_STATUS_RENDERING_LOCALLY): esta PC todavía lo convierte y lo envía al
+// servidor. Nunca se pausa, reanuda, cancela, mueve ni reenvía: cortarlo a
+// mitad del envío deja al servidor con datos incompletos (hojas en blanco).
+// Se actúa sobre el trabajo del servidor, que aparece apenas empieza a llegar.
+bool IsLocalCsrCopy(std::uint32_t jobStatus);
+
 // true si el estado requiere atención del operador.
 bool IsAttentionState(JobState state);
 

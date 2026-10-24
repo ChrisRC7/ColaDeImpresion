@@ -33,6 +33,8 @@ bool CanReadJobData(std::uint32_t s) {
     return (s & (JOB_STATUS_PAUSED | JOB_STATUS_PRINTED | JOB_STATUS_COMPLETE)) != 0;
 }
 
+bool IsLocalCsrCopy(std::uint32_t s) { return (s & kJobStatusRenderingLocally) != 0; }
+
 std::uint32_t PrinterProblemsFromFlags(std::uint32_t s, std::uint32_t attributes) {
     std::uint32_t p = ProblemNone;
     if ((s & PRINTER_STATUS_OFFLINE) || (attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE)) p |= ProblemOffline;

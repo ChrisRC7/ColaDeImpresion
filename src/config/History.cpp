@@ -1,7 +1,10 @@
 #include "config/History.h"
 
+#include <windows.h>
+
 #include "config/Json.h"
 #include "util/Format.h"
+#include "util/Log.h"
 
 namespace cola::config {
 
@@ -36,8 +39,24 @@ History::History(std::wstring path, size_t limit) : path_(std::move(path)), limi
 
 bool History::Load() {
     entries_.clear();
+    protectFile_ = false;
     JsonValue json;
-    if (path_.empty() || !LoadJsonFile(path_, json)) return false;
+    if (path_.empty()) return false;
+    std::wstring error;
+    if (!LoadJsonFile(path_, json, &error)) {
+        if (GetFileAttributesW(path_.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            // Existe pero no se pudo leer (dañado, bloqueado...): se conserva una copia.
+            if (CopyFileW(path_.c_str(), BackupPath().c_str(), FALSE)) {
+                util::LogError(L"No se pudo leer el historial %ls (%ls); copia en %ls", path_.c_str(), error.c_str(),
+                               BackupPath().c_str());
+            } else {
+                protectFile_ = true;
+                util::LogError(L"No se pudo leer el historial %ls (%ls) ni copiarlo: no se reemplazará",
+                               path_.c_str(), error.c_str());
+            }
+        }
+        return false;
+    }
     for (const auto& item : json[L"entries"].AsArray()) {
         HistoryEntry e;
         e.timeUnix = item[L"time"].AsInt64();
@@ -64,7 +83,7 @@ bool History::Load() {
 }
 
 bool History::Save() {
-    if (path_.empty()) return false;
+    if (path_.empty() || protectFile_) return false;
     JsonValue json = JsonValue::MakeObject();
     json[L"version"] = 1;
     JsonValue list = JsonValue::MakeArray();

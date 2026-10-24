@@ -66,7 +66,15 @@ std::vector<JobEvent> JobTracker::Update(const QueueSnapshot& snapshot) {
             if (current.count(key)) continue;
             // Solo cuenta como terminado si su impresora sigue existiendo y respondiendo.
             const PrinterInfo* printer = snapshot.FindPrinter(job.printer);
-            if (!printer || (printer->problems & ProblemNotAvailable)) continue;
+            if (!printer) continue;
+            if (printer->problems & ProblemNotAvailable) {
+                // Sin respuesta de su impresora (corte de red...) no se sabe si
+                // terminó: se sigue recordando hasta que vuelva. Si no, un trabajo
+                // impreso durante el corte no llegaba nunca al historial y los
+                // demás se avisaban otra vez como nuevos al volver.
+                current.emplace(key, job);
+                continue;
+            }
             auto problems = printerProblems_.count(job.printer) ? printerProblems_[job.printer] : 0u;
             const bool ours = cancelledByUs_.erase(key) > 0;
             const bool released = releasedByUs_.erase(key) > 0;

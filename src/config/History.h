@@ -52,6 +52,9 @@ class History {
 public:
     explicit History(std::wstring path = {}, size_t limit = 2000);
 
+    // Si el archivo existe pero no se puede leer, se copia aparte
+    // (BackupPath) antes de que Save lo reemplace; si ni eso se puede, Save
+    // no lo toca. Así un archivo dañado nunca se pisa con un historial vacío.
     bool Load();
     bool Save();
     bool IsDirty() const { return dirty_; }
@@ -66,11 +69,14 @@ public:
     // nowUnix se inyecta para poder probarlo; solo cuenta trabajos impresos.
     HistoryStats ComputeStats(std::int64_t nowUnix) const;
 
+    std::wstring BackupPath() const { return path_ + L".danado"; }
+
 private:
     std::wstring path_;
     size_t limit_;
     std::vector<HistoryEntry> entries_;
     bool dirty_ = false;
+    bool protectFile_ = false;  // el archivo no se pudo leer ni copiar aparte: no se reemplaza
 };
 
 }  // namespace cola::config

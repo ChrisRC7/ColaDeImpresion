@@ -53,6 +53,9 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] (LAIMI) Confirmar con trabajos reales que ya no faltan trabajos (en `app.log` aparece "los trabajos se consultan en \\…estudiantes.tec.cr\…" al iniciar y "la caché del cliente muestra N trabajo(s) y el servidor M" cuando la corrección actúa)
 - [x] Hojas en blanco / impresora que se reinicia con documentos grandes enviados con la app abierta: la retención ya no pausa la copia local de Client Side Rendering (`RENDERING_LOCALLY`) y los datos solo se leen de trabajos en pausa o impresos (0.4.9, D39)
 - [ ] (LAIMI) Confirmar con "50 pag.pdf" desde una PC del laboratorio que llega con ~70,9 MB, queda retenido y se imprime bien al liberarlo con la 0.4.9
+- [x] Las acciones del operador (pausar, reanudar, cancelar, reiniciar, mover, reenviar y `F11`) tampoco tocan la copia local de CSR: se omiten con un aviso en la barra de estado (0.5.11, D50). Antes solo la retención automática la evitaba
+- [ ] (LAIMI) Con un PDF grande que todavía se envía desde esta PC, intentar pausar/cancelar su copia local y confirmar el aviso y que el documento se imprime completo
+- [x] La lista sin la caché del cliente se reintenta si el DNS no respondía al iniciar (p. ej. con Windows): antes esa impresora usaba la caché toda la sesión (0.5.11, D51)
 - [x] Varias copias de la app conectadas al servidor se repartían los datos de cada trabajo (lecturas incompletas → "RAW" y doble cara de la cola): se detecta, se reintenta y no se analiza lo incompleto; Epson sin datos leídos = "—" en Doble cara (0.5.9, D48)
 - [ ] (LAIMI) Confirmar con dos copias abiertas y un PDF de varios MB a una cara que ambas muestran "Una cara" y que se imprime bien
 - [ ] Retención sin depender de la app abierta (p. ej. servicio de Windows en el servidor) — evaluar si hace falta
@@ -146,6 +149,9 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Mover las columnas arrastrando su título como en la cola de Windows (línea que marca dónde quedan, desplazamiento automático en los bordes); el orden predeterminado es el de siempre y el de cada operador se guarda en su `config.json` (`columnOrder`) y se conserva al abrir; "Restablecer el orden de las columnas"
 - [x] Ninguna columna desaparece al achicar la ventana o abrir el panel de detalles (antes se ocultaba Enviado, entre otras): aparece la barra horizontal
 - [x] La cabecera (búsqueda, botones de pausa e íconos) y la barra de impresoras se redibujan mientras se cambia el tamaño de la ventana (antes se encimaban hasta soltar el borde)
+- [x] En el historial con la ventana al mínimo, "Exportar a Excel" se montaba sobre el botón del panel de detalles: el selector de impresora se achica para dejar lugar a los botones (0.5.11)
+- [ ] Verificar en la app la cabecera del historial con la ventana al mínimo (100 % y 150 % de escala)
+- [x] Menú: "Conectar al servidor del LAIMI (\\vtec-laimiprint)", marcado mientras está conectado (0.5.11)
 - [x] Total de páginas de la selección en la barra inferior ("Selección: 3 trabajo(s) · 11 páginas a imprimir", suma de la columna Páginas, con los "—" aparte); también en el historial (0.5.1)
 - [ ] Verificar en la app el arrastre de columnas (cola, vista "Todas" con Impresora, historial y con barra horizontal); no se abrió la app en la PC personal porque al iniciar pausa las impresoras
 - [x] Botones junto a la búsqueda para pausar / reanudar los trabajos seleccionados y la impresora (texto según lo que harán; solo íconos en ventanas angostas)
@@ -179,6 +185,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Cada tabla del resumen de Excel en su propia hoja ("Por resultado", "Por papel", "Por impresora", "Por usuario", "Por equipo", "Por día"...), con título y encabezados fijos, para no bajar entre tablas; "Resumen" queda con los datos generales (0.5.4)
 - [x] Hojas del resumen vacías: los trabajos liberados (`F11`, `Ctrl+R`) que se imprimían entre dos refrescos quedaban "Retirado" y la copia local de CSR se agregaba como otro registro; ahora quedan "Impreso", sin duplicados, y una tabla sin datos dice por qué (0.5.5)
 - [ ] (LAIMI) Confirmar con trabajos reales liberados con `F11` que el historial dice "Impreso" una sola vez y que el Excel trae las tablas con datos
+- [x] Trabajos que se perdían del historial si su impresora dejaba de responder un momento (y avisos repetidos de "nuevo trabajo" al volver): se siguen recordando hasta que la impresora responda (0.5.11, D52)
+- [x] `historial.json` dañado o con BOM UTF-8: el BOM se ignora y un archivo ilegible se copia a `historial.json.danado` antes de guardar encima; si ni eso se puede, no se reemplaza (0.5.11, D52)
 - [x] Elegir al exportar: todo el historial o solo un rango de fechas (Desde/Hasta entre los días con registros, con el total del rango); el resumen y el nombre del archivo indican el período (0.5.6)
 - [ ] Probar en la app el diálogo de exportación con el mouse (lista de días, cambio de opción) y con un historial largo (muchos días en la lista)
 - [ ] Probar en la app el diálogo "Guardar como" de la exportación y abrir el archivo desde el aviso (el libro se verificó abriéndolo en Excel; el diálogo no se abrió para no robar el foco)

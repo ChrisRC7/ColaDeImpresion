@@ -43,6 +43,9 @@ constexpr UINT WM_APP_FACTS = WM_APP + 4;  // hay datos nuevos de trabajos (pág
 constexpr UINT_PTR kTimerSaveHistory = 1;
 constexpr UINT_PTR kTimerTransient = 2;
 
+// Servidor de impresión del LAIMI: el menú lo ofrece directamente.
+constexpr wchar_t kLaimiServer[] = L"\\\\vtec-laimiprint";
+
 // Identificadores de menú.
 enum MenuId : UINT {
     ID_PRINTER_ALL = 1000,
@@ -84,6 +87,7 @@ enum MenuId : UINT {
     ID_CHIP_RESUME,
     ID_CHIP_PURGE,
     ID_ABOUT,
+    ID_CONNECT_LAIMI,
     ID_CTX_PAUSE = 2101,
     ID_CTX_PAUSE_BOTH,
     ID_CTX_PRINT_REPAUSE,
@@ -1091,6 +1095,14 @@ void MainWindow::PrintSelectionAndRepause() {
         ShowTransient(Tr(S::NoJobSelected), ui::Tone::Warning);
         return;
     }
+    // La copia local de CSR no se libera ni se sigue (D50): sin ella no se
+    // reanuda la impresora por un trabajo que no se va a tocar.
+    const auto selected = jobs.size();
+    std::erase_if(jobs, [](const core::JobInfo& job) { return core::IsLocalCsrCopy(job.rawStatus); });
+    if (jobs.empty()) {
+        ShowTransient(util::Format(Tr(S::ActionSkippedLocalCopy), static_cast<unsigned>(selected)), ui::Tone::Warning);
+        return;
+    }
     const auto count = static_cast<unsigned>(release_.Start(jobs, GetTickCount64()));
     if (count == 0) {
         ShowTransient(Tr(S::PrintAndRepauseNothing), ui::Tone::Warning);
@@ -1279,7 +1291,7 @@ void MainWindow::OnActionResult(const ActionResult& result) {
         if (result.firstError == ERROR_ACCESS_DENIED && !quiet)
             MessageBoxW(hwnd_, result.message.c_str(), Tr(S::AppTitle), MB_OK | MB_ICONWARNING);
     } else if (!result.message.empty()) {
-        ShowTransient(result.message, ui::Tone::Success);
+        ShowTransient(result.message, result.skipped ? ui::Tone::Warning : ui::Tone::Success);
     }
     monitor_->RequestRefresh();
 }
@@ -1428,6 +1440,8 @@ void MainWindow::ShowMainMenu(POINT screen) {
     };
 
     AppendMenuW(menu, MF_STRING, ID_CONNECT, keyed(S::CmdConnect, Command::Connect).c_str());
+    AppendMenuW(menu, MF_STRING | check(util::EqualsInsensitive(settings_.activeServer, kLaimiServer)), ID_CONNECT_LAIMI,
+                util::Format(Tr(S::MenuConnectLaimi), kLaimiServer).c_str());
     menuServers_ = settings_.servers;
     if (std::find(menuServers_.begin(), menuServers_.end(), L"") == menuServers_.end()) menuServers_.push_back(L"");
     for (size_t i = 0; i < menuServers_.size() && i < 99; ++i) {
@@ -1634,6 +1648,7 @@ void MainWindow::HandleMenuCommand(UINT id) {
             }
             break;
         case ID_CONNECT: Execute(Command::Connect); break;
+        case ID_CONNECT_LAIMI: ConnectTo(kLaimiServer); break;
         case ID_REFRESH: Execute(Command::Refresh); break;
         case ID_HISTORY: ToggleHistory(); break;
         case ID_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;

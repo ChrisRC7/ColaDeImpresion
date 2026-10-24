@@ -46,6 +46,17 @@ TEST(CanReadJobDataOnlyWhenHeld) {
     CHECK(!core::CanReadJobData(JOB_STATUS_PAUSED | core::kJobStatusRenderingLocally));
 }
 
+TEST(LocalCsrCopyIsNeverControlled) {
+    // La copia local que esta PC todavía envía al servidor: las acciones la omiten.
+    CHECK(core::IsLocalCsrCopy(core::kJobStatusRenderingLocally));
+    CHECK(core::IsLocalCsrCopy(core::kJobStatusRenderingLocally | JOB_STATUS_PAUSED));  // 0x4001 de la 0.4.8
+    CHECK(core::IsLocalCsrCopy(core::kJobStatusRenderingLocally | JOB_STATUS_SPOOLING));
+    // Los trabajos del servidor sí se controlan, en cualquier estado.
+    CHECK(!core::IsLocalCsrCopy(0));
+    CHECK(!core::IsLocalCsrCopy(JOB_STATUS_PAUSED | JOB_STATUS_SPOOLING));  // 0x9: el del servidor retenido
+    CHECK(!core::IsLocalCsrCopy(JOB_STATUS_PRINTING));
+}
+
 TEST(PrinterProblems) {
     auto p = core::PrinterProblemsFromFlags(PRINTER_STATUS_PAPER_OUT | PRINTER_STATUS_TONER_LOW, 0);
     CHECK(p & core::ProblemPaperOut);
@@ -126,6 +137,23 @@ TEST(JobTrackerEvents) {
     auto broken = MakeSnapshot({});
     broken.error = L"RPC server unavailable";
     CHECK(tracker.Update(broken).empty());
+}
+
+TEST(JobTrackerKeepsJobsOfUnavailablePrinter) {
+    core::JobTracker tracker;
+    tracker.Update(MakeSnapshot({MakeJob(1, core::JobState::Paused), MakeJob(2, core::JobState::Paused)}));
+    // La impresora deja de responder: su lista llega vacía, pero nada terminó.
+    CHECK(tracker.Update(MakeSnapshot({}, core::ProblemNotAvailable)).empty());
+    CHECK(tracker.Update(MakeSnapshot({}, core::ProblemNotAvailable)).empty());
+    // Vuelve: el 1 sigue en la cola (no es "nuevo") y el 2 se liberó y salió en el corte.
+    tracker.MarkReleasedByUser(MakeJob(2, core::JobState::Paused).Key());
+    auto events = tracker.Update(MakeSnapshot({MakeJob(1, core::JobState::Paused)}));
+    CHECK_EQ(events.size(), size_t(1));
+    if (!events.empty()) {
+        CHECK(events[0].kind == core::JobEvent::Kind::Finished);
+        CHECK_EQ(events[0].job.id, 2u);
+        CHECK(events[0].outcome == config::JobOutcome::Printed);
+    }
 }
 
 TEST(ReleasedJobsAndLocalCopiesInHistory) {

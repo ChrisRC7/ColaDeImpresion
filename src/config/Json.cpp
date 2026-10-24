@@ -356,6 +356,8 @@ bool LoadJsonFile(const std::wstring& path, JsonValue& out, std::wstring* error)
         return false;
     }
     text.resize(read);
+    // Bloc de notas y PowerShell 5.1 (-Encoding UTF8) guardan con BOM: se ignora.
+    if (text.rfind("\xEF\xBB\xBF", 0) == 0) text.erase(0, 3);
     return JsonValue::Parse(text, out, error);
 }
 

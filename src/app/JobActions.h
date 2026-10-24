@@ -44,6 +44,7 @@ struct ActionResult {
     JobAction action = JobAction::Pause;
     unsigned succeeded = 0;
     unsigned failed = 0;
+    unsigned skipped = 0;  // copias locales de CSR que no se tocaron (core::IsLocalCsrCopy)
     DWORD firstError = ERROR_SUCCESS;
     std::wstring message;  // mensaje listo para mostrar (vacío si no hace falta)
 

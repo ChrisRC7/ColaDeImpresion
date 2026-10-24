@@ -780,8 +780,31 @@ TEST(HistoryKeepsEveryQueueColumn) {
     }
     config::History loaded(path);
     CHECK(loaded.Load());
-    DeleteFileW(path.c_str());
     CHECK_EQ(loaded.Entries().size(), size_t(1));
+
+    // Con BOM UTF-8 (Bloc de notas, PowerShell 5.1) también se lee.
+    auto writeRaw = [&](const std::string& text) {
+        HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        DWORD written = 0;
+        if (f != INVALID_HANDLE_VALUE) {
+            WriteFile(f, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+            CloseHandle(f);
+        }
+    };
+    writeRaw("\xEF\xBB\xBF{\"entries\":[{\"time\":5,\"document\":\"a\"}]}");
+    config::History withBom(path);
+    CHECK(withBom.Load());
+    CHECK_EQ(withBom.Entries().size(), size_t(1));
+
+    // Un archivo dañado no se pierde: se copia aparte antes de guardar encima.
+    writeRaw("{\"entries\":[{\"time\":5,");
+    config::History damaged(path);
+    CHECK(!damaged.Load());
+    CHECK(GetFileAttributesW(damaged.BackupPath().c_str()) != INVALID_FILE_ATTRIBUTES);
+    damaged.Add(entry);
+    CHECK(damaged.Save());
+    DeleteFileW(damaged.BackupPath().c_str());
+    DeleteFileW(path.c_str());
     const auto& back = loaded.Entries().front();
     CHECK_EQ(back.position, 4u);
     CHECK_EQ(back.printPages, entry.printPages);

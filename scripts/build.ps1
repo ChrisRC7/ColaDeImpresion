@@ -153,6 +153,23 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - COPIAS LOCALES INTOCABLES (0.5.11): mientras esta PC todavía envía un
+     documento grande al servidor aparece en la lista una fila de esta PC
+     (la copia local). Selecciónela y pruebe pausar (Ctrl+P), cancelar,
+     reanudar, F11 o reenviar: abajo debe decir que no se tocó porque esta
+     PC todavía la envía, y el documento debe imprimirse completo, sin
+     hojas en blanco. Sobre el trabajo del servidor todo funciona igual.
+   - SERVIDOR DEL LAIMI EN EL MENÚ (0.5.11): menú (F10) > "Conectar al
+     servidor del LAIMI (\\vtec-laimiprint)" muestra directamente sus
+     impresoras; queda marcado mientras esté conectado.
+   - CABECERA DEL HISTORIAL (0.5.11): abra el historial (Ctrl+H) y achique
+     la ventana al mínimo. El botón "Exportar a Excel" ya no debe montarse
+     sobre el botón del panel de detalles: el selector de impresora se
+     achica (con "…") para dejarle lugar.
+   - HISTORIAL SIN HUECOS (0.5.11): si una impresora deja de responder un
+     momento (cable de red, servidor reiniciándose), los trabajos que se
+     imprimieron mientras tanto igual quedan en el historial al volver, y
+     los que siguen en la cola no se avisan otra vez como nuevos.
    - CONFIGURACIÓN DE CADA PERSONA (0.5.10): las preferencias (config.json)
      ya no se guardan junto al .exe sino en la carpeta de cada usuario de
      Windows (%LOCALAPPDATA%\ColaDeImpresion). Abra la app con su usuario,

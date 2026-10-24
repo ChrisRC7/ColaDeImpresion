@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "core/JobStatus.h"
 #include "core/Spooler.h"
 #include "i18n/Strings.h"
 #include "preview/EmfSpool.h"
@@ -29,6 +30,13 @@ void JobActionRunner::Run(JobAction action, std::vector<core::JobInfo> jobs) {
         ActionResult result;
         result.action = action;
         for (const auto& job : jobs) {
+            // La copia local de CSR no se toca: cortarla deja hojas en blanco (D50).
+            if (core::IsLocalCsrCopy(job.rawStatus)) {
+                ++result.skipped;
+                util::LogInfo(L"Acción %d sobre %ls#%u omitida: es la copia local que esta PC envía al servidor",
+                              static_cast<int>(action), job.printer.c_str(), job.id);
+                continue;
+            }
             core::OpResult op;
             switch (action) {
                 case JobAction::Pause: op = spooler::PauseJob(job.printer, job.id); break;
@@ -51,6 +59,7 @@ void JobActionRunner::Run(JobAction action, std::vector<core::JobInfo> jobs) {
             }
         }
         if (result.failed) result.message = ActionErrorText(result.firstError);
+        else if (result.skipped) result.message = util::Format(Tr(S::ActionSkippedLocalCopy), result.skipped);
         done_(std::move(result));
     });
 }
@@ -108,6 +117,15 @@ void JobActionRunner::Redirect(RedirectRequest request) {
             result.firstError = error;
             result.message = std::move(message);
         };
+
+        // La copia local de CSR no se pausa ni se lee (D39, D50): se reenvía el
+        // trabajo del servidor cuando aparezca.
+        if (core::IsLocalCsrCopy(job.rawStatus)) {
+            result.skipped = 1;
+            result.message = Tr(S::RedirectLocalCopy);
+            done_(std::move(result));
+            return;
+        }
 
         // 1. Pausar el original: que no se imprima dos veces y que el spooler no
         //    lo envíe a la impresora mientras se leen sus datos (la lectura le

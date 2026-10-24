@@ -139,12 +139,17 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     // Impresora de un servidor: el handle de la conexión responde desde la caché
     // del cliente, que a veces no recibe los trabajos enviados desde otras PCs
     // hasta el siguiente evento. La lista que manda es la del servidor.
-    if (err == ERROR_SUCCESS && !w.directResolved) {
-        w.directResolved = true;
+    if (err == ERROR_SUCCESS && !w.directResolved && GetTickCount64() >= w.directRetryAt) {
         w.directName = spooler::CacheBypassName(w.info.name);
-        if (!w.directName.empty())
+        // Sin nombre puede ser una cola de este equipo (no hace falta) o un DNS
+        // que todavía no responde (al iniciar con Windows): se vuelve a probar en
+        // un minuto. Antes quedaba con la caché del cliente toda la sesión.
+        w.directResolved = !w.directName.empty();
+        if (w.directResolved)
             util::LogInfo(L"%ls: los trabajos se consultan en %ls (sin la caché del cliente)", w.info.name.c_str(),
                           w.directName.c_str());
+        else
+            w.directRetryAt = GetTickCount64() + 60000;
     }
     if (err == ERROR_SUCCESS && !w.directName.empty()) {
         if (!w.direct && GetTickCount64() >= w.directRetryAt && !w.direct.Open(w.directName, false)) {
