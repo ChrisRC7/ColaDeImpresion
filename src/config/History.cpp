@@ -43,7 +43,16 @@ bool History::Load() {
     JsonValue json;
     if (path_.empty()) return false;
     std::wstring error;
-    if (!LoadJsonFile(path_, json, &error)) {
+    // Un bloqueo momentáneo (antivirus, otra copia de la app reemplazándolo) no
+    // es un archivo dañado: se reintenta antes de copiarlo aparte.
+    bool loaded = LoadJsonFile(path_, json, &error);
+    for (int attempt = 0; !loaded && attempt < 2 && GetFileAttributesW(path_.c_str()) != INVALID_FILE_ATTRIBUTES;
+         ++attempt) {
+        Sleep(200);
+        json = JsonValue();
+        loaded = LoadJsonFile(path_, json, &error);
+    }
+    if (!loaded) {
         if (GetFileAttributesW(path_.c_str()) != INVALID_FILE_ATTRIBUTES) {
             // Existe pero no se pudo leer (dañado, bloqueado...): se conserva una copia.
             if (CopyFileW(path_.c_str(), BackupPath().c_str(), FALSE)) {

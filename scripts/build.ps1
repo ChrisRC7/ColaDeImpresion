@@ -153,6 +153,9 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - RESULTADO TRAS UN CORTE (0.5.12): si una impresora deja de responder y
+     mientras tanto se imprime el primer trabajo de su cola (sin pausa), al
+     volver el historial debe decir "Impreso", no "Retirado".
    - COPIAS LOCALES INTOCABLES (0.5.11): mientras esta PC todavía envía un
      documento grande al servidor aparece en la lista una fila de esta PC
      (la copia local). Selecciónela y pruebe pausar (Ctrl+P), cancelar,

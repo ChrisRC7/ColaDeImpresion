@@ -84,8 +84,16 @@ std::vector<JobEvent> JobTracker::Update(const QueueSnapshot& snapshot) {
 
     if (reliable) {
         last_ = std::move(current);
-        printerProblems_.clear();
-        for (const auto& p : snapshot.printers) printerProblems_[p.name] = p.problems;
+        // De una impresora que no responde se conserva el estado de antes del
+        // corte: al volver, GuessOutcome decide con él (si no, un trabajo que
+        // estaba primero en una cola operativa quedaba "Retirado").
+        std::unordered_map<std::wstring, std::uint32_t> problems;
+        for (const auto& p : snapshot.printers) {
+            auto old = printerProblems_.find(p.name);
+            problems[p.name] = (p.problems & ProblemNotAvailable) && old != printerProblems_.end() ? old->second
+                                                                                                  : p.problems;
+        }
+        printerProblems_ = std::move(problems);
         initialized_ = true;
     }
     return events;

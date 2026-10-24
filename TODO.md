@@ -186,6 +186,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Hojas del resumen vacías: los trabajos liberados (`F11`, `Ctrl+R`) que se imprimían entre dos refrescos quedaban "Retirado" y la copia local de CSR se agregaba como otro registro; ahora quedan "Impreso", sin duplicados, y una tabla sin datos dice por qué (0.5.5)
 - [ ] (LAIMI) Confirmar con trabajos reales liberados con `F11` que el historial dice "Impreso" una sola vez y que el Excel trae las tablas con datos
 - [x] Trabajos que se perdían del historial si su impresora dejaba de responder un momento (y avisos repetidos de "nuevo trabajo" al volver): se siguen recordando hasta que la impresora responda (0.5.11, D52)
+- [x] Al volver de un corte, el resultado se decide con el estado de la impresora de antes del corte: el primero de una cola operativa que salió durante el corte queda "Impreso", no "Retirado" (0.5.12, D52)
+- [x] `historial.json` bloqueado un momento al iniciar (antivirus, otra copia guardándolo) ya no se trata como dañado: se reintenta la lectura; antes no se guardaba nada en toda la sesión (0.5.12, D52)
 - [x] `historial.json` dañado o con BOM UTF-8: el BOM se ignora y un archivo ilegible se copia a `historial.json.danado` antes de guardar encima; si ni eso se puede, no se reemplaza (0.5.11, D52)
 - [x] Elegir al exportar: todo el historial o solo un rango de fechas (Desde/Hasta entre los días con registros, con el total del rango); el resumen y el nombre del archivo indican el período (0.5.6)
 - [ ] Probar en la app el diálogo de exportación con el mouse (lista de días, cambio de opción) y con un historial largo (muchos días en la lista)
@@ -198,7 +200,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 87 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 91 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

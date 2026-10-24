@@ -154,6 +154,15 @@ TEST(JobTrackerKeepsJobsOfUnavailablePrinter) {
         CHECK_EQ(events[0].job.id, 2u);
         CHECK(events[0].outcome == config::JobOutcome::Printed);
     }
+
+    // El resultado se decide con el estado de la impresora de antes del corte:
+    // el primero de una cola operativa que sale durante el corte se imprimió.
+    core::JobTracker queued;
+    queued.Update(MakeSnapshot({MakeJob(7, core::JobState::Queued, 1)}));
+    CHECK(queued.Update(MakeSnapshot({}, core::ProblemNotAvailable)).empty());
+    events = queued.Update(MakeSnapshot({}));
+    CHECK_EQ(events.size(), size_t(1));
+    if (!events.empty()) CHECK(events[0].outcome == config::JobOutcome::Printed);
 }
 
 TEST(ReleasedJobsAndLocalCopiesInHistory) {
