@@ -458,7 +458,7 @@ bool CanAdminister(const std::wstring& printer) {
 }
 
 OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint64_t maxBytes,
-                     std::vector<std::uint8_t>& out, bool* truncated) {
+                     std::vector<std::uint8_t>& out, bool* truncated, const DataSink& beyond) {
     out.clear();
     if (truncated) *truncated = false;
     // Dos lecturas simultáneas del mismo trabajo hacen que la segunda reciba 0
@@ -516,11 +516,18 @@ OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint
     std::vector<std::uint8_t> chunk(256 * 1024);
     DWORD error = ERROR_SUCCESS;
     for (;;) {
-        if (out.size() >= maxBytes) {
+        const bool overflow = out.size() >= maxBytes;
+        if (overflow && !beyond) {
             // Comprueba si quedaba algo más sin leerlo entero.
             BYTE probe = 0;
             DWORD got = 0;
             if (truncated && ReadPrinter(handle.get(), &probe, 1, &got) && got > 0) *truncated = true;
+            break;
+        }
+        if (overflow && !safeToRead()) {
+            // Lo que se guardó se leyó en pausa y sirve; el resto ya no se recorre.
+            util::LogInfo(L"Lectura del resto del trabajo %u en '%ls' cortada: se reanudó", jobId, printer.c_str());
+            if (truncated) *truncated = true;
             break;
         }
         if (!out.empty() && !safeToRead()) {
@@ -529,13 +536,19 @@ OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint
             out.clear();
             return OpResult::Fail(ERROR_BUSY);
         }
-        DWORD want = static_cast<DWORD>(std::min<std::uint64_t>(chunk.size(), maxBytes - out.size()));
+        DWORD want = overflow ? static_cast<DWORD>(chunk.size())
+                              : static_cast<DWORD>(std::min<std::uint64_t>(chunk.size(), maxBytes - out.size()));
         DWORD got = 0;
         if (!ReadPrinter(handle.get(), chunk.data(), want, &got)) {
             error = GetLastError();
             break;
         }
         if (got == 0) break;  // fin de los datos
+        if (overflow) {
+            if (truncated) *truncated = true;
+            if (!beyond(chunk.data(), got)) break;
+            continue;
+        }
         out.insert(out.end(), chunk.begin(), chunk.begin() + got);
     }
     if (error != ERROR_SUCCESS) {

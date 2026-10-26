@@ -175,7 +175,7 @@ short EpsonBin(int unit) {
 }
 
 void ParseEjl(const std::uint8_t* data, size_t size, const std::vector<std::string>& header,
-              const std::vector<std::string>& trailer, core::ContentFacts& facts) {
+              const std::vector<std::string>& trailer, core::ContentFacts& facts, const EscPageCount* allData) {
     std::string dx, bd, driver;
     std::uint32_t quantity = 0;
     bool any = false;
@@ -224,12 +224,14 @@ void ParseEjl(const std::uint8_t* data, size_t size, const std::vector<std::stri
         return l.rfind("@EJL EN LA=ESC/PAGE", 0) == 0;
     });
     if (escPage) {
-        const EscPageCount count = CountEscPagePages(data, size);
+        // Con los datos cortados por tamaño, el conteo hecho sobre todos al leerlos.
+        const EscPageCount count = allData ? *allData : CountEscPagePages(data, size);
         std::uint32_t pages = count.pages;
         if (dx == "ON" && count.lastPageBlank && pages >= 2 && pages % 2 == 0) --pages;  // dorso de relleno
         if (count.end == EscPageCount::End::Complete && pages > 0) {
             facts.pageSource = core::ContentFacts::PageSource::EscPageFormFeeds;
             facts.pages = pages;
+            facts.pagesFromAllData = allData != nullptr;
         }
         // Datos cortados por tamaño (no inválidos): TotalPages puede traer ese dorso.
         facts.spoolerCountsBlankBack = VerifiedEpsonDriver(driver) && count.end == EscPageCount::End::Truncated;
@@ -317,74 +319,167 @@ void ParseDsc(const std::uint8_t* data, size_t size, bool complete, core::Conten
 }  // namespace
 
 EscPageCount CountEscPagePages(const std::uint8_t* data, size_t size) {
-    using End = EscPageCount::End;
-    EscPageCount out;
-    if (!data) return out;
-    // Los comandos empiezan después de la línea "@EJL EN LA=ESC/PAGE...".
-    std::string_view text(reinterpret_cast<const char*>(data), std::min(size, kHeaderWindow));
-    size_t enter = text.find("@EJL EN LA=ESC/PAGE");
-    if (enter == std::string_view::npos) return out;
-    size_t pos = text.find('\n', enter);
-    if (pos == std::string_view::npos) return out;
-    ++pos;
+    EscPageCounter counter;
+    if (data) counter.Feed(data, size);
+    return counter.Result();
+}
+
+void EscPageCounter::Feed(const std::uint8_t* data, size_t size) {
+    fed_ += size;
+    if (done_) {
+        if (count_.end == EscPageCount::End::Complete) KeepTrailer(data, size);
+        return;
+    }
+    if (!header_) {
+        FeedBody(data, size);
+        return;
+    }
+    // Los comandos empiezan después de la línea "@EJL EN LA=ESC/PAGE...", que
+    // tiene que estar en los primeros kHeaderWindow bytes.
+    constexpr size_t kMaxHead = kHeaderWindow + 1024;
+    const size_t take = std::min(size, kMaxHead - head_.size());
+    head_.insert(head_.end(), data, data + take);
+    std::string_view text(reinterpret_cast<const char*>(head_.data()), head_.size());
+    const size_t enter = text.find("@EJL EN LA=ESC/PAGE");
+    const size_t line = enter < kHeaderWindow ? text.find('\n', enter) : std::string_view::npos;
+    if (line == std::string_view::npos) {
+        if (head_.size() >= kMaxHead) Finish(EscPageCount::End::Invalid);
+        return;
+    }
+    header_ = false;
+    std::vector<std::uint8_t> body(head_.begin() + static_cast<std::ptrdiff_t>(line + 1), head_.end());
+    head_.clear();
+    FeedBody(body.data(), body.size());
+    if (!done_) FeedBody(data + take, size - take);
+    else if (count_.end == EscPageCount::End::Complete) KeepTrailer(data + take, size - take);
+}
+
+void EscPageCounter::FeedBody(const std::uint8_t* data, size_t size) {
+    size_t pos = 0;
+    if (!head_.empty()) {
+        // Comando partido entre dos bloques: se completa con el principio de este.
+        constexpr size_t kMaxCommand = 128;  // GS + 64 parámetros + 8 letras + "{" + mayúscula
+        const size_t old = head_.size();
+        const size_t take = std::min(size, kMaxCommand - old);
+        head_.insert(head_.end(), data, data + take);
+        const size_t used = Parse(head_.data(), head_.size());
+        if (done_) {
+            if (count_.end == EscPageCount::End::Complete) {
+                KeepTrailer(head_.data(), old);
+                KeepTrailer(data, size);
+            }
+            head_.clear();
+            return;
+        }
+        if (used == kNeedMore) {
+            if (take < size) Finish(EscPageCount::End::Invalid);  // no puede pasar: el comando no es tan largo
+            return;
+        }
+        pos = used - old;
+        head_.clear();
+    }
+    while (pos < size) {
+        if (skip_ > 0) {
+            const size_t n = static_cast<size_t>(std::min<std::uint64_t>(skip_, size - pos));
+            pos += n;
+            skip_ -= n;
+            continue;
+        }
+        const size_t used = Parse(data + pos, size - pos);
+        if (done_) {
+            if (count_.end == EscPageCount::End::Complete) KeepTrailer(data + pos, size - pos);
+            return;
+        }
+        if (used == kNeedMore) {
+            head_.assign(data + pos, data + size);
+            return;
+        }
+        pos += used;
+    }
+}
+
+size_t EscPageCounter::Parse(const std::uint8_t* data, size_t size) {
     auto isLower = [](std::uint8_t c) { return c >= 'a' && c <= 'z'; };
     auto isUpper = [](std::uint8_t c) { return c >= 'A' && c <= 'Z'; };
     auto isParam = [](std::uint8_t c) { return (c >= '0' && c <= '9') || c == ';' || c == '.' || c == '-'; };
-    bool pageHasData = false;  // la página actual trajo algún comando con datos (imagen)
-    while (pos < size) {
-        const std::uint8_t c = data[pos];
-        if (c == 0x0c) {  // FF: fin de página
-            ++out.pages;
-            out.lastPageBlank = !pageHasData;
-            pageHasData = false;
-            ++pos;
-            continue;
-        }
-        if (c == 0x1b) {  // ESC 01 @EJL: vuelve al EJL del final del trabajo
-            if (size - pos < 6) break;
-            out.end = std::memcmp(data + pos + 1, "\x01@EJL", 5) == 0 ? End::Complete : End::Invalid;
-            return out;
-        }
-        if (c != 0x1d) return out;  // ni comando ni FF: no es lo que se conoce
-        // GS <parámetros> <minúsculas> [{] <mayúscula>
-        size_t p = pos + 1;
-        const size_t params = p;
-        while (p < size && p - params < 64 && isParam(data[p])) ++p;
-        const size_t paramsEnd = p;
-        const size_t name = p;
-        while (p < size && p - name < 8 && isLower(data[p])) ++p;
-        const bool hasData = p < size && data[p] == '{';
-        if (hasData) ++p;
-        if (p >= size) break;
-        if (p == name || !isUpper(data[p])) return out;
-        ++p;
-        if (hasData) {
-            // El primer parámetro es el largo de los datos que siguen.
-            std::uint64_t length = 0;
-            size_t q = params;
-            for (; q < paramsEnd && data[q] >= '0' && data[q] <= '9' && length <= size; ++q)
-                length = length * 10 + (data[q] - '0');
-            if (q == params) return out;
-            if (length > size - p) break;  // los datos siguen más allá de lo leído
-            p += static_cast<size_t>(length);
-            pageHasData = true;
-        }
-        pos = p;
+    const std::uint8_t c = data[0];
+    if (c == 0x0c) {  // FF: fin de página
+        ++count_.pages;
+        count_.lastPageBlank = !pageHasData_;
+        pageHasData_ = false;
+        return 1;
     }
-    out.end = End::Truncated;
+    if (c == 0x1b) {  // ESC 01 @EJL: vuelve al EJL del final del trabajo
+        if (size < 6) return kNeedMore;
+        Finish(std::memcmp(data + 1, "\x01@EJL", 5) == 0 ? EscPageCount::End::Complete : EscPageCount::End::Invalid);
+        return 0;
+    }
+    if (c != 0x1d) {  // ni comando ni FF: no es lo que se conoce
+        Finish(EscPageCount::End::Invalid);
+        return 0;
+    }
+    // GS <parámetros> <minúsculas> [{] <mayúscula>
+    size_t p = 1;
+    const size_t params = p;
+    while (p < size && p - params < 64 && isParam(data[p])) ++p;
+    const size_t paramsEnd = p;
+    const size_t name = p;
+    while (p < size && p - name < 8 && isLower(data[p])) ++p;
+    const bool hasData = p < size && data[p] == '{';
+    if (hasData) ++p;
+    if (p >= size) return kNeedMore;
+    if (p == name || !isUpper(data[p])) {
+        Finish(EscPageCount::End::Invalid);
+        return 0;
+    }
+    ++p;
+    if (hasData) {
+        // El primer parámetro es el largo de los datos que siguen (pueden
+        // continuar en los bloques siguientes).
+        std::uint64_t length = 0;
+        size_t q = params;
+        for (; q < paramsEnd && data[q] >= '0' && data[q] <= '9' && length < (1ull << 48); ++q)
+            length = length * 10 + (data[q] - '0');
+        if (q == params) {
+            Finish(EscPageCount::End::Invalid);
+            return 0;
+        }
+        skip_ = length;
+        pageHasData_ = true;
+    }
+    return p;
+}
+
+void EscPageCounter::Finish(EscPageCount::End end) {
+    done_ = true;
+    count_.end = end;
+}
+
+void EscPageCounter::KeepTrailer(const std::uint8_t* data, size_t size) {
+    const size_t take = std::min(size, kTrailerWindow - std::min(kTrailerWindow, count_.trailer.size()));
+    count_.trailer.insert(count_.trailer.end(), data, data + take);
+}
+
+EscPageCount EscPageCounter::Result() const {
+    EscPageCount out = count_;
+    if (!done_) out.end = header_ ? EscPageCount::End::Invalid : EscPageCount::End::Truncated;
     return out;
 }
 
-void ParsePdlSettings(const std::uint8_t* data, size_t size, bool complete, core::ContentFacts& facts) {
+void ParsePdlSettings(const std::uint8_t* data, size_t size, bool complete, core::ContentFacts& facts,
+                      const EscPageCount* allData) {
     if (!data || size == 0) return;
     auto header = CommandLines(data, std::min(size, kHeaderWindow), true);
     std::vector<std::string> trailer;
+    const bool counted = allData && allData->end == EscPageCount::End::Complete;
     if (complete) {
         size_t start = size > kTrailerWindow ? size - kTrailerWindow : 0;
         trailer = CommandLines(data + start, size - start, false);
+    } else if (counted) {
+        trailer = CommandLines(allData->trailer.data(), allData->trailer.size(), false);
     }
     const bool isEjl = std::any_of(header.begin(), header.end(), [](const std::string& l) { return l.rfind("@EJL", 0) == 0; });
-    if (isEjl) ParseEjl(data, size, header, trailer, facts);
+    if (isEjl) ParseEjl(data, size, header, trailer, facts, counted ? allData : nullptr);
     else ParsePjl(header, facts);
     // PostScript (directo o tras el encabezado PJL): comentarios DSC.
     const size_t start = SkipPjlHeader(data, size);

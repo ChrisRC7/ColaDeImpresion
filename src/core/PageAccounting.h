@@ -48,6 +48,9 @@ struct ContentFacts {
     enum class PageSource { None, EmfRecords, XpsFixedPages, PostScriptDsc, EscPageFormFeeds };
     PageSource pageSource = PageSource::None;
     std::uint32_t pages = 0;
+    // Las páginas se contaron recorriendo todos los datos aunque solo se guardó
+    // el principio (complete = false): ESC/Page de más de 16 MB.
+    bool pagesFromAllData = false;
     // La secuencia de páginas se repite de forma exacta con este período
     // (p. ej. 1 página repetida 10 veces => 1): indicio de copias hechas por la
     // aplicación. 0 = no se detectó repetición o no se pudo comprobar.

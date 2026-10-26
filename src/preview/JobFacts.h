@@ -5,8 +5,9 @@
 // enviado desde otra PC solo están en sus datos (EJL de Epson, PJL, DSC,
 // DEVMODE del spool EMF), no en JOB_INFO_2.
 //
-// Cada trabajo se lee una sola vez con la API del spooler (como máximo
-// kMaxBytes: el encabezado trae las opciones) y el resultado queda en caché
+// Cada trabajo se lee una sola vez con la API del spooler (se guardan como
+// máximo kMaxBytes: el encabezado trae las opciones; de un ESC/Page más largo
+// el resto se recorre sin guardarlo para contar sus páginas) y el resultado queda en caché
 // hasta que el trabajo sale de la cola. Los trabajos que todavía se reciben se
 // analizan al terminar. Al liberarlo (pasa a imprimirse) sus datos siguen
 // valiendo aunque el spooler informe otro tamaño, para que la fila y el

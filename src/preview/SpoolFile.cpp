@@ -278,9 +278,29 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
         return data;
     }
 
-    // 2. API del spooler.
+    // 2. API del spooler. Un ESC/Page más largo que maxBytes se sigue leyendo
+    // sin guardarlo para contar sus páginas: en TotalPages el servidor cuenta el
+    // dorso en blanco de la última hoja (D46, D53).
     bool truncated = false;
-    core::OpResult api = core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated);
+    std::optional<EscPageCounter> counter;
+    bool counterDecided = false;
+    auto countRest = [&](const std::uint8_t* chunk, size_t size) {
+        if (!counterDecided) {
+            counterDecided = true;
+            if (DetectFormat(data.bytes.data(), data.bytes.size()) != DataFormat::EscPage) return false;
+            counter.emplace();
+            counter->Feed(data.bytes.data(), data.bytes.size());
+        }
+        if (!counter) return false;
+        counter->Feed(chunk, size);
+        return !counter->Failed();
+    };
+    auto read = [&] {
+        counter.reset();
+        counterDecided = false;
+        return core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated, countRest);
+    };
+    core::OpResult api = read();
     // 0 bytes o bloques sueltos de un trabajo que sí tiene datos: otro programa
     // (otra copia de la app) lo estaba leyendo a la vez. Se reintenta con esperas
     // crecientes y algo de azar para que las copias no vuelvan a coincidir. Cada
@@ -293,7 +313,7 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
     for (DWORD wait : {250, 500, 1000, 2000, 4000}) {
         if (!partial()) break;
         Sleep(wait + (GetTickCount() ^ GetCurrentProcessId()) % 300);
-        api = core::spooler::ReadJobData(job.printer, job.id, maxBytes, data.bytes, &truncated);
+        api = read();
     }
     if (partial()) {
         // Analizar bloques sueltos daría un formato desconocido y opciones equivocadas.
@@ -313,6 +333,18 @@ SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std:
         data.format = DetectFormat(data.bytes.data(), data.bytes.size());
         util::LogInfo(L"Datos del trabajo %u leídos por la API del spooler (%llu bytes, %ls)", job.id,
                       static_cast<unsigned long long>(data.bytes.size()), DataFormatName(data.format));
+        if (counter) {
+            // Solo vale si se llegó al final y no faltan bloques (otra copia de
+            // la app pudo llevarse alguno mientras se recorría, D48).
+            EscPageCount count = counter->Result();
+            const bool whole = !ReadLooksIncomplete(job.sizeBytes, counter->BytesFed(), false);
+            util::LogInfo(L"Páginas ESC/Page del trabajo %u contadas en %llu bytes: %u (%ls)", job.id,
+                          static_cast<unsigned long long>(counter->BytesFed()), count.pages,
+                          count.end != EscPageCount::End::Complete ? L"sin llegar al final"
+                          : whole                                   ? L"completo"
+                                                                    : L"faltan bloques, no se usa");
+            if (count.end == EscPageCount::End::Complete && whole) data.escPageAllData = std::move(count);
+        }
         return data;
     }
     if (api.error == ERROR_BUSY) {

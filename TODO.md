@@ -102,7 +102,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Significado del EJL del controlador EPSON AM-C6000 verificado sin papel (`QT` copias, `JI PAGES` hojas, `DX`/`BD`, `PS`, `poE`): copias y hojas de trabajos de otras PCs fiables
 - [x] Documentos de 1 página que aparecían con 2 en las Epson: las páginas de los trabajos ESC/Page se cuentan en los datos (`FF`), sin el dorso en blanco que agrega el controlador a doble cara; `TotalPages` del servidor daba 2/2/4 para 1/2/3 páginas (0.5.2; el encabezado del panel de detalles, en la 0.5.3)
 - [ ] (LAIMI) Confirmar con trabajos reales de estudiantes (PDF, Word, navegador; 1, 2 y 3 páginas, a una y a doble cara) que la columna Páginas coincide con el documento
-- [ ] Trabajos ESC/Page de más de 16 MB (unas 20 páginas): las páginas no se cuentan y `TotalPages` puede traer el dorso de relleno (se muestra estimado); evaluar recorrer los datos completos sin guardarlos
+- [x] Trabajos ESC/Page de más de 16 MB: las páginas no se contaban y `TotalPages` traía el dorso de relleno (PDF de 11 páginas desde Edge a doble cara = 12); ahora el resto de los datos se recorre sin guardarlo para contarlas (0.5.13, D53)
+- [ ] (LAIMI) Confirmar con "Crocheting Elliot 2.pdf" desde Edge, a una y a doble cara, que la columna Páginas dice 11 (y en `app.log` "Páginas ESC/Page del trabajo N contadas en ... (completo)")
 - [ ] (LAIMI) Pruebas P6–P8 (Lexmark, etiquetas, operador sin permisos)
 - [x] Columna "Páginas" = páginas × copias para todos los trabajos (análisis en segundo plano de sus datos)
 - [x] Columnas de papel, orientación, doble cara y origen del papel
@@ -200,7 +201,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 91 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 92 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

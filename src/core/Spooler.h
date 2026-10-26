@@ -8,6 +8,7 @@
 #include <winspool.h>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -133,8 +134,13 @@ bool CanAdminister(const std::wstring& printer);
 // (consultado al servidor antes y durante la lectura) cumple CanReadJobData;
 // si no, o si lo reanudan a mitad, devuelve ERROR_BUSY. ResumeJob/RestartJob
 // esperan a que termine o se corte una lectura del mismo trabajo.
+// beyond: si se da, lo que pasa de maxBytes no se descarta sino que se le
+// entrega por bloques sin guardarlo (con la misma comprobación de pausa antes
+// de cada bloque); devolver false deja de leer. Si lo reanudan mientras tanto
+// se deja de leer pero 'out' sigue valiendo (truncated = true).
+using DataSink = std::function<bool(const std::uint8_t* data, size_t size)>;
 OpResult ReadJobData(const std::wstring& printer, std::uint32_t jobId, std::uint64_t maxBytes,
-                     std::vector<std::uint8_t>& out, bool* truncated);
+                     std::vector<std::uint8_t>& out, bool* truncated, const DataSink& beyond = {});
 
 // Carpeta de spool configurada en el servidor (p. ej. "C:\\Windows\\System32\\spool\\PRINTERS").
 std::wstring GetSpoolDirectory(const std::wstring& server);

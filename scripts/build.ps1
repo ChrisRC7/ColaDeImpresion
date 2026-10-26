@@ -153,6 +153,13 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - PÁGINAS DE DOCUMENTOS GRANDES (0.5.13): envíe desde Edge un PDF de 11
+     páginas y más de 16 MB (p. ej. "Crocheting Elliot 2.pdf") a una Epson,
+     una vez a una cara y otra a doble cara. La columna Páginas debe decir 11
+     en los dos (antes, a doble cara, decía 12: se contaba el dorso en blanco
+     de la última hoja). En app.log aparece "Páginas ESC/Page del trabajo N
+     contadas en ... bytes: 12 (completo)" (12 fines de página, uno es el
+     dorso de relleno). Con un documento de páginas pares no cambia nada.
    - RESULTADO TRAS UN CORTE (0.5.12): si una impresora deja de responder y
      mientras tanto se imprime el primer trabajo de su cola (sin pausa), al
      volver el historial debe decir "Impreso", no "Retirado".

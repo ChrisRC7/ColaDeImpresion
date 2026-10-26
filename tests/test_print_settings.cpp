@@ -500,6 +500,63 @@ TEST(EpsonEscPageTruncatedOrInvalid) {
     CHECK_EQ(core::ComputePageAccounting(job, &g).dataPages.value, 4u);
 }
 
+TEST(EpsonEscPageCountedInChunks) {
+    // Caso real (D53): PDF de 11 páginas desde Edge a doble cara, 42 MB; solo se
+    // guardan 16 MB y TotalPages = 12 por el dorso en blanco. El resto se recorre
+    // por bloques: cualquier corte entre bloques (dentro de un comando, de sus
+    // datos o del ESC del final) debe dar lo mismo que contarlo entero.
+    auto bytes = Bytes(EscPageJob(11, true, true));
+    const auto whole = preview::CountEscPagePages(bytes.data(), bytes.size());
+    CHECK(whole.end == preview::EscPageCount::End::Complete);
+    CHECK_EQ(whole.pages, 12u);
+    for (size_t step : {size_t(1), size_t(2), size_t(3), size_t(7), size_t(64), bytes.size()}) {
+        preview::EscPageCounter counter;
+        for (size_t at = 0; at < bytes.size(); at += step)
+            counter.Feed(bytes.data() + at, std::min(step, bytes.size() - at));
+        auto count = counter.Result();
+        CHECK(count.end == preview::EscPageCount::End::Complete);
+        CHECK_EQ(count.pages, whole.pages);
+        CHECK(count.lastPageBlank);
+        CHECK_EQ(counter.BytesFed(), static_cast<std::uint64_t>(bytes.size()));
+        CHECK(std::string(count.trailer.begin(), count.trailer.end()).find("JI PAGES=\"6\"") != std::string::npos);
+    }
+    // Sin llegar al final sigue cortado; algo desconocido falla.
+    preview::EscPageCounter cut;
+    cut.Feed(bytes.data(), bytes.size() - 100);
+    CHECK(cut.Result().end == preview::EscPageCount::End::Truncated);
+    CHECK(!cut.Failed());
+
+    // Solo el principio guardado + el conteo de todos los datos: 11 páginas
+    // fiables (no TotalPages estimado) y las hojas del EJL del final.
+    auto head = Bytes(std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size() / 2));
+    core::ContentFacts f;
+    f.analyzed = true;
+    f.kind = core::DataKind::Pdl;
+    preview::ParsePdlSettings(head.data(), head.size(), false, f, &whole);
+    CHECK(f.pageSource == core::ContentFacts::PageSource::EscPageFormFeeds);
+    CHECK(f.pagesFromAllData);
+    CHECK_EQ(f.pages, 11u);
+    CHECK(!f.spoolerCountsBlankBack);
+    CHECK_EQ(f.sheetsCounter.value, 6u);
+    core::JobInfo job;
+    job.datatype = L"RAW";
+    job.totalPages = 12;
+    auto acc = core::ComputePageAccounting(job, &f);
+    CHECK_EQ(acc.dataPages.value, 11u);
+    CHECK(acc.dataPages.reliability == Reliability::Reliable);
+    CHECK_EQ(acc.printPages.value, 11u);
+
+    // Un conteo que no llegó al final no se usa: TotalPages estimado, como antes.
+    auto partial = cut.Result();
+    core::ContentFacts g;
+    g.analyzed = true;
+    g.kind = core::DataKind::Pdl;
+    preview::ParsePdlSettings(head.data(), head.size(), false, g, &partial);
+    CHECK(g.pageSource == core::ContentFacts::PageSource::None);
+    CHECK(g.spoolerCountsBlankBack);
+    CHECK(core::ComputePageAccounting(job, &g).dataPages.reliability == Reliability::Estimated);
+}
+
 TEST(EpsonPaperSourceShowsNames) {
     i18n::SetLanguage(i18n::Language::Spanish);
     // Datos del controlador AM-C6000: bandeja en "GS n;m iuE" y papel en PS.

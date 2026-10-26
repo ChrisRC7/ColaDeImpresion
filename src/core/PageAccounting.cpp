@@ -209,7 +209,7 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
     acc.jobDevModeStale = acc.devModeFromSpool && job.settings.present && !SameVisibleSettings(job.settings, dm);
 
     // 1. Páginas en los datos (tal como las envió la aplicación).
-    const bool contentCounted = facts && facts->complete && facts->pages > 0 &&
+    const bool contentCounted = facts && (facts->complete || facts->pagesFromAllData) && facts->pages > 0 &&
                                 (facts->pageSource == ContentFacts::PageSource::EmfRecords ||
                                  facts->pageSource == ContentFacts::PageSource::XpsFixedPages ||
                                  facts->pageSource == ContentFacts::PageSource::PostScriptDsc ||

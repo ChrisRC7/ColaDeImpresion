@@ -109,7 +109,10 @@ void AnalyzeSpoolData(const SpoolData& spool, core::ContentFacts& facts) {
         case DataFormat::Pdf:
         case DataFormat::EscPage:
         case DataFormat::EscPr:
-        case DataFormat::Unknown: ParsePdlSettings(data, size, facts.complete, facts); break;
+        case DataFormat::Unknown:
+            ParsePdlSettings(data, size, facts.complete, facts,
+                             spool.escPageAllData ? &*spool.escPageAllData : nullptr);
+            break;
         default: break;
     }
 }

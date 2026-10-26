@@ -7,10 +7,12 @@
 // administrador del servidor) o por una carpeta alternativa configurada.
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "core/PrintTypes.h"
+#include "preview/PdlSettings.h"
 #include "preview/PreviewTypes.h"
 
 namespace cola::preview {
@@ -35,6 +37,9 @@ struct SpoolData {
     std::vector<std::uint8_t> bytes;
     std::uint64_t fileSize = 0;      // tamaño real (bytes puede estar recortado)
     bool truncated = false;
+    // ESC/Page cortado por tamaño: páginas contadas recorriendo el resto de los
+    // datos sin guardarlo (solo si se llegó al final y se leyó todo, D53).
+    std::optional<EscPageCount> escPageAllData;
     DataFormat format = DataFormat::Unknown;
     unsigned long error = 0;         // error Win32 si no se pudo leer
     // Carpetas probadas y por qué falló cada una (para explicarlo en la UI y el log).
@@ -84,6 +89,8 @@ SpoolData ReadSpoolFile(const SpoolSearch& search, std::uint32_t jobId, const st
 // quitaría datos al procesador de impresión. Una lectura incompleta
 // (ReadLooksIncomplete) se reintenta unas veces con espera; si no se logra
 // completa se descarta (incomplete = true) en vez de analizar bloques sueltos.
+// Si un trabajo ESC/Page pasa de maxBytes, el resto se recorre sin guardarlo
+// para contar sus páginas (escPageAllData).
 // allowFile = false: solo la API del spooler (para análisis en segundo plano,
 // donde buscar en la carpeta de spool solo sumaría esperas y errores).
 SpoolData ReadJobSpool(const SpoolSearch& search, const core::JobInfo& job, std::uint64_t maxBytes,
