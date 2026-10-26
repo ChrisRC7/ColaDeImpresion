@@ -255,7 +255,7 @@ std::wstring BinName(short bin, const std::wstring& driver, const core::PrinterI
 ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* factsIn,
                                  const core::PrinterInfo* printer) {
     ListSettings out;
-    short orientation = 0;  // para la encuadernación: 0 = no se conoce
+    short orientation = 0;  // para la presentación: 0 = no se conoce
     const core::ContentFacts* facts = factsIn && factsIn->analyzed ? factsIn : nullptr;
     const core::PrintSettings& dm = core::EffectiveDevMode(job, facts);
     const core::PageAccounting acc = core::ComputePageAccounting(job, facts);

@@ -561,9 +561,9 @@ TEST(EpsonEscPageCountedInChunks) {
 TEST(BindingFromOrientationAndDuplex) {
     i18n::SetLanguage(i18n::Language::Spanish);
     using app::BindingText;
-    // Vertical + borde largo / horizontal + borde corto: se hojea de lado (libro).
-    CHECK_EQ(BindingText(DMORIENT_PORTRAIT, DMDUP_VERTICAL), std::wstring(L"Libro"));
-    CHECK_EQ(BindingText(DMORIENT_LANDSCAPE, DMDUP_HORIZONTAL), std::wstring(L"Libro"));
+    // Vertical + borde largo / horizontal + borde corto: se hojea de lado (Cuaderno).
+    CHECK_EQ(BindingText(DMORIENT_PORTRAIT, DMDUP_VERTICAL), std::wstring(L"Cuaderno"));
+    CHECK_EQ(BindingText(DMORIENT_LANDSCAPE, DMDUP_HORIZONTAL), std::wstring(L"Cuaderno"));
     // Vertical + borde corto / horizontal + borde largo: hacia arriba (libreta).
     CHECK_EQ(BindingText(DMORIENT_PORTRAIT, DMDUP_HORIZONTAL), std::wstring(L"Libreta"));
     CHECK_EQ(BindingText(DMORIENT_LANDSCAPE, DMDUP_VERTICAL), std::wstring(L"Libreta"));
@@ -581,7 +581,7 @@ TEST(BindingFromOrientationAndDuplex) {
     auto s = app::ResolveListSettings(job, nullptr);
     CHECK_EQ(s.duplex, std::wstring(L"Borde largo"));
     CHECK_EQ(s.binding, std::wstring(L"Libreta"));
-    // Epson sin datos leídos: doble cara "—" y encuadernación también.
+    // Epson sin datos leídos: doble cara "—" y presentación también.
     job.driver = L"EPSON AM-C6000 Series";
     job.datatype = L"RAW";
     CHECK_EQ(app::ResolveListSettings(job, nullptr).binding, std::wstring(L"—"));

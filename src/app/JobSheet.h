@@ -32,12 +32,12 @@ struct ListSettings {
     std::wstring paper;        // "Carta", "A4", "100 × 150 mm"
     std::wstring orientation;  // "Vertical" / "Horizontal"
     std::wstring duplex;       // "Una cara" / "Borde largo" / "Borde corto"
-    std::wstring binding;      // "Libro" / "Libreta" / "No aplica" (BindingText)
+    std::wstring binding;      // "Cuaderno" / "Libreta" / "No aplica" (BindingText)
     std::wstring source;       // origen del papel
 };
 
 // Cómo se pasan las hojas impresas a doble cara (D55), según la orientación y
-// el borde de giro: vertical + borde largo u horizontal + borde corto = "Libro"
+// el borde de giro: vertical + borde largo u horizontal + borde corto = "Cuaderno"
 // (se hojea de lado); vertical + borde corto u horizontal + borde largo =
 // "Libreta" (se hojea hacia arriba). Una cara = "No aplica".
 // orientation: DMORIENT_* o 0 si no se conoce; duplex: DMDUP_* o 0 si no se

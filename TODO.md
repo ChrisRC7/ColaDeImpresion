@@ -154,7 +154,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] Verificar en la app la cabecera del historial con la ventana al mínimo (100 % y 150 % de escala)
 - [x] Menú: "Conectar al servidor del LAIMI (\\vtec-laimiprint)", marcado mientras está conectado (0.5.11)
 - [x] Total de páginas de la selección en la barra inferior ("Selección: 3 trabajo(s) · 11 páginas a imprimir", suma de la columna Páginas, con los "—" aparte); también en el historial (0.5.1)
-- [x] Columna **Encuadernación** (Libro / Libreta / No aplica, por orientación y borde de giro), a la derecha de Doble cara en la cola, el historial y el Excel ("Por encuadernación") (0.5.14, D55)
+- [x] Columna **Presentación** (Cuaderno / Libreta / No aplica, por orientación y borde de giro), a la derecha de Doble cara en la cola, el historial y el Excel ("Por presentación") (0.5.14, D55)
 - [x] Botón *Conectar al servidor del LAIMI* configurable sin compilar: `servidor-laimi.txt` junto al .exe; `Abrir vtec-laimiprint.bat` usa `--laimi` (0.5.14, D54)
 - [x] Cambiar ese servidor desde la app: menú *Cambiar servidor del LAIMI…*, se escribe en el cuadro de arriba y reemplaza al que muestra la opción (0.5.15, D54)
 - [ ] (LAIMI) Probar *Cambiar servidor del LAIMI…* con un usuario sin permisos de administrador sobre la carpeta de la app (debe quedar solo para ese usuario y avisarlo)

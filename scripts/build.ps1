@@ -161,11 +161,11 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
-   - COLUMNA ENCUADERNACIÓN (0.5.14): a la derecha de "Doble cara" dice
-     "Libro" (vertical por el borde largo u horizontal por el borde corto),
+   - COLUMNA PRESENTACIÓN (0.5.14; antes "Encuadernación", renombrada en la 0.5.16): a la derecha de "Doble cara" dice
+     "Cuaderno" (vertical por el borde largo u horizontal por el borde corto),
      "Libreta" (vertical por el borde corto u horizontal por el borde largo)
      o "No aplica" (una cara). Compárelo con lo que sale de la impresora.
-     También aparece en el historial y en el Excel (hoja "Por encuadernación").
+     También aparece en el historial y en el Excel (hoja "Por presentación").
    - CAMBIAR EL SERVIDOR DEL LAIMI (0.5.15): menú (F10) > "Cambiar servidor
      del LAIMI...". Arriba aparece el servidor actual: escriba otro nombre y
      Enter (Esc cancela). La opción "Conectar al servidor del LAIMI" debe

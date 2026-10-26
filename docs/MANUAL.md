@@ -31,7 +31,7 @@ es **en vivo** o por **sondeo**.
 La cola es una **tabla** como la de Windows. Columnas: `#` (posición en la
 cola), **Documento**, **Estado**, **Usuario**, **Equipo** (la PC desde la que
 se envió), **Impresora** (en la vista "Todas"), **Páginas**, **Papel**,
-**Orientación**, **Doble cara**, **Encuadernación**, **Origen del papel**, **Tamaño** y **Enviado**
+**Orientación**, **Doble cara**, **Presentación**, **Origen del papel**, **Tamaño** y **Enviado**
 (fecha y hora de envío). Desde Estado en adelante los valores van centrados
 bajo su título.
 
@@ -50,8 +50,8 @@ bajo su título.
   (Carta, A3, 12 × 18) y el origen con el nombre de la bandeja: en las Epson
   del LAIMI, *Auto selección*, *Alimentador de papel*, *Bandeja 1* o
   *Bandeja 2* (nunca un número de código).
-- **Encuadernación** dice cómo se pasan las hojas impresas a doble cara:
-  **Libro** (se hojean de lado: vertical por el borde largo u horizontal por
+- **Presentación** dice cómo se pasan las hojas impresas a doble cara:
+  **Cuaderno** (se hojean de lado: vertical por el borde largo u horizontal por
   el borde corto) o **Libreta** (se hojean hacia arriba: vertical por el borde
   corto u horizontal por el borde largo). A una cara dice *No aplica*; si no se
   sabe la doble cara o la orientación, `—`. Por defecto está a la derecha de
@@ -269,7 +269,7 @@ En la barra de estado se ve "Filtro: … (n de m)".
 `Ctrl+H` (o el botón del reloj) muestra los trabajos que salieron de la cola con
 su resultado: **Impreso**, **Cancelado**, **Falló** o **Retirado** (se fue sin
 que se viera imprimir). Cada trabajo conserva las mismas columnas que tenía en la
-cola (`#`, páginas × copias, papel, orientación, doble cara, encuadernación, origen del papel,
+cola (`#`, páginas × copias, papel, orientación, doble cara, presentación, origen del papel,
 tamaño, enviado) y además la hora en que terminó (*Finalizado*). Los registros
 guardados con versiones anteriores a la 0.5.0 muestran "—" en las columnas que
 no tenían. Las páginas son las mismas que se veían en la cola **también cuando el
@@ -305,7 +305,7 @@ indica el período exportado. El libro tiene estas hojas:
   páginas, trabajo más grande, tamaño total).
 - **Una hoja por tabla**, para no tener que bajar entre una y otra: *Por
   resultado* (trabajos impresos, cancelados, con error y retirados) y **páginas
-  impresas** *Por papel*, *Por impresora*, *Por doble cara*, *Por encuadernación*, *Por orientación*,
+  impresas** *Por papel*, *Por impresora*, *Por doble cara*, *Por presentación*, *Por orientación*,
   *Por origen del papel*, *Por usuario*, *Por equipo*, *Por día* y *Por hora*,
   con trabajos, páginas, porcentaje y total. El título y los encabezados quedan
   fijos al desplazarse. Las tablas por categoría cuentan solo los trabajos

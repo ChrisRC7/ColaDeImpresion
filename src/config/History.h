@@ -31,7 +31,7 @@ struct HistoryEntry {
     std::wstring paper;
     std::wstring orientation;
     std::wstring duplex;
-    std::wstring binding;  // encuadernación: "Libro" / "Libreta" / "No aplica" (0.5.14)
+    std::wstring binding;  // presentación: "Cuaderno" / "Libreta" / "No aplica" (0.5.14)
     std::wstring source;            // origen del papel
     std::int64_t submittedUnix = 0;  // "Enviado" (UTC)
 
