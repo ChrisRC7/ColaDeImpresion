@@ -204,4 +204,25 @@ std::wstring LaimiServer(const Settings& settings) {
     return kDefaultLaimiServer;
 }
 
+bool SaveLaimiServerFile(const std::wstring& server) {
+    const std::string text =
+        "# Servidor de impresi\xC3\xB3n del LAIMI que usan el men\xC3\xBA \"Conectar al servidor del\r\n"
+        "# LAIMI\" y \"Abrir vtec-laimiprint.bat\". Se cambia desde la app (men\xC3\xBA >\r\n"
+        "# \"Cambiar servidor del LAIMI...\") o aqu\xC3\xAD: la primera l\xC3\xADnea que no empiece con #.\r\n" +
+        util::ToUtf8(server) + "\r\n";
+    const std::wstring path = ExecutableDir() + L"\\" + kLaimiServerFile;
+    const std::wstring temp = path + L".tmp";
+    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const BOOL ok = WriteFile(file, text.data(), static_cast<DWORD>(text.size()), &written, nullptr) &&
+                    written == text.size();
+    CloseHandle(file);
+    if (!ok || !MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        DeleteFileW(temp.c_str());
+        return false;
+    }
+    return true;
+}
+
 }  // namespace cola::config

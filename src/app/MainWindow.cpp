@@ -354,6 +354,21 @@ void MainWindow::ToggleTheme() {
 // Servidor e impresoras
 // ---------------------------------------------------------------------------
 
+void MainWindow::SetLaimiServer(const std::wstring& text) {
+    // Vacío = el predeterminado. Se guarda en servidor-laimi.txt (para todos los
+    // usuarios de esta copia y para el .bat); si no se puede escribir junto al
+    // programa, solo para este usuario (config.json). D54.
+    std::wstring server = config::ServerFromText(util::ToUtf8(text));
+    if (server.empty()) server = config::kDefaultLaimiServer;
+    const bool shared = config::SaveLaimiServerFile(server);
+    settings_.laimiServer = shared ? L"" : server;
+    SaveSettings();
+    util::LogInfo(L"Servidor del LAIMI: %ls (%ls)", server.c_str(), shared ? L"servidor-laimi.txt" : L"config.json");
+    ConnectTo(server);
+    ShowTransient(util::Format(Tr(shared ? S::LaimiServerSaved : S::LaimiServerSavedUser), server.c_str()),
+                  shared ? ui::Tone::Neutral : ui::Tone::Warning);
+}
+
 void MainWindow::ConnectTo(const std::wstring& serverIn) {
     const std::wstring server = core::spooler::NormalizeServerName(serverIn);
     const bool changed = server != settings_.activeServer || !snapshot_;
@@ -1445,9 +1460,7 @@ void MainWindow::ShowMainMenu(POINT screen) {
     const bool onLaimi = util::EqualsInsensitive(settings_.activeServer, laimi);
     AppendMenuW(menu, MF_STRING | check(onLaimi), ID_CONNECT_LAIMI,
                 util::Format(Tr(S::MenuConnectLaimi), laimi.c_str()).c_str());
-    if (!settings_.activeServer.empty() && !onLaimi)
-        AppendMenuW(menu, MF_STRING, ID_SET_LAIMI,
-                    util::Format(Tr(S::MenuSetLaimi), settings_.activeServer.c_str()).c_str());
+    AppendMenuW(menu, MF_STRING, ID_SET_LAIMI, Tr(S::MenuSetLaimi));
     menuServers_ = settings_.servers;
     if (std::find(menuServers_.begin(), menuServers_.end(), L"") == menuServers_.end()) menuServers_.push_back(L"");
     for (size_t i = 0; i < menuServers_.size() && i < 99; ++i) {
@@ -1656,9 +1669,8 @@ void MainWindow::HandleMenuCommand(UINT id) {
         case ID_CONNECT: Execute(Command::Connect); break;
         case ID_CONNECT_LAIMI: ConnectTo(config::LaimiServer(settings_)); break;
         case ID_SET_LAIMI:
-            settings_.laimiServer = settings_.activeServer;
-            SaveSettings();
-            ShowTransient(util::Format(Tr(S::LaimiServerChanged), settings_.laimiServer.c_str()), ui::Tone::Neutral);
+            editingLaimi_ = true;
+            header_.BeginServerInput(config::LaimiServer(settings_), Tr(S::LaimiServerPlaceholder));
             break;
         case ID_REFRESH: Execute(Command::Refresh); break;
         case ID_HISTORY: ToggleHistory(); break;
@@ -1832,6 +1844,7 @@ bool MainWindow::PreTranslate(MSG& msg) {
     // Teclas especiales del cuadro de texto.
     if (header_.IsEditFocused()) {
         if (vk == VK_ESCAPE) {
+            editingLaimi_ = false;
             if (header_.InServerMode()) header_.EndServerInput();
             else if (!header_.EditText().empty()) header_.ClearSearch();
             SetFocus(list_.hwnd());
@@ -1841,7 +1854,9 @@ bool MainWindow::PreTranslate(MSG& msg) {
             if (header_.InServerMode()) {
                 std::wstring server = header_.EditText();
                 header_.EndServerInput();
-                ConnectTo(server);
+                if (editingLaimi_) SetLaimiServer(server);
+                else ConnectTo(server);
+                editingLaimi_ = false;
             }
             SetFocus(list_.hwnd());
             return true;

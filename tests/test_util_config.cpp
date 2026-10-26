@@ -3,6 +3,7 @@
 #include "TestFramework.h"
 #include "config/History.h"
 #include "config/Json.h"
+#include "config/Paths.h"
 #include "config/Settings.h"
 #include "util/Format.h"
 #include "util/Strings.h"
@@ -128,6 +129,17 @@ TEST(LaimiServerFromText) {
     CHECK_EQ(config::ServerFromText("\\otro"), std::wstring(L"\\\\otro"));
     CHECK(config::ServerFromText("# solo comentarios\n\n").empty());
     CHECK(config::ServerFromText("\\\\").empty());
+
+    // Lo que guarda la app (menú "Cambiar servidor del LAIMI…") se vuelve a leer
+    // igual; config.json (laimiServer) sigue mandando si tiene un valor.
+    const std::wstring file = config::ExecutableDir() + L"\\" + config::kLaimiServerFile;
+    CHECK(config::SaveLaimiServerFile(L"\\\\servidor-de-prueba"));
+    config::Settings s;
+    CHECK_EQ(config::LaimiServer(s), std::wstring(L"\\\\servidor-de-prueba"));
+    s.laimiServer = L"\\\\propio";
+    CHECK_EQ(config::LaimiServer(s), std::wstring(L"\\\\propio"));
+    DeleteFileW(file.c_str());
+    CHECK_EQ(config::LaimiServer(config::Settings{}), std::wstring(config::kDefaultLaimiServer));
 }
 
 TEST(SettingsDefaultsOnGarbage) {

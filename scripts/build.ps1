@@ -166,12 +166,12 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      "Libreta" (vertical por el borde corto u horizontal por el borde largo)
      o "No aplica" (una cara). Compárelo con lo que sale de la impresora.
      También aparece en el historial y en el Excel (hoja "Por encuadernación").
-   - SERVIDOR DEL LAIMI CONFIGURABLE (0.5.14): el botón del menú "Conectar al
-     servidor del LAIMI" y "Abrir vtec-laimiprint.bat" usan el servidor
-     escrito en "servidor-laimi.txt" (en esta carpeta). Si el servidor cambia,
-     edítelo con el Bloc de notas y vuelva a abrir la app. Para un solo
-     usuario: conéctese al nuevo con Ctrl+O y elija en el menú "Usar ... como
-     servidor del LAIMI".
+   - CAMBIAR EL SERVIDOR DEL LAIMI (0.5.15): menú (F10) > "Cambiar servidor
+     del LAIMI...". Arriba aparece el servidor actual: escriba otro nombre y
+     Enter (Esc cancela). La opción "Conectar al servidor del LAIMI" debe
+     mostrar el nombre nuevo, también al volver a abrir la app y con otro
+     usuario de Windows en esta misma carpeta. "Abrir vtec-laimiprint.bat"
+     también usa ese servidor. Vuelva a poner \\vtec-laimiprint al terminar.
    - PÁGINAS DE DOCUMENTOS GRANDES (0.5.13): envíe desde Edge un PDF de 11
      páginas y más de 16 MB (p. ej. "Crocheting Elliot 2.pdf") a una Epson,
      una vez a una cara y otra a doble cara. La columna Páginas debe decir 11

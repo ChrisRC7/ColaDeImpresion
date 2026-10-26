@@ -5,11 +5,14 @@
 1. Ejecutar `ColaDeImpresion.exe`. Aparece la lista de trabajos de **este equipo**.
 2. Para controlar el servidor del laboratorio: `Ctrl+O` (o menú `⋯` → *Conectar a servidor…*), escribir el nombre, p. ej. `\\SERVIDOR-LAIMI`, y `Enter`. El servidor queda en la lista de **servidores recientes** del menú.
    El menú también tiene *Conectar al servidor del LAIMI* (`\\vtec-laimiprint`). Si el
-   servidor cambia, no hace falta compilar: escriba el nombre nuevo en
-   `servidor-laimi.txt` junto al .exe (vale para todos los usuarios de esa
-   copia, también para `Abrir vtec-laimiprint.bat`), o conéctese al nuevo con
-   `Ctrl+O` y elija en el menú *Usar \\NUEVO como servidor del LAIMI* (solo para
-   su usuario; manda sobre el archivo).
+   servidor cambia, no hace falta compilar: menú `⋯` → *Cambiar servidor del
+   LAIMI…*, escriba el nombre nuevo en el cuadro de arriba y `Enter` (vacío =
+   el predeterminado, `Esc` cancela). La opción pasa a mostrar el servidor nuevo
+   y la app se conecta a él. Se guarda en `servidor-laimi.txt` junto al .exe,
+   así vale para todos los usuarios de esa copia y para
+   `Abrir vtec-laimiprint.bat`; si la app no puede escribir ahí (por ejemplo,
+   instalada en *Archivos de programa*), queda solo para su usuario y la barra
+   inferior lo avisa.
 3. El botón de la izquierda (o `Ctrl+E`) elige la impresora; **Todas las impresoras** muestra la cola completa del servidor con el nombre de la impresora en cada trabajo.
 4. Bajo la cabecera está la **barra de acceso rápido**: los botones de las impresoras que se hayan fijado, con la cantidad de trabajos de cada una (ver §3.1).
 5. A la derecha de la búsqueda hay dos botones: **Pausar / Reanudar trabajos** (los seleccionados, igual que `Ctrl+P`) y **Pausar / Reanudar impresora** (igual que `F9`; en la vista "Todas" actúa sobre todas). Su texto dice lo que harán: si todo lo elegido está en pausa dicen *Reanudar* (con ▶ resaltado). Sin trabajos seleccionados el primero queda gris. En ventanas angostas muestran solo íconos (documento o impresora + ⏸/▶); al pasar el mouse se ve la descripción con el atajo.

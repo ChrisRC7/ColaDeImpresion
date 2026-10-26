@@ -46,8 +46,9 @@ public:
     std::wstring EditText() const;
     void ClearSearch();
 
-    // Modo servidor: el cuadro pide el nombre del servidor.
-    void BeginServerInput(const std::wstring& current);
+    // Modo servidor: el cuadro pide el nombre del servidor. placeholder = texto
+    // de ayuda propio (por defecto, el de "Conectar a servidor").
+    void BeginServerInput(const std::wstring& current, const std::wstring& placeholder = L"");
     void EndServerInput();
     bool InServerMode() const { return serverMode_; }
 
@@ -85,6 +86,7 @@ private:
     std::wstring exportTooltip_;
     bool pauseLabels_ = true;  // con poco espacio los botones de pausa muestran solo el ícono
     bool serverMode_ = false;
+    std::wstring serverPlaceholder_;
     std::wstring savedSearch_;
     int hover_ = -1;
     int pressed_ = -1;

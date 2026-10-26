@@ -65,6 +65,9 @@ private:
 
     // --- Servidor / impresoras ---
     void ConnectTo(const std::wstring& server);
+    // Guarda el servidor del botón del LAIMI (servidor-laimi.txt o, si no se
+    // puede escribir, config.json) y se conecta a él.
+    void SetLaimiServer(const std::wstring& text);
     std::wstring ServerDisplayName() const;
     void SelectPrinter(const std::wstring& printer);
     void CyclePrinter(int delta);
@@ -184,6 +187,7 @@ private:
     bool quickLook_ = false;
     bool reallyQuit_ = false;
     bool connecting_ = true;
+    bool editingLaimi_ = false;  // el cuadro de servidor cambia el del LAIMI (no conecta a otro)
     bool startPausePending_ = false;  // pausar impresoras al recibir la primera instantánea
     bool startPauseInFlight_ = false; // su resultado se informa sin diálogos
     std::wstring currentPreviewKey_;

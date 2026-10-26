@@ -415,8 +415,13 @@ X(MenuConnect, L"Conectar a servidor…\tCtrl+O", L"Connect to server…\tCtrl+O
 X(MenuServers, L"Servidores recientes", L"Recent servers")
 X(MenuRefresh, L"Actualizar", L"Refresh")
 X(MenuConnectLaimi, L"Conectar al servidor del LAIMI (%ls)", L"Connect to the LAIMI server (%ls)")
-X(MenuSetLaimi, L"    Usar %ls como servidor del LAIMI", L"    Use %ls as the LAIMI server")
-X(LaimiServerChanged, L"Servidor del LAIMI: %ls", L"LAIMI server: %ls")
+X(MenuSetLaimi, L"    Cambiar servidor del LAIMI…", L"    Change LAIMI server…")
+X(LaimiServerPlaceholder, L"Servidor del LAIMI, p. ej. \\\\vtec-laimiprint, y Enter (vacío = el predeterminado; Esc cancela)",
+  L"LAIMI server, e.g. \\\\vtec-laimiprint, and Enter (empty = default; Esc cancels)")
+X(LaimiServerSaved, L"Servidor del LAIMI: %ls (para todos los que usan esta copia)",
+  L"LAIMI server: %ls (for everyone using this copy)")
+X(LaimiServerSavedUser, L"Servidor del LAIMI: %ls, solo para su usuario (no se pudo escribir junto al programa)",
+  L"LAIMI server: %ls, only for your user (could not write next to the program)")
 X(MenuHistory, L"Ver historial", L"Show history")
 X(MenuQueue, L"Ver cola", L"Show queue")
 X(MenuPausePrinter, L"Pausar / reanudar impresora", L"Pause / resume printer")

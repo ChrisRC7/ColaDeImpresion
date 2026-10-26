@@ -75,8 +75,10 @@ void HeaderBar::UpdateTooltips() {
 }
 
 void HeaderBar::UpdateCueBanner() {
-    SendMessageW(edit_, EM_SETCUEBANNER, TRUE,
-                 reinterpret_cast<LPARAM>(Tr(serverMode_ ? S::ServerPlaceholder : S::SearchPlaceholder)));
+    const wchar_t* text = !serverMode_                  ? Tr(S::SearchPlaceholder)
+                          : serverPlaceholder_.empty() ? Tr(S::ServerPlaceholder)
+                                                       : serverPlaceholder_.c_str();
+    SendMessageW(edit_, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(text));
 }
 
 void HeaderBar::SetPrinterLabel(const std::wstring& title, const std::wstring& subtitle, bool warning) {
@@ -160,9 +162,10 @@ void HeaderBar::ClearSearch() {
     SetWindowTextW(edit_, L"");
 }
 
-void HeaderBar::BeginServerInput(const std::wstring& current) {
+void HeaderBar::BeginServerInput(const std::wstring& current, const std::wstring& placeholder) {
     if (!serverMode_) savedSearch_ = EditText();
     serverMode_ = true;
+    serverPlaceholder_ = placeholder;
     suppressChange_ = true;
     SetWindowTextW(edit_, current.c_str());
     suppressChange_ = false;

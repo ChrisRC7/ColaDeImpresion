@@ -101,6 +101,9 @@ struct Settings {
 inline constexpr wchar_t kDefaultLaimiServer[] = L"\\\\vtec-laimiprint";
 inline constexpr wchar_t kLaimiServerFile[] = L"servidor-laimi.txt";
 std::wstring LaimiServer(const Settings& settings);
+// Escribe servidor-laimi.txt junto al .exe (comentario + servidor). false si
+// no se pudo (p. ej. instalada en Program Files sin permiso de escritura).
+bool SaveLaimiServerFile(const std::wstring& server);
 // Servidor escrito en un texto: primera línea que no esté vacía ni empiece con
 // '#', siempre con dos barras invertidas delante. "" si no hay ninguna.
 std::wstring ServerFromText(const std::string& utf8);
