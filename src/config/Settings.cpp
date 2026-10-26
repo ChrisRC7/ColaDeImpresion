@@ -4,7 +4,9 @@
 
 #include <algorithm>
 
+#include "config/Paths.h"
 #include "util/Log.h"
+#include "util/Strings.h"
 
 namespace cola::config {
 
@@ -45,6 +47,7 @@ JsonValue Settings::ToJson() const {
     for (const auto& s : servers) serverList.Push(s);
     json[L"servers"] = serverList;
     json[L"activeServer"] = activeServer;
+    json[L"laimiServer"] = laimiServer;
     json[L"activePrinter"] = activePrinter;
     JsonValue favorites = JsonValue::MakeArray();
     for (const auto& p : favoritePrinters) favorites.Push(p);
@@ -106,6 +109,7 @@ Settings Settings::FromJson(const JsonValue& json) {
     for (const auto& v : json[L"servers"].AsArray())
         if (v.IsString()) s.servers.push_back(v.AsString());
     s.activeServer = json[L"activeServer"].AsString();
+    s.laimiServer = ServerFromText(util::ToUtf8(json[L"laimiServer"].AsString()));
     s.activePrinter = json[L"activePrinter"].AsString(s.activePrinter);
     for (const auto& v : json[L"favoritePrinters"].AsArray())
         if (v.IsString() && !v.AsString().empty()) s.favoritePrinters.push_back(v.AsString());
@@ -165,6 +169,39 @@ bool Settings::Save(const std::wstring& path) const {
     bool ok = SaveJsonFile(path, ToJson());
     if (!ok) util::LogError(L"No se pudo guardar la configuración en %ls", path.c_str());
     return ok;
+}
+
+std::wstring ServerFromText(const std::string& utf8) {
+    std::wstring text = util::FromUtf8(utf8.rfind("\xEF\xBB\xBF", 0) == 0 ? utf8.substr(3) : utf8);
+    size_t pos = 0;
+    while (pos <= text.size()) {
+        size_t end = text.find(L'\n', pos);
+        if (end == std::wstring::npos) end = text.size();
+        std::wstring line = util::Trim(std::wstring_view(text).substr(pos, end - pos));
+        pos = end + 1;
+        if (line.empty() || line[0] == L'#') continue;
+        const size_t name = line.find_first_not_of(L'\\');
+        if (name == std::wstring::npos) continue;
+        return L"\\\\" + line.substr(name);
+    }
+    return L"";
+}
+
+std::wstring LaimiServer(const Settings& settings) {
+    if (!settings.laimiServer.empty()) return settings.laimiServer;
+    const std::wstring path = ExecutableDir() + L"\\" + kLaimiServerFile;
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file != INVALID_HANDLE_VALUE) {
+        std::string text(4096, '\0');
+        DWORD read = 0;
+        const BOOL ok = ReadFile(file, text.data(), static_cast<DWORD>(text.size()), &read, nullptr);
+        CloseHandle(file);
+        text.resize(ok ? read : 0);
+        std::wstring server = ServerFromText(text);
+        if (!server.empty()) return server;
+    }
+    return kDefaultLaimiServer;
 }
 
 }  // namespace cola::config

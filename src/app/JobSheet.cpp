@@ -255,6 +255,7 @@ std::wstring BinName(short bin, const std::wstring& driver, const core::PrinterI
 ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFacts* factsIn,
                                  const core::PrinterInfo* printer) {
     ListSettings out;
+    short orientation = 0;  // para la encuadernación: 0 = no se conoce
     const core::ContentFacts* facts = factsIn && factsIn->analyzed ? factsIn : nullptr;
     const core::PrintSettings& dm = core::EffectiveDevMode(job, facts);
     const core::PageAccounting acc = core::ComputePageAccounting(job, facts);
@@ -285,6 +286,7 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
         const bool agree = inDm && inContent && dm.orientation.value == facts->orientation.value;
         auto a = core::AssessSetting(acc.kind, inDm, inContent, documented, agree, dataRead);
         short value = inContent && (documented || !inDm) ? facts->orientation.value : dm.orientation.value;
+        if ((inDm || inContent) && a.reliability != Reliability::Unknown) orientation = value;
         out.orientation = Marked(a.reliability, inDm || inContent ? std::wstring(value == DMORIENT_LANDSCAPE
                                                                                      ? Tr(S::ValueLandscapeShort)
                                                                                      : Tr(S::ValuePortraitShort))
@@ -299,7 +301,13 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
         // predeterminado de la cola (D29), no lo que eligió el usuario: "—".
         const bool queueDefault = acc.kind == core::DataKind::Pdl && !(facts && facts->duplex.valid) &&
                                   IsVerifiedEpsonDriver(job.driver);
-        out.duplex = Marked(queueDefault ? Reliability::Unknown : acc.duplex.reliability, text);
+        const Reliability reliability = queueDefault ? Reliability::Unknown : acc.duplex.reliability;
+        out.duplex = Marked(reliability, text);
+        const short duplex = reliability == Reliability::Unknown ? 0
+                             : acc.duplex.value == DMDUP_VERTICAL || acc.duplex.value == DMDUP_HORIZONTAL
+                                 ? static_cast<short>(acc.duplex.value)
+                                 : static_cast<short>(DMDUP_SIMPLEX);
+        out.binding = BindingText(orientation, duplex);
     }
     // Origen del papel: en los datos (ESC/Page "iuE") o en el DEVMODE (en RAW
     // este puede ser el predeterminado de la cola). Con el nombre del controlador.
@@ -312,6 +320,16 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
         out.source = Marked(a.reliability, inDm || inContent ? BinName(bin, JobDriver(job, facts), printer) : L"");
     }
     return out;
+}
+
+std::wstring BindingText(short orientation, short duplex) {
+    if (duplex == DMDUP_SIMPLEX) return Tr(S::ValueBindingNone);
+    if ((duplex != DMDUP_VERTICAL && duplex != DMDUP_HORIZONTAL) ||
+        (orientation != DMORIENT_PORTRAIT && orientation != DMORIENT_LANDSCAPE))
+        return L"—";
+    const bool longEdge = duplex == DMDUP_VERTICAL;
+    const bool portrait = orientation == DMORIENT_PORTRAIT;
+    return Tr(longEdge == portrait ? S::ValueBindingBook : S::ValueBindingNotepad);
 }
 
 std::wstring PaperText(const core::PrintSettings& s, const core::PrinterInfo* printer) {

@@ -35,6 +35,7 @@ struct StartupOptions {
     bool startInTray = false;
     std::wstring server;  // --server
     bool hasServer = false;
+    bool laimi = false;  // --laimi: el servidor del LAIMI configurado
 };
 
 class MainWindow : public ui::Window {

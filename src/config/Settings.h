@@ -35,6 +35,9 @@ struct Settings {
     // Servidores de impresión conocidos ("" = equipo local, "\\\\SERVIDOR" = remoto).
     std::vector<std::wstring> servers;
     std::wstring activeServer;
+    // Servidor del menú "Conectar al servidor del LAIMI" elegido por el
+    // operador; vacío = el de servidor-laimi.txt o el predeterminado (LaimiServer).
+    std::wstring laimiServer;
     // Impresora seleccionada; "*" = vista de todas las impresoras del servidor.
     std::wstring activePrinter = L"*";
     // Impresoras fijadas en la barra de acceso rápido (nombre completo, en orden).
@@ -88,6 +91,19 @@ struct Settings {
     static Settings Load(const std::wstring& path);
     bool Save(const std::wstring& path) const;
 };
+
+// Servidor del menú "Conectar al servidor del LAIMI" (D54), en este orden:
+//   1. laimiServer de config.json (el operador lo cambió desde el menú);
+//   2. la primera línea útil de servidor-laimi.txt junto al .exe: vale para
+//      todos los usuarios de la copia portable y se cambia con el Bloc de notas,
+//      sin compilar;
+//   3. kDefaultLaimiServer.
+inline constexpr wchar_t kDefaultLaimiServer[] = L"\\\\vtec-laimiprint";
+inline constexpr wchar_t kLaimiServerFile[] = L"servidor-laimi.txt";
+std::wstring LaimiServer(const Settings& settings);
+// Servidor escrito en un texto: primera línea que no esté vacía ni empiece con
+// '#', siempre con dos barras invertidas delante. "" si no hay ninguna.
+std::wstring ServerFromText(const std::string& utf8);
 
 const wchar_t* ThemeModeToString(ThemeMode mode);
 ThemeMode ThemeModeFromString(const std::wstring& text);

@@ -70,6 +70,7 @@ HistorySummary SummarizeHistory(const std::vector<config::HistoryEntry>& entries
         Add(s.byPaper[CategoryKey(columns.Cell(row, L"history.paper"))], pages);
         Add(s.byPrinter[CategoryKey(columns.Cell(row, L"history.printer"))], pages);
         Add(s.byDuplex[CategoryKey(columns.Cell(row, L"history.duplex"))], pages);
+        Add(s.byBinding[CategoryKey(columns.Cell(row, L"history.binding"))], pages);
         Add(s.byOrientation[CategoryKey(columns.Cell(row, L"history.orientation"))], pages);
         Add(s.bySource[CategoryKey(columns.Cell(row, L"history.source"))], pages);
         Add(s.byUser[e.user], pages);
@@ -347,6 +348,7 @@ std::vector<Sheet> SummarySheets(const std::vector<config::HistoryEntry>& entrie
     table(S::XlsSheetPaper, S::XlsByPaper, S::ColPaper, ByPages(s.byPaper));
     table(S::XlsSheetPrinter, S::XlsByPrinter, S::ColPrinter, ByPages(s.byPrinter));
     table(S::XlsSheetDuplex, S::XlsByDuplex, S::ColDuplex, ByPages(s.byDuplex));
+    table(S::XlsSheetBinding, S::XlsByBinding, S::ColBinding, ByPages(s.byBinding));
     table(S::XlsSheetOrientation, S::XlsByOrientation, S::ColOrientation, ByPages(s.byOrientation));
     table(S::XlsSheetSource, S::XlsBySource, S::ColSource, ByPages(s.bySource));
     table(S::XlsSheetUser, S::XlsByUser, S::ColUser, ByPages(s.byUser));

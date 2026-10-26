@@ -148,6 +148,7 @@ const wchar_t* SortById(SortBy sort) {
         case SortBy::Paper: return L"paper";
         case SortBy::Orientation: return L"orientation";
         case SortBy::Duplex: return L"duplex";
+        case SortBy::Binding: return L"binding";
         case SortBy::Source: return L"source";
         default: return L"queue";
     }
@@ -174,6 +175,7 @@ std::wstring SortName(SortBy sort) {
         case SortBy::Paper: return Tr(S::SortPaper);
         case SortBy::Orientation: return Tr(S::SortOrientation);
         case SortBy::Duplex: return Tr(S::SortDuplex);
+        case SortBy::Binding: return Tr(S::SortBinding);
         case SortBy::Source: return Tr(S::SortSource);
         default: return Tr(S::SortQueue);
     }
@@ -201,6 +203,7 @@ int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const
         case SortBy::Paper:
         case SortBy::Orientation:
         case SortBy::Duplex:
+        case SortBy::Binding:
         case SortBy::Source: {
             // Por el valor mostrado.
             auto value = [&](const core::JobInfo& job) {
@@ -208,6 +211,7 @@ int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const
                 std::wstring v = sort == SortBy::Paper ? s.paper
                                  : sort == SortBy::Orientation ? s.orientation
                                  : sort == SortBy::Duplex ? s.duplex
+                                 : sort == SortBy::Binding ? s.binding
                                                           : s.source;
                 return v;
             };
@@ -287,6 +291,7 @@ std::vector<ui::ListColumn> JobColumns(bool showPrinter) {
     columns.push_back({Tr(S::ColPaper), 84, Align::Center, false, false, id(SortBy::Paper), L"paper"});
     columns.push_back({Tr(S::ColOrientation), 96, Align::Center, false, false, id(SortBy::Orientation), L"orientation"});
     columns.push_back({Tr(S::ColDuplex), 96, Align::Center, false, false, id(SortBy::Duplex), L"duplex"});
+    columns.push_back({Tr(S::ColBinding), 110, Align::Center, false, false, id(SortBy::Binding), L"binding"});
     columns.push_back({Tr(S::ColSource), 130, Align::Center, false, false, id(SortBy::Source), L"source"});
     columns.push_back({Tr(S::ColSize), 72, Align::Center, false, false, id(SortBy::Size), L"size"});
     columns.push_back({Tr(S::ColSubmitted), 124, Align::Center, false, false, id(SortBy::Time), L"submitted"});
@@ -308,6 +313,7 @@ std::vector<ui::ListColumn> HistoryColumns() {
     columns.push_back({Tr(S::ColPaper), 84, Align::Center, false, false, -1, L"history.paper"});
     columns.push_back({Tr(S::ColOrientation), 96, Align::Center, false, false, -1, L"history.orientation"});
     columns.push_back({Tr(S::ColDuplex), 96, Align::Center, false, false, -1, L"history.duplex"});
+    columns.push_back({Tr(S::ColBinding), 110, Align::Center, false, false, -1, L"history.binding"});
     columns.push_back({Tr(S::ColSource), 130, Align::Center, false, false, -1, L"history.source"});
     columns.push_back({Tr(S::ColSize), 72, Align::Center, false, false, -1, L"history.size"});
     columns.push_back({Tr(S::ColSubmitted), 124, Align::Center, false, false, -1, L"history.submitted"});
@@ -352,6 +358,7 @@ ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::C
     row.cells.push_back(settings.paper);
     row.cells.push_back(settings.orientation);
     row.cells.push_back(settings.duplex);
+    row.cells.push_back(settings.binding);
     row.cells.push_back(settings.source);
     row.cells.push_back(util::FormatBytes(job.sizeBytes));
     row.cells.push_back(util::FormatDateTime(job.submitted));  // fecha y hora completas
@@ -382,6 +389,7 @@ config::HistoryEntry MakeHistoryEntry(const core::JobInfo& job, config::JobOutco
     entry.paper = settings.paper;
     entry.orientation = settings.orientation;
     entry.duplex = settings.duplex;
+    entry.binding = settings.binding;
     entry.source = settings.source;
     if (job.submitted.wYear) entry.submittedUnix = util::ToUnixSeconds(job.submitted);
     return entry;
@@ -402,6 +410,7 @@ ui::ListRow MakeHistoryRow(const config::HistoryEntry& e, size_t index) {
     row.cells.push_back(orDash(e.paper));
     row.cells.push_back(orDash(e.orientation));
     row.cells.push_back(orDash(e.duplex));
+    row.cells.push_back(orDash(e.binding));
     row.cells.push_back(orDash(e.source));
     row.cells.push_back(util::FormatBytes(e.sizeBytes));
     row.cells.push_back(e.submittedUnix ? util::FormatDateTime(util::FromUnixSeconds(e.submittedUnix)) : L"—");

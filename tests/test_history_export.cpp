@@ -269,7 +269,7 @@ TEST(HistorySummaryAndWorkbook) {
     auto sheets = app::BuildHistoryWorkbook(entries, now, order);
     // Historial, Resumen y una hoja por tabla (resultado, papel, impresora, doble
     // cara, orientación, origen, usuario, equipo, día y hora).
-    CHECK_EQ(sheets.size(), size_t(12));
+    CHECK_EQ(sheets.size(), size_t(13));
     CHECK_EQ(sheets[0].rows.size(), entries.size() + 1);
     CHECK_EQ(sheets[0].rows[0][0].text, std::wstring(L"Documento"));
     CHECK_EQ(sheets[0].rows[0].back().text, std::wstring(L"Servidor"));

@@ -154,6 +154,9 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] Verificar en la app la cabecera del historial con la ventana al mínimo (100 % y 150 % de escala)
 - [x] Menú: "Conectar al servidor del LAIMI (\\vtec-laimiprint)", marcado mientras está conectado (0.5.11)
 - [x] Total de páginas de la selección en la barra inferior ("Selección: 3 trabajo(s) · 11 páginas a imprimir", suma de la columna Páginas, con los "—" aparte); también en el historial (0.5.1)
+- [x] Columna **Encuadernación** (Libro / Libreta / No aplica, por orientación y borde de giro), a la derecha de Doble cara en la cola, el historial y el Excel ("Por encuadernación") (0.5.14, D55)
+- [x] Botón *Conectar al servidor del LAIMI* configurable sin compilar: `servidor-laimi.txt` junto al .exe (para todos) u opción del menú *Usar \\X como servidor del LAIMI* (por usuario); `Abrir vtec-laimiprint.bat` usa `--laimi` (0.5.14, D54)
+- [ ] Probar en la app el menú *Usar \\X como servidor del LAIMI* y un `servidor-laimi.txt` con otro nombre
 - [ ] Verificar en la app el arrastre de columnas (cola, vista "Todas" con Impresora, historial y con barra horizontal); no se abrió la app en la PC personal porque al iniciar pausa las impresoras
 - [x] Botones junto a la búsqueda para pausar / reanudar los trabajos seleccionados y la impresora (texto según lo que harán; solo íconos en ventanas angostas)
 - [x] Ventana "Acerca de" con los autores principales (botón "!" en un círculo a la derecha del de claro/oscuro y menú *Acerca de…*) (0.5.7); sin correos y con descripción corta (0.5.8)
@@ -201,7 +204,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 92 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 94 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

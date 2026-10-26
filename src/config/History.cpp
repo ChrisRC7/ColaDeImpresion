@@ -82,6 +82,7 @@ bool History::Load() {
         e.paper = item[L"paper"].AsString();
         e.orientation = item[L"orientation"].AsString();
         e.duplex = item[L"duplex"].AsString();
+        e.binding = item[L"binding"].AsString();
         e.source = item[L"source"].AsString();
         e.submittedUnix = item[L"submitted"].AsInt64();
         entries_.push_back(std::move(e));
@@ -112,6 +113,7 @@ bool History::Save() {
         item[L"paper"] = e.paper;
         item[L"orientation"] = e.orientation;
         item[L"duplex"] = e.duplex;
+        item[L"binding"] = e.binding;
         item[L"source"] = e.source;
         item[L"submitted"] = static_cast<long long>(e.submittedUnix);
         list.Push(std::move(item));

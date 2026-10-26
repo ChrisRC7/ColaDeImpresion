@@ -22,7 +22,7 @@ inline constexpr wchar_t kAllPrinters[] = L"*";
 // (impresora + posición); los demás son vistas para buscar trabajos.
 // Pages = páginas que se van a imprimir en total (páginas x copias).
 enum class SortBy { Queue, Machine, Time, User, Document, Status, Size, Pages, Printer, Paper, Orientation, Duplex,
-                    Source, Count_ };
+                    Binding, Source, Count_ };
 
 inline constexpr int kSortCount = static_cast<int>(SortBy::Count_);
 

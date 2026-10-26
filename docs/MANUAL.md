@@ -4,6 +4,12 @@
 
 1. Ejecutar `ColaDeImpresion.exe`. Aparece la lista de trabajos de **este equipo**.
 2. Para controlar el servidor del laboratorio: `Ctrl+O` (o menú `⋯` → *Conectar a servidor…*), escribir el nombre, p. ej. `\\SERVIDOR-LAIMI`, y `Enter`. El servidor queda en la lista de **servidores recientes** del menú.
+   El menú también tiene *Conectar al servidor del LAIMI* (`\\vtec-laimiprint`). Si el
+   servidor cambia, no hace falta compilar: escriba el nombre nuevo en
+   `servidor-laimi.txt` junto al .exe (vale para todos los usuarios de esa
+   copia, también para `Abrir vtec-laimiprint.bat`), o conéctese al nuevo con
+   `Ctrl+O` y elija en el menú *Usar \\NUEVO como servidor del LAIMI* (solo para
+   su usuario; manda sobre el archivo).
 3. El botón de la izquierda (o `Ctrl+E`) elige la impresora; **Todas las impresoras** muestra la cola completa del servidor con el nombre de la impresora en cada trabajo.
 4. Bajo la cabecera está la **barra de acceso rápido**: los botones de las impresoras que se hayan fijado, con la cantidad de trabajos de cada una (ver §3.1).
 5. A la derecha de la búsqueda hay dos botones: **Pausar / Reanudar trabajos** (los seleccionados, igual que `Ctrl+P`) y **Pausar / Reanudar impresora** (igual que `F9`; en la vista "Todas" actúa sobre todas). Su texto dice lo que harán: si todo lo elegido está en pausa dicen *Reanudar* (con ▶ resaltado). Sin trabajos seleccionados el primero queda gris. En ventanas angostas muestran solo íconos (documento o impresora + ⏸/▶); al pasar el mouse se ve la descripción con el atajo.
@@ -22,7 +28,7 @@ es **en vivo** o por **sondeo**.
 La cola es una **tabla** como la de Windows. Columnas: `#` (posición en la
 cola), **Documento**, **Estado**, **Usuario**, **Equipo** (la PC desde la que
 se envió), **Impresora** (en la vista "Todas"), **Páginas**, **Papel**,
-**Orientación**, **Doble cara**, **Origen del papel**, **Tamaño** y **Enviado**
+**Orientación**, **Doble cara**, **Encuadernación**, **Origen del papel**, **Tamaño** y **Enviado**
 (fecha y hora de envío). Desde Estado en adelante los valores van centrados
 bajo su título.
 
@@ -41,6 +47,12 @@ bajo su título.
   (Carta, A3, 12 × 18) y el origen con el nombre de la bandeja: en las Epson
   del LAIMI, *Auto selección*, *Alimentador de papel*, *Bandeja 1* o
   *Bandeja 2* (nunca un número de código).
+- **Encuadernación** dice cómo se pasan las hojas impresas a doble cara:
+  **Libro** (se hojean de lado: vertical por el borde largo u horizontal por
+  el borde corto) o **Libreta** (se hojean hacia arriba: vertical por el borde
+  corto u horizontal por el borde largo). A una cara dice *No aplica*; si no se
+  sabe la doble cara o la orientación, `—`. Por defecto está a la derecha de
+  Doble cara.
 - **Ancho de las columnas**, como en la cola de Windows: arrastrar el borde
   derecho del título de una columna (el cursor cambia a ↔). **Doble clic** en
   el borde ajusta la columna a su contenido. Si las columnas no caben aparece
@@ -254,7 +266,7 @@ En la barra de estado se ve "Filtro: … (n de m)".
 `Ctrl+H` (o el botón del reloj) muestra los trabajos que salieron de la cola con
 su resultado: **Impreso**, **Cancelado**, **Falló** o **Retirado** (se fue sin
 que se viera imprimir). Cada trabajo conserva las mismas columnas que tenía en la
-cola (`#`, páginas × copias, papel, orientación, doble cara, origen del papel,
+cola (`#`, páginas × copias, papel, orientación, doble cara, encuadernación, origen del papel,
 tamaño, enviado) y además la hora en que terminó (*Finalizado*). Los registros
 guardados con versiones anteriores a la 0.5.0 muestran "—" en las columnas que
 no tenían. Las páginas son las mismas que se veían en la cola **también cuando el
@@ -290,7 +302,7 @@ indica el período exportado. El libro tiene estas hojas:
   páginas, trabajo más grande, tamaño total).
 - **Una hoja por tabla**, para no tener que bajar entre una y otra: *Por
   resultado* (trabajos impresos, cancelados, con error y retirados) y **páginas
-  impresas** *Por papel*, *Por impresora*, *Por doble cara*, *Por orientación*,
+  impresas** *Por papel*, *Por impresora*, *Por doble cara*, *Por encuadernación*, *Por orientación*,
   *Por origen del papel*, *Por usuario*, *Por equipo*, *Por día* y *Por hora*,
   con trabajos, páginas, porcentaje y total. El título y los encabezados quedan
   fijos al desplazarse. Las tablas por categoría cuentan solo los trabajos

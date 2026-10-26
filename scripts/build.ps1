@@ -100,10 +100,18 @@ C:\Program Files\gs\.
     # siempre va en %LOCALAPPDATA% de cada usuario).
     Set-Content -Path (Join-Path $dist "portable.txt") -Encoding utf8 -Value `
         "Si este archivo existe, el historial y app.log se guardan en esta carpeta. La configuración (config.json) es de cada usuario: está en %LOCALAPPDATA%\ColaDeImpresion."
-    # Lanzador que conecta directo al servidor del laboratorio.
+    # Servidor del botón "Conectar al servidor del LAIMI" para todos los usuarios
+    # de esta copia (D54): se cambia con el Bloc de notas, sin compilar.
+    Set-Content -Path (Join-Path $dist "servidor-laimi.txt") -Encoding utf8 -Value @"
+# Servidor de impresión del LAIMI que usan el menú "Conectar al servidor del
+# LAIMI" y "Abrir vtec-laimiprint.bat". Si cambia, escriba aquí el nombre nuevo
+# (la primera línea que no empiece con #) y vuelva a abrir la app.
+\\vtec-laimiprint
+"@
+    # Lanzador que conecta directo al servidor del laboratorio (el de servidor-laimi.txt).
     Set-Content -Path (Join-Path $dist "Abrir vtec-laimiprint.bat") -Encoding ascii -Value @"
 @echo off
-start "" "%~dp0ColaDeImpresion.exe" --server vtec-laimiprint
+start "" "%~dp0ColaDeImpresion.exe" --laimi
 "@
     # Windows marca los archivos que vienen de un USB o de Internet (Mark of the
     # Web) y eso dispara SmartScreen; este .bat quita la marca de toda la carpeta.
@@ -153,6 +161,17 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - COLUMNA ENCUADERNACIÓN (0.5.14): a la derecha de "Doble cara" dice
+     "Libro" (vertical por el borde largo u horizontal por el borde corto),
+     "Libreta" (vertical por el borde corto u horizontal por el borde largo)
+     o "No aplica" (una cara). Compárelo con lo que sale de la impresora.
+     También aparece en el historial y en el Excel (hoja "Por encuadernación").
+   - SERVIDOR DEL LAIMI CONFIGURABLE (0.5.14): el botón del menú "Conectar al
+     servidor del LAIMI" y "Abrir vtec-laimiprint.bat" usan el servidor
+     escrito en "servidor-laimi.txt" (en esta carpeta). Si el servidor cambia,
+     edítelo con el Bloc de notas y vuelva a abrir la app. Para un solo
+     usuario: conéctese al nuevo con Ctrl+O y elija en el menú "Usar ... como
+     servidor del LAIMI".
    - PÁGINAS DE DOCUMENTOS GRANDES (0.5.13): envíe desde Edge un PDF de 11
      páginas y más de 16 MB (p. ej. "Crocheting Elliot 2.pdf") a una Epson,
      una vez a una cara y otra a doble cara. La columna Páginas debe decir 11

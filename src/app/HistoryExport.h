@@ -33,7 +33,7 @@ struct HistorySummary {
     std::uint64_t printedUnknownPages = 0;  // impresos con páginas "—"
     std::uint64_t printedBytes = 0;
     // Claves con el texto que mostraba la tabla ("" = sin dato).
-    std::map<std::wstring, Tally> byPaper, byPrinter, byDuplex, byOrientation, bySource, byUser, byMachine;
+    std::map<std::wstring, Tally> byPaper, byPrinter, byDuplex, byBinding, byOrientation, bySource, byUser, byMachine;
     std::map<std::wstring, Tally> byDay;  // "2026-10-09" (hora local)
     Tally byHour[24];                     // hora local de finalización
     // Trabajo impreso con más páginas.

@@ -43,9 +43,6 @@ constexpr UINT WM_APP_FACTS = WM_APP + 4;  // hay datos nuevos de trabajos (pág
 constexpr UINT_PTR kTimerSaveHistory = 1;
 constexpr UINT_PTR kTimerTransient = 2;
 
-// Servidor de impresión del LAIMI: el menú lo ofrece directamente.
-constexpr wchar_t kLaimiServer[] = L"\\\\vtec-laimiprint";
-
 // Identificadores de menú.
 enum MenuId : UINT {
     ID_PRINTER_ALL = 1000,
@@ -88,6 +85,7 @@ enum MenuId : UINT {
     ID_CHIP_PURGE,
     ID_ABOUT,
     ID_CONNECT_LAIMI,
+    ID_SET_LAIMI,
     ID_CTX_PAUSE = 2101,
     ID_CTX_PAUSE_BOTH,
     ID_CTX_PRINT_REPAUSE,
@@ -153,7 +151,8 @@ bool MainWindow::Create(const StartupOptions& options) {
     // El panel de detalles (vista previa y configuración) arranca siempre oculto:
     // la tabla usa todo el ancho y se abre con el botón de la cabecera, Ctrl+B o F7.
     settings_.showPreviewPane = false;
-    if (options.hasServer) settings_.activeServer = options.server;
+    if (options.laimi) settings_.activeServer = config::LaimiServer(settings_);
+    else if (options.hasServer) settings_.activeServer = options.server;
     settings_.startWithWindows = config::IsAutostartEnabled();
     i18n::SetLanguage(i18n::LanguageFromCode(settings_.language.c_str()));
     shortcuts_.ApplyOverrides(settings_.shortcuts);
@@ -1440,8 +1439,15 @@ void MainWindow::ShowMainMenu(POINT screen) {
     };
 
     AppendMenuW(menu, MF_STRING, ID_CONNECT, keyed(S::CmdConnect, Command::Connect).c_str());
-    AppendMenuW(menu, MF_STRING | check(util::EqualsInsensitive(settings_.activeServer, kLaimiServer)), ID_CONNECT_LAIMI,
-                util::Format(Tr(S::MenuConnectLaimi), kLaimiServer).c_str());
+    // El servidor de este botón se cambia sin compilar (D54): desde aquí (para
+    // este usuario) o en servidor-laimi.txt junto al .exe (para todos).
+    const std::wstring laimi = config::LaimiServer(settings_);
+    const bool onLaimi = util::EqualsInsensitive(settings_.activeServer, laimi);
+    AppendMenuW(menu, MF_STRING | check(onLaimi), ID_CONNECT_LAIMI,
+                util::Format(Tr(S::MenuConnectLaimi), laimi.c_str()).c_str());
+    if (!settings_.activeServer.empty() && !onLaimi)
+        AppendMenuW(menu, MF_STRING, ID_SET_LAIMI,
+                    util::Format(Tr(S::MenuSetLaimi), settings_.activeServer.c_str()).c_str());
     menuServers_ = settings_.servers;
     if (std::find(menuServers_.begin(), menuServers_.end(), L"") == menuServers_.end()) menuServers_.push_back(L"");
     for (size_t i = 0; i < menuServers_.size() && i < 99; ++i) {
@@ -1648,7 +1654,12 @@ void MainWindow::HandleMenuCommand(UINT id) {
             }
             break;
         case ID_CONNECT: Execute(Command::Connect); break;
-        case ID_CONNECT_LAIMI: ConnectTo(kLaimiServer); break;
+        case ID_CONNECT_LAIMI: ConnectTo(config::LaimiServer(settings_)); break;
+        case ID_SET_LAIMI:
+            settings_.laimiServer = settings_.activeServer;
+            SaveSettings();
+            ShowTransient(util::Format(Tr(S::LaimiServerChanged), settings_.laimiServer.c_str()), ui::Tone::Neutral);
+            break;
         case ID_REFRESH: Execute(Command::Refresh); break;
         case ID_HISTORY: ToggleHistory(); break;
         case ID_PAUSE_BOTH: Execute(Command::TogglePauseBoth); break;

@@ -6,6 +6,7 @@
 // Argumentos:
 //   --tray               inicia oculta en la bandeja (lo usa el inicio con Windows)
 //   --server NOMBRE      conecta a ese servidor de impresión ("" = este equipo)
+//   --laimi              conecta al servidor del LAIMI (config::LaimiServer)
 //   --elevated-restart   (interno) espera a que la instancia anterior termine
 
 namespace cola::app {

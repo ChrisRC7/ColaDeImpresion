@@ -109,6 +109,25 @@ TEST(SettingsRoundTrip) {
     CHECK_EQ(r.spoolDirOverrides[L"\\\\LAIMI-PS"], std::wstring(L"\\\\LAIMI-PS\\spool$"));
     CHECK(r.notifications == config::NotifyMode::All);
     CHECK_EQ(r.ghostscriptPath, s.ghostscriptPath);
+    CHECK(r.laimiServer.empty());
+
+    // Servidor del LAIMI (D54): el de config.json manda; sin él, el de
+    // servidor-laimi.txt (no existe junto a cola_tests.exe) o el predeterminado.
+    CHECK_EQ(config::LaimiServer(r), std::wstring(config::kDefaultLaimiServer));
+    s.laimiServer = L"\\\\nuevo-laimi";
+    r = config::Settings::FromJson(s.ToJson());
+    CHECK_EQ(r.laimiServer, std::wstring(L"\\\\nuevo-laimi"));
+    CHECK_EQ(config::LaimiServer(r), std::wstring(L"\\\\nuevo-laimi"));
+}
+
+TEST(LaimiServerFromText) {
+    // Como lo escribe el Bloc de notas: con BOM, comentarios y CRLF.
+    CHECK_EQ(config::ServerFromText("\xEF\xBB\xBF# comentario\r\n\r\n  \\\\otro-servidor  \r\n"),
+             std::wstring(L"\\\\otro-servidor"));
+    CHECK_EQ(config::ServerFromText("otro-servidor"), std::wstring(L"\\\\otro-servidor"));
+    CHECK_EQ(config::ServerFromText("\\otro"), std::wstring(L"\\\\otro"));
+    CHECK(config::ServerFromText("# solo comentarios\n\n").empty());
+    CHECK(config::ServerFromText("\\\\").empty());
 }
 
 TEST(SettingsDefaultsOnGarbage) {

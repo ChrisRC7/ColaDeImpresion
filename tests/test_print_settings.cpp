@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <winspool.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <string>
@@ -555,6 +556,49 @@ TEST(EpsonEscPageCountedInChunks) {
     CHECK(g.pageSource == core::ContentFacts::PageSource::None);
     CHECK(g.spoolerCountsBlankBack);
     CHECK(core::ComputePageAccounting(job, &g).dataPages.reliability == Reliability::Estimated);
+}
+
+TEST(BindingFromOrientationAndDuplex) {
+    i18n::SetLanguage(i18n::Language::Spanish);
+    using app::BindingText;
+    // Vertical + borde largo / horizontal + borde corto: se hojea de lado (libro).
+    CHECK_EQ(BindingText(DMORIENT_PORTRAIT, DMDUP_VERTICAL), std::wstring(L"Libro"));
+    CHECK_EQ(BindingText(DMORIENT_LANDSCAPE, DMDUP_HORIZONTAL), std::wstring(L"Libro"));
+    // Vertical + borde corto / horizontal + borde largo: hacia arriba (libreta).
+    CHECK_EQ(BindingText(DMORIENT_PORTRAIT, DMDUP_HORIZONTAL), std::wstring(L"Libreta"));
+    CHECK_EQ(BindingText(DMORIENT_LANDSCAPE, DMDUP_VERTICAL), std::wstring(L"Libreta"));
+    CHECK_EQ(BindingText(DMORIENT_PORTRAIT, DMDUP_SIMPLEX), std::wstring(L"No aplica"));
+    CHECK_EQ(BindingText(0, DMDUP_SIMPLEX), std::wstring(L"No aplica"));
+    CHECK_EQ(BindingText(0, DMDUP_VERTICAL), std::wstring(L"—"));
+    CHECK_EQ(BindingText(DMORIENT_PORTRAIT, 0), std::wstring(L"—"));
+
+    // En la lista: EMF horizontal a doble cara por el borde largo = libreta.
+    core::JobInfo job;
+    job.datatype = L"NT EMF 1.008";
+    job.settings.present = true;
+    job.settings.orientation.Set(DMORIENT_LANDSCAPE);
+    job.settings.duplex.Set(DMDUP_VERTICAL);
+    auto s = app::ResolveListSettings(job, nullptr);
+    CHECK_EQ(s.duplex, std::wstring(L"Borde largo"));
+    CHECK_EQ(s.binding, std::wstring(L"Libreta"));
+    // Epson sin datos leídos: doble cara "—" y encuadernación también.
+    job.driver = L"EPSON AM-C6000 Series";
+    job.datatype = L"RAW";
+    CHECK_EQ(app::ResolveListSettings(job, nullptr).binding, std::wstring(L"—"));
+
+    // La columna va a la derecha de Doble cara en la cola y en el historial.
+    for (const auto& columns : {app::JobColumns(true), app::HistoryColumns()}) {
+        size_t duplex = 0, binding = 0;
+        for (size_t i = 0; i < columns.size(); ++i) {
+            if (columns[i].id == L"duplex" || columns[i].id == L"history.duplex") duplex = i;
+            if (columns[i].id == L"binding" || columns[i].id == L"history.binding") binding = i;
+        }
+        CHECK_EQ(binding, duplex + 1);
+    }
+    // Un orden guardado por una versión anterior la recibe detrás de Doble cara.
+    auto order = app::EffectiveColumnOrder({L"duplex", L"orientation", L"paper"});
+    auto at = [&](const wchar_t* id) { return std::find(order.begin(), order.end(), id) - order.begin(); };
+    CHECK_EQ(at(L"binding"), at(L"duplex") + 1);
 }
 
 TEST(EpsonPaperSourceShowsNames) {
