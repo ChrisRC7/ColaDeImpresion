@@ -79,6 +79,7 @@ bool History::Load() {
         e.outcome = JobOutcomeFromString(item[L"outcome"].AsString());
         e.position = static_cast<std::uint32_t>(item[L"position"].AsInt64());
         e.printPages = item[L"printPages"].AsString();
+        e.carnet = item[L"carnet"].AsString();
         e.paper = item[L"paper"].AsString();
         e.orientation = item[L"orientation"].AsString();
         e.duplex = item[L"duplex"].AsString();
@@ -110,6 +111,7 @@ bool History::Save() {
         item[L"outcome"] = JobOutcomeToString(e.outcome);
         item[L"position"] = static_cast<long long>(e.position);
         item[L"printPages"] = e.printPages;
+        item[L"carnet"] = e.carnet;
         item[L"paper"] = e.paper;
         item[L"orientation"] = e.orientation;
         item[L"duplex"] = e.duplex;

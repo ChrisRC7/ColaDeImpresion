@@ -868,7 +868,7 @@ TEST(HistoryKeepsEveryQueueColumn) {
     job.submitted.wDay = 6;
     job.submitted.wHour = 15;
     auto facts = EmfFacts(3, 0);
-    auto entry = app::MakeHistoryEntry(job, config::JobOutcome::Printed, 1'800'000'000, &facts);
+    auto entry = app::MakeHistoryEntry(job, config::JobOutcome::Printed, 1'800'000'000, &facts, nullptr, L"2022040771");
 
     // Guardar y volver a leer no pierde nada.
     wchar_t dir[MAX_PATH];
@@ -908,6 +908,7 @@ TEST(HistoryKeepsEveryQueueColumn) {
     DeleteFileW(path.c_str());
     const auto& back = loaded.Entries().front();
     CHECK_EQ(back.position, 4u);
+    CHECK_EQ(back.carnet, std::wstring(L"2022040771"));
     CHECK_EQ(back.printPages, entry.printPages);
     CHECK_EQ(back.paper, entry.paper);
     CHECK_EQ(back.orientation, entry.orientation);
@@ -918,7 +919,7 @@ TEST(HistoryKeepsEveryQueueColumn) {
     // Cada columna de la cola tiene la suya en el historial, con el mismo valor
     // (salvo Estado, que en el historial es el resultado).
     auto jobColumns = app::JobColumns(true);
-    auto jobRow = app::MakeJobRow(job, true, &facts);
+    auto jobRow = app::MakeJobRow(job, true, &facts, nullptr, L"2022040771");
     auto historyColumns = app::HistoryColumns();
     auto historyRow = app::MakeHistoryRow(back, 0);
     CHECK_EQ(historyRow.cells.size(), historyColumns.size());
@@ -932,15 +933,15 @@ TEST(HistoryKeepsEveryQueueColumn) {
         }
         CHECK(found);
     }
-    CHECK_EQ(jobRow.cells[6], std::wstring(L"9"));  // páginas × copias
+    CHECK_EQ(jobRow.cells[7], std::wstring(L"9"));  // páginas × copias
 
     // Un registro de una versión anterior (sin esos datos) se muestra con "—".
     config::HistoryEntry old;
     old.pages = 5;
     auto oldRow = app::MakeHistoryRow(old, 0);
     CHECK_EQ(oldRow.cells.size(), historyColumns.size());
-    CHECK_EQ(oldRow.cells[6], std::wstring(L"5"));
-    CHECK_EQ(oldRow.cells[7], std::wstring(L"—"));
+    CHECK_EQ(oldRow.cells[7], std::wstring(L"5"));
+    CHECK_EQ(oldRow.cells[8], std::wstring(L"—"));
 }
 
 TEST(SubmittedShowsDateAndTime) {

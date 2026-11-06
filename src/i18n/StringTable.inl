@@ -27,6 +27,7 @@ X(ColPaper, L"Papel", L"Paper")
 X(ColOrientation, L"Orientación", L"Orientation")
 X(ColDuplex, L"Doble cara", L"Duplex")
 X(ColSource, L"Origen del papel", L"Paper source")
+X(ColCarnet, L"Carnet", L"Student ID")
 X(ColBinding, L"Presentación", L"Binding")
 
 // --- Páginas ---
@@ -85,6 +86,7 @@ X(SortPaper, L"Tamaño de papel", L"Paper size")
 X(SortOrientation, L"Orientación", L"Orientation")
 X(SortDuplex, L"Doble cara", L"Duplex")
 X(SortSource, L"Origen del papel", L"Paper source")
+X(SortCarnet, L"Carnet", L"Student ID")
 X(SortBinding, L"Presentación", L"Binding")
 
 // --- Barra de estado ---

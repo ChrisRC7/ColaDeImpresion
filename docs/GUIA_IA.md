@@ -26,6 +26,7 @@ de trabajo. El **qué** (estado del proyecto, decisiones, arquitectura) está en
 | **Modularidad** | Respetar las capas (ver §4). Un archivo = una responsabilidad. Si un `.cpp` pasa de ~800 líneas, dividirlo. |
 | **Pruebas** | Toda lógica pura nueva lleva prueba en `tests/`. `cola_tests.exe` debe pasar al 100 % antes de cada commit. |
 | **Compilar sin warnings** | GCC con `-Wall -Wextra` y MSVC `/W4`. |
+| **Active Directory solo de lectura** | Solo bind y búsqueda (`core/Directory`, D56). Nunca `ldap_add`/`ldap_modify`/`ldap_delete`/`ldap_rename`, `IADs::Put`/`SetInfo` ni cmdlets `Set-AD*`/`New-AD*`/`Remove-AD*`, tampoco en pruebas. |
 
 ## 3. Flujo de trabajo por tarea
 
@@ -149,6 +150,7 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **`TotalPages` de las Epson (ESC/Page) no es el número de páginas**: a doble cara el servidor cuenta el dorso en blanco de la última hoja (1 → 2, 3 → 4). Contar en los datos (`preview::CountEscPagePages`; si pasan de lo que se guarda, `EscPageCounter` por bloques desde `ReadJobSpool`, D53: un PDF de Edge de 11 páginas pesa 42 MB). Para ver un trabajo del servidor con `cola_jobinspect --hold` usar el nombre DNS completo (`\\vtec-laimiprint.estudiantes.tec.cr\Cola`): con el de la conexión aparece y se pausa la copia local de CSR.
 - **Resultado del historial**: un trabajo corto sale de la cola entre dos refrescos, así que lo último visto puede ser "en pausa". Toda acción que libere trabajos debe pasar por `MainWindow::RunJobAction` (marca `JobTracker::MarkReleasedByUser`); si no, el trabajo impreso queda "Retirado". Las copias locales de CSR no entran al historial.
 - **Compilar y probar en Linux** (p. ej. en un entorno en la nube): `g++-mingw-w64-x86-64-posix` + un archivo de toolchain de CMake (`CMAKE_SYSTEM_NAME Windows`, `x86_64-w64-mingw32-g++-posix`, `x86_64-w64-mingw32-windres`) compila todo sin warnings, y `wine64 cola_tests.exe` ejecuta las pruebas. Bajo Wine falla solo `PrivateTempDirIsProtectedAndRemoved` (no informa `SE_DACL_PROTECTED`). No reemplaza compilar con WinLibs/MSVC ni `build.ps1 -Package` en Windows.
+- **Carnet (D56)**: está en `employeeID` (no `employeeNumber`, que es la cédula). Las consultas al directorio van solo por `core::CarnetService` (hilo de fondo); fuera del dominio la columna dice "—" y `app.log` lo explica. Para probar la búsqueda sin abrir la app, enlazar un programa a `cola_core` y llamar a `core::DirectoryReader::FindCarnets`.
 - **Probar con clics simulados**: `Mayús`/`Ctrl` se leen del teclado real (`GetKeyState`), así que un `PostMessage` con `MK_SHIFT` no hace selección múltiple; usar el arrastre (rectángulo) con `WM_LBUTTONDOWN` + `WM_MOUSEMOVE` + `WM_LBUTTONUP`.
 
 ## 7. Cómo verificar en la app real

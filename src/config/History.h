@@ -20,6 +20,7 @@ struct HistoryEntry {
     std::wstring printer;
     std::wstring document;
     std::wstring user;
+    std::wstring carnet;  // del Active Directory (0.5.17, D56); "" = no se conoce
     std::wstring machine;
     std::uint32_t pages = 0;  // para las estadísticas
     std::uint64_t sizeBytes = 0;
@@ -61,6 +62,22 @@ public:
     bool IsDirty() const { return dirty_; }
 
     void Add(HistoryEntry entry);
+    // Completa el carnet de los registros que no lo tienen (las consultas al
+    // directorio llegan después, y los registros anteriores a la 0.5.17 no lo
+    // traen). carnetOf(usuario) devuelve "" si no se conoce. true si cambió alguno.
+    template <typename CarnetOf>
+    bool FillCarnets(CarnetOf&& carnetOf) {
+        bool changed = false;
+        for (auto& e : entries_) {
+            if (!e.carnet.empty() || e.user.empty()) continue;
+            std::wstring carnet = carnetOf(e.user);
+            if (carnet.empty()) continue;
+            e.carnet = std::move(carnet);
+            changed = true;
+        }
+        if (changed) dirty_ = true;
+        return changed;
+    }
     void Clear();
     void SetLimit(size_t limit);
 

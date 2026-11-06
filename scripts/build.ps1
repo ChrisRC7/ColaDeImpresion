@@ -161,6 +161,14 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - COLUMNA CARNET (0.5.17): a la derecha de "Usuario" aparece el carnet del
+     estudiante, leído del Active Directory (atributo employeeID de su
+     cuenta; solo se lee, nunca se cambia nada). Al abrir puede verse "—" un
+     momento hasta que llega la respuesta. Compruebe con trabajos de varios
+     estudiantes que el carnet es el correcto, que se puede buscar por carnet
+     en el cuadro de búsqueda y ordenar con clic en el título. También está en
+     el historial y en el Excel. Si dice "—" siempre, revise app.log ("No se
+     pudo consultar el carnet en el Active Directory").
    - COLUMNA PRESENTACIÓN (0.5.14; antes "Encuadernación", renombrada en la 0.5.16): a la derecha de "Doble cara" dice
      "Cuaderno" (vertical por el borde largo u horizontal por el borde corto),
      "Libreta" (vertical por el borde corto u horizontal por el borde largo)

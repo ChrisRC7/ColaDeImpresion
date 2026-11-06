@@ -29,7 +29,7 @@ es **en vivo** o por **sondeo**.
 ## 2. Trabajos
 
 La cola es una **tabla** como la de Windows. Columnas: `#` (posición en la
-cola), **Documento**, **Estado**, **Usuario**, **Equipo** (la PC desde la que
+cola), **Documento**, **Estado**, **Usuario**, **Carnet**, **Equipo** (la PC desde la que
 se envió), **Impresora** (en la vista "Todas"), **Páginas**, **Papel**,
 **Orientación**, **Doble cara**, **Presentación**, **Origen del papel**, **Tamaño** y **Enviado**
 (fecha y hora de envío). Desde Estado en adelante los valores van centrados
@@ -50,6 +50,10 @@ bajo su título.
   (Carta, A3, 12 × 18) y el origen con el nombre de la bandeja: en las Epson
   del LAIMI, *Auto selección*, *Alimentador de papel*, *Bandeja 1* o
   *Bandeja 2* (nunca un número de código).
+- **Carnet** es el del estudiante que envió el trabajo, tomado del Active
+  Directory del TEC (solo se lee). Aparece unos instantes después que el
+  trabajo; dice "—" si la cuenta no tiene carnet o si el directorio no
+  responde (por ejemplo, fuera de la red del TEC). Se puede buscar por carnet.
 - **Presentación** dice cómo se pasan las hojas impresas a doble cara:
   **Cuaderno** (se hojean de lado: vertical por el borde largo u horizontal por
   el borde corto) o **Libreta** (se hojean hacia arriba: vertical por el borde
@@ -182,7 +186,7 @@ posición de impresión). Se puede ordenar por otros criterios:
 | Orden de la cola | El orden real en que se va a imprimir (predeterminado) |
 | **Equipo** | Agrupa los trabajos por la PC desde la que se imprimió (LAB-PC02, LAB-PC07…) |
 | **Hora de envío** | Del más viejo al más nuevo: útil para atender por llegada |
-| Usuario, Documento, Estado, Tamaño | Buscar trabajos de una persona, repetidos, retenidos o muy pesados |
+| Usuario, Carnet, Documento, Estado, Tamaño | Buscar trabajos de una persona, repetidos, retenidos o muy pesados |
 
 - `F6` cambia al criterio siguiente, `Shift+F6` invierte el orden.
 - Menú → *Ordenar la cola por* permite elegir directamente y marcar *Orden inverso*.

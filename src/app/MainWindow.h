@@ -14,6 +14,7 @@
 #include "app/JobActions.h"
 #include "config/History.h"
 #include "config/Settings.h"
+#include "core/CarnetService.h"
 #include "core/JobTracker.h"
 #include "core/PrintRelease.h"
 #include "core/QueueMonitor.h"
@@ -155,6 +156,10 @@ private:
     void Quit();
     void RestartAsAdmin();
     void Notify(const std::wstring& title, const std::wstring& text, bool error);
+    // Pide al directorio el carnet de los usuarios del historial que no lo tienen.
+    void RequestHistoryCarnets();
+    // Llegaron carnets nuevos: completa el historial y redibuja.
+    void OnCarnets();
 
     // Módulos
     config::Settings settings_;
@@ -165,6 +170,8 @@ private:
     std::unique_ptr<preview::PreviewService> previews_;
     // Copias y páginas reales de todos los trabajos (para la columna "Páginas").
     std::unique_ptr<preview::JobFactsService> facts_;
+    // Carnet de cada usuario, leído del Active Directory (solo lectura, D56).
+    std::unique_ptr<core::CarnetService> carnets_;
     std::unique_ptr<JobActionRunner> actions_;
     core::JobTracker tracker_;
     core::PrintReleaseTracker release_;  // trabajos de "imprimir y volver a pausar"

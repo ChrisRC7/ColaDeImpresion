@@ -39,6 +39,7 @@ constexpr UINT WM_APP_SNAPSHOT = WM_APP + 1;
 constexpr UINT WM_APP_PREVIEW = WM_APP + 2;
 constexpr UINT WM_APP_ACTION = WM_APP + 3;
 constexpr UINT WM_APP_FACTS = WM_APP + 4;  // hay datos nuevos de trabajos (páginas x copias)
+constexpr UINT WM_APP_CARNETS = WM_APP + 5;  // llegaron carnets del Active Directory
 
 constexpr UINT_PTR kTimerSaveHistory = 1;
 constexpr UINT_PTR kTimerTransient = 2;
@@ -259,6 +260,8 @@ bool MainWindow::Create(const StartupOptions& options) {
     previews_ = std::make_unique<preview::PreviewService>(
         [self](const std::wstring& key) { PostOwned(self, WM_APP_PREVIEW, new std::wstring(key)); });
     facts_ = std::make_unique<preview::JobFactsService>([self] { PostMessageW(self, WM_APP_FACTS, 0, 0); });
+    carnets_ = std::make_unique<core::CarnetService>([self] { PostMessageW(self, WM_APP_CARNETS, 0, 0); });
+    RequestHistoryCarnets();
     actions_ = std::make_unique<JobActionRunner>(
         [self](ActionResult r) { PostOwned(self, WM_APP_ACTION, new ActionResult(std::move(r))); });
 
@@ -537,6 +540,12 @@ void MainWindow::OnSnapshot(core::SnapshotPtr snapshot) {
     RepauseReleasedPrinters();
     // Copias reales de cada trabajo (lectura del inicio de sus datos, una vez por trabajo).
     facts_->Request(snapshot_->jobs, settings_.activeServer, SpoolOverrideDir());
+    // Carnet de los usuarios nuevos (una consulta al directorio por usuario y sesión).
+    {
+        std::vector<std::wstring> users;
+        for (const auto& job : snapshot_->jobs) users.push_back(job.user);
+        carnets_->Request(users);
+    }
 
     // "Al iniciar, pausar todo": pausa las impresoras apenas se conoce la lista.
     // (Los trabajos en cola los retiene el monitor en su primer refresco.)
@@ -602,7 +611,8 @@ void MainWindow::ProcessEvents(const std::vector<core::JobEvent>& events) {
                     const auto facts = facts_->Find(e.job);
                     config::HistoryEntry entry =
                         MakeHistoryEntry(e.job, e.outcome, util::ToUnixSeconds(util::NowUtc()), facts.get(),
-                                         snapshot_ ? snapshot_->FindPrinter(e.job.printer) : nullptr);
+                                         snapshot_ ? snapshot_->FindPrinter(e.job.printer) : nullptr,
+                                         carnets_->Find(e.job.user));
                     entry.server = settings_.activeServer;
                     history_.Add(std::move(entry));
                     historyChanged = true;
@@ -620,6 +630,22 @@ void MainWindow::ProcessEvents(const std::vector<core::JobEvent>& events) {
         SetTimer(hwnd_, kTimerSaveHistory, 5000, nullptr);  // guarda agrupando cambios
         if (historyView_) RebuildRows();
     }
+}
+
+void MainWindow::RequestHistoryCarnets() {
+    if (!carnets_) return;
+    std::vector<std::wstring> users;
+    for (const auto& e : history_.Entries())
+        if (e.carnet.empty()) users.push_back(e.user);
+    carnets_->Request(users);
+}
+
+void MainWindow::OnCarnets() {
+    // Los trabajos que salieron de la cola antes de conocer su carnet (y los
+    // registros de versiones anteriores) lo reciben ahora, también para el Excel.
+    if (history_.FillCarnets([this](const std::wstring& user) { return carnets_->Find(user); }))
+        SetTimer(hwnd_, kTimerSaveHistory, 5000, nullptr);  // guarda agrupando cambios
+    RebuildRows();
 }
 
 void MainWindow::CheckPrinterProblems() {
@@ -686,9 +712,11 @@ void MainWindow::RebuildRows() {
                 slot = std::move(facts);
                 return slot.get();
             };
-            for (const auto* job : VisibleJobs(*snapshot_, settings_.activePrinter, filter_,
-                                               CurrentSort(settings_), settings_.sortDescending, lookup))
-                rows.push_back(MakeJobRow(*job, showPrinter, lookup(*job), snapshot_->FindPrinter(job->printer)));
+            CarnetLookup carnet = [this](const std::wstring& user) { return carnets_->Find(user); };
+            for (const auto* job : VisibleJobs(*snapshot_, settings_.activePrinter, filter_, CurrentSort(settings_),
+                                               settings_.sortDescending, lookup, carnet))
+                rows.push_back(MakeJobRow(*job, showPrinter, lookup(*job), snapshot_->FindPrinter(job->printer),
+                                          carnet(job->user)));
         }
         if (connecting_) list_.SetEmptyText(Tr(S::StatusConnecting), ServerDisplayName(), ui::glyph::Server);
         else if (snapshot_ && !snapshot_->error.empty())
@@ -1924,6 +1952,13 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             if (!historyView_) RebuildRows();
             UpdateSelectionTotal();
+            return 0;
+        }
+        case WM_APP_CARNETS: {
+            MSG pending;
+            while (PeekMessageW(&pending, hwnd_, WM_APP_CARNETS, WM_APP_CARNETS, PM_REMOVE)) {
+            }
+            OnCarnets();
             return 0;
         }
         case WM_APP_ACTION: {

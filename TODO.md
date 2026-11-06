@@ -155,6 +155,8 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Menú: "Conectar al servidor del LAIMI (\\vtec-laimiprint)", marcado mientras está conectado (0.5.11)
 - [x] Total de páginas de la selección en la barra inferior ("Selección: 3 trabajo(s) · 11 páginas a imprimir", suma de la columna Páginas, con los "—" aparte); también en el historial (0.5.1)
 - [x] Columna **Presentación** (Cuaderno / Libreta / No aplica, por orientación y borde de giro), a la derecha de Doble cara en la cola, el historial y el Excel ("Por presentación") (0.5.14, D55)
+- [x] Columna **Carnet** a la derecha de Usuario (cola, historial y Excel; búsqueda y orden), leída del Active Directory en solo lectura (`employeeID`, 0.5.17, D56)
+- [ ] (LAIMI) Confirmar con trabajos reales de estudiantes que la columna Carnet muestra el carnet correcto (y revisar `app.log` si siempre dice "—")
 - [x] Botón *Conectar al servidor del LAIMI* configurable sin compilar: `servidor-laimi.txt` junto al .exe; `Abrir vtec-laimiprint.bat` usa `--laimi` (0.5.14, D54)
 - [x] Cambiar ese servidor desde la app: menú *Cambiar servidor del LAIMI…*, se escribe en el cuadro de arriba y reemplaza al que muestra la opción (0.5.15, D54)
 - [ ] (LAIMI) Probar *Cambiar servidor del LAIMI…* con un usuario sin permisos de administrador sobre la carpeta de la app (debe quedar solo para ese usuario y avisarlo)
@@ -205,7 +207,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 94 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 99 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)

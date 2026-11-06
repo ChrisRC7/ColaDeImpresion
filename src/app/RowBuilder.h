@@ -21,8 +21,9 @@ inline constexpr wchar_t kAllPrinters[] = L"*";
 // Criterio para ordenar la cola. "Queue" es el orden real de impresión
 // (impresora + posición); los demás son vistas para buscar trabajos.
 // Pages = páginas que se van a imprimir en total (páginas x copias).
-enum class SortBy { Queue, Machine, Time, User, Document, Status, Size, Pages, Printer, Paper, Orientation, Duplex,
-                    Binding, Source, Count_ };
+// Los valores se guardan por su id de texto (SortById), no por su número.
+enum class SortBy { Queue, Machine, Time, User, Carnet, Document, Status, Size, Pages, Printer, Paper, Orientation,
+                    Duplex, Binding, Source, Count_ };
 
 inline constexpr int kSortCount = static_cast<int>(SortBy::Count_);
 
@@ -54,6 +55,8 @@ std::wstring TotalPagesText(const PrintTotal& total);
 
 // Datos analizados de un trabajo (puede devolver nullptr).
 using FactsLookup = std::function<const core::ContentFacts*(const core::JobInfo&)>;
+// Carnet del usuario de un trabajo según el Active Directory ("" si no se conoce, D56).
+using CarnetLookup = std::function<std::wstring(const std::wstring& user)>;
 
 // Columnas de la tabla. En la cola, sortId es el SortBy de la columna.
 std::vector<ui::ListColumn> JobColumns(bool showPrinter);
@@ -73,29 +76,31 @@ std::vector<std::wstring> SaveColumnOrder(const std::vector<std::wstring>& saved
 std::pair<SortBy, bool> NextSort(SortBy current, bool descending, SortBy clicked);
 
 // true si el trabajo coincide con el texto de búsqueda (documento, usuario,
-// equipo, impresora, estado). Varias palabras = todas deben coincidir.
-bool JobMatchesFilter(const core::JobInfo& job, const std::wstring& filter);
+// carnet, equipo, impresora, estado). Varias palabras = todas deben coincidir.
+bool JobMatchesFilter(const core::JobInfo& job, const std::wstring& filter, const std::wstring& carnet = {});
 bool HistoryMatchesFilter(const config::HistoryEntry& entry, const std::wstring& filter);
 
 // Trabajos visibles para la impresora elegida ("*" = todas) y el filtro,
 // ordenados según el criterio pedido (por defecto, el orden de la cola).
 std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapshot, const std::wstring& printer,
                                               const std::wstring& filter, SortBy sort = SortBy::Queue,
-                                              bool descending = false, const FactsLookup& facts = {});
+                                              bool descending = false, const FactsLookup& facts = {},
+                                              const CarnetLookup& carnets = {});
 
 // Nombre del equipo sin las barras iniciales ("\\\\LAB-PC07" -> "LAB-PC07").
 std::wstring MachineName(const std::wstring& machine);
 
 // Celdas en el orden de JobColumns(showPrinter).
 // printer (puede ser nullptr) aporta los nombres de bandejas y papeles del controlador.
+// carnet: el del usuario según el Active Directory ("" = "—").
 ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts = nullptr,
-                       const core::PrinterInfo* printer = nullptr);
+                       const core::PrinterInfo* printer = nullptr, const std::wstring& carnet = {});
 // Registro del historial de un trabajo que salió de la cola, con los mismos
 // valores que tenía su fila en la tabla (páginas, papel, orientación, doble
 // cara, origen, enviado...). El servidor lo completa quien llama.
 config::HistoryEntry MakeHistoryEntry(const core::JobInfo& job, config::JobOutcome outcome, std::int64_t timeUnix,
                                       const core::ContentFacts* facts = nullptr,
-                                      const core::PrinterInfo* printer = nullptr);
+                                      const core::PrinterInfo* printer = nullptr, const std::wstring& carnet = {});
 // Celdas en el orden de HistoryColumns().
 ui::ListRow MakeHistoryRow(const config::HistoryEntry& entry, size_t index);
 std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index);

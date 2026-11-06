@@ -115,16 +115,17 @@ wchar_t GlyphForState(JobState state) {
 }
 }  // namespace
 
-bool JobMatchesFilter(const core::JobInfo& job, const std::wstring& filter) {
+bool JobMatchesFilter(const core::JobInfo& job, const std::wstring& filter, const std::wstring& carnet) {
     if (util::Trim(filter).empty()) return true;
-    std::wstring haystack = job.document + L" " + job.user + L" " + job.machine + L" " +
+    std::wstring haystack = job.document + L" " + job.user + L" " + carnet + L" " + job.machine + L" " +
                             PrinterShortName(job.printer) + L" " + JobStatusText(job) + L" " + job.statusText;
     return AllWordsMatch(haystack, filter);
 }
 
 bool HistoryMatchesFilter(const config::HistoryEntry& e, const std::wstring& filter) {
     if (util::Trim(filter).empty()) return true;
-    std::wstring haystack = e.document + L" " + e.user + L" " + e.machine + L" " + PrinterShortName(e.printer) + L" " +
+    std::wstring haystack = e.document + L" " + e.user + L" " + e.carnet + L" " + e.machine + L" " +
+                            PrinterShortName(e.printer) + L" " +
                             OutcomeText(e.outcome);
     return AllWordsMatch(haystack, filter);
 }
@@ -140,6 +141,7 @@ const wchar_t* SortById(SortBy sort) {
         case SortBy::Machine: return L"machine";
         case SortBy::Time: return L"time";
         case SortBy::User: return L"user";
+        case SortBy::Carnet: return L"carnet";
         case SortBy::Document: return L"document";
         case SortBy::Status: return L"status";
         case SortBy::Size: return L"size";
@@ -176,6 +178,7 @@ std::wstring SortName(SortBy sort) {
         case SortBy::Orientation: return Tr(S::SortOrientation);
         case SortBy::Duplex: return Tr(S::SortDuplex);
         case SortBy::Binding: return Tr(S::SortBinding);
+        case SortBy::Carnet: return Tr(S::SortCarnet);
         case SortBy::Source: return Tr(S::SortSource);
         default: return Tr(S::SortQueue);
     }
@@ -192,7 +195,7 @@ bool BeforeInQueue(const core::JobInfo& a, const core::JobInfo& b) {
 
 // Compara por el criterio elegido. 0 = empate (se desempata con la cola).
 int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const FactsLookup& facts,
-              const core::QueueSnapshot& snapshot) {
+              const CarnetLookup& carnets, const core::QueueSnapshot& snapshot) {
     auto text = [](const std::wstring& x, const std::wstring& y) { return _wcsicmp(x.c_str(), y.c_str()); };
     auto number = [](std::uint64_t x, std::uint64_t y) { return x < y ? -1 : (x > y ? 1 : 0); };
     switch (sort) {
@@ -222,6 +225,9 @@ int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const
             return number(static_cast<std::uint64_t>(util::ToUnixSeconds(a.submitted)),
                           static_cast<std::uint64_t>(util::ToUnixSeconds(b.submitted)));
         case SortBy::User: return text(a.user, b.user);
+        case SortBy::Carnet:
+            if (!carnets) return 0;
+            return text(carnets(a.user), carnets(b.user));
         case SortBy::Document: return text(a.document, b.document);
         case SortBy::Status: return text(JobStatusText(a), JobStatusText(b));
         case SortBy::Size: return number(a.sizeBytes, b.sizeBytes);
@@ -232,16 +238,16 @@ int CompareBy(SortBy sort, const core::JobInfo& a, const core::JobInfo& b, const
 
 std::vector<const core::JobInfo*> VisibleJobs(const core::QueueSnapshot& snapshot, const std::wstring& printer,
                                               const std::wstring& filter, SortBy sort, bool descending,
-                                              const FactsLookup& facts) {
+                                              const FactsLookup& facts, const CarnetLookup& carnets) {
     std::vector<const core::JobInfo*> jobs;
     const bool all = printer == kAllPrinters || printer.empty();
     for (const auto& job : snapshot.jobs) {
         if (!all && job.printer != printer) continue;
-        if (!JobMatchesFilter(job, filter)) continue;
+        if (!JobMatchesFilter(job, filter, carnets ? carnets(job.user) : std::wstring())) continue;
         jobs.push_back(&job);
     }
     std::stable_sort(jobs.begin(), jobs.end(), [&](const core::JobInfo* a, const core::JobInfo* b) {
-        int cmp = CompareBy(sort, *a, *b, facts, snapshot);
+        int cmp = CompareBy(sort, *a, *b, facts, carnets, snapshot);
         if (descending) cmp = -cmp;
         if (cmp != 0) return cmp < 0;
         // A igualdad de criterio (y siempre en "Cola"), el orden real de impresión.
@@ -285,6 +291,7 @@ std::vector<ui::ListColumn> JobColumns(bool showPrinter) {
     columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, id(SortBy::Document), L"document"});
     columns.push_back({Tr(S::ColStatus), 104, Align::Center, true, false, id(SortBy::Status), L"status"});
     columns.push_back({Tr(S::ColUser), 100, Align::Center, false, false, id(SortBy::User), L"user"});
+    columns.push_back({Tr(S::ColCarnet), 96, Align::Center, false, false, id(SortBy::Carnet), L"carnet"});
     columns.push_back({Tr(S::ColMachine), 100, Align::Center, false, false, id(SortBy::Machine), L"machine"});
     if (showPrinter) columns.push_back({Tr(S::ColPrinter), 120, Align::Center, false, false, id(SortBy::Printer), L"printer"});
     columns.push_back({Tr(S::ColPages), 78, Align::Center, false, false, id(SortBy::Pages), L"pages"});
@@ -307,6 +314,7 @@ std::vector<ui::ListColumn> HistoryColumns() {
     columns.push_back({Tr(S::ColDocument), 0, Align::Left, false, true, -1, L"history.document"});
     columns.push_back({Tr(S::ColResult), 104, Align::Center, true, false, -1, L"history.result"});
     columns.push_back({Tr(S::ColUser), 100, Align::Center, false, false, -1, L"history.user"});
+    columns.push_back({Tr(S::ColCarnet), 96, Align::Center, false, false, -1, L"history.carnet"});
     columns.push_back({Tr(S::ColMachine), 100, Align::Center, false, false, -1, L"history.machine"});
     columns.push_back({Tr(S::ColPrinter), 120, Align::Center, false, false, -1, L"history.printer"});
     columns.push_back({Tr(S::ColPages), 78, Align::Center, false, false, -1, L"history.pages"});
@@ -344,13 +352,14 @@ std::pair<SortBy, bool> NextSort(SortBy current, bool descending, SortBy clicked
 }
 
 ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::ContentFacts* facts,
-                       const core::PrinterInfo* printer) {
+                       const core::PrinterInfo* printer, const std::wstring& carnet) {
     ui::ListRow row;
     row.key = job.Key();
     row.cells.push_back(job.position ? std::to_wstring(job.position) : L"");
     row.cells.push_back(job.document.empty() ? Tr(S::Unknown) : job.document);
     row.cells.push_back(JobStatusText(job));
     row.cells.push_back(job.user);
+    row.cells.push_back(carnet.empty() ? std::wstring(L"—") : carnet);
     row.cells.push_back(MachineName(job.machine));
     if (showPrinter) row.cells.push_back(PrinterShortName(job.printer));
     row.cells.push_back(TotalPagesText(TotalPrintPages(job, facts)));
@@ -372,12 +381,14 @@ std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index) {
 }
 
 config::HistoryEntry MakeHistoryEntry(const core::JobInfo& job, config::JobOutcome outcome, std::int64_t timeUnix,
-                                      const core::ContentFacts* facts, const core::PrinterInfo* printer) {
+                                      const core::ContentFacts* facts, const core::PrinterInfo* printer,
+                                      const std::wstring& carnet) {
     config::HistoryEntry entry;
     entry.timeUnix = timeUnix;
     entry.printer = job.printer;
     entry.document = job.document;
     entry.user = job.user;
+    entry.carnet = carnet;
     entry.machine = job.machine;
     entry.pages = std::max(job.totalPages, job.pagesPrinted);
     entry.sizeBytes = job.sizeBytes;
@@ -404,6 +415,7 @@ ui::ListRow MakeHistoryRow(const config::HistoryEntry& e, size_t index) {
     row.cells.push_back(e.document.empty() ? Tr(S::Unknown) : e.document);
     row.cells.push_back(OutcomeText(e.outcome));
     row.cells.push_back(e.user);
+    row.cells.push_back(orDash(e.carnet));
     row.cells.push_back(MachineName(e.machine));
     row.cells.push_back(PrinterShortName(e.printer));
     row.cells.push_back(!e.printPages.empty() ? e.printPages : e.pages ? std::to_wstring(e.pages) : L"—");
