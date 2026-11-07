@@ -1,3 +1,7 @@
+// Implementación de la ficha "Configuración" y de los valores cortos de las
+// columnas (ver JobSheet.h). Arma filas ui::InfoRow a partir de JOB_INFO_2,
+// el DEVMODE efectivo, los ContentFacts analizados y la contabilidad de
+// páginas (core::PageAccounting). Lógica pura: no toca el spooler.
 #include "app/JobSheet.h"
 
 #include <winspool.h>
@@ -21,15 +25,18 @@ using i18n::Tr;
 namespace {
 
 // Décimas de milímetro -> "215,9" (coma decimal en español).
+// (Las medidas del DEVMODE y de los datos vienen en décimas de mm.)
 std::wstring Millimeters(short tenths) {
     const wchar_t sep = i18n::GetLanguage() == i18n::Language::Spanish ? L',' : L'.';
     return util::Format(L"%d%lc%d", tenths / 10, sep, std::abs(tenths % 10));
 }
 
+// "215,9 × 279,4 mm" a partir de ancho y largo en décimas de mm.
 std::wstring SizeText(short width, short length) {
     return Millimeters(width) + L" × " + Millimeters(length) + L" mm";
 }
 
+// Color de la insignia: verde = fiable, amarillo = estimado, neutro = no determinable.
 ui::Tone ToneFor(Reliability r) {
     switch (r) {
         case Reliability::Reliable: return ui::Tone::Success;
@@ -38,12 +45,16 @@ ui::Tone ToneFor(Reliability r) {
     }
 }
 
+// Une dos fragmentos del detalle con un espacio, omitiendo los vacíos.
 std::wstring Join(const std::wstring& a, const std::wstring& b) {
     if (a.empty()) return b;
     if (b.empty()) return a;
     return a + L" " + b;
 }
 
+// Nombre de la sintaxis de los datos de la que salieron las opciones ("PJL",
+// "PrintTicket XPS", "DSC de PostScript", "EJL", o "EJL verificado con <driver>"
+// si es el controlador Epson verificado, D29). "" sin datos.
 std::wstring ContentSourceName(const core::ContentFacts* facts) {
     if (!facts) return L"";
     if (facts->settingsSource == core::ContentFacts::SettingsSource::Ejl && !facts->verifiedDriver.empty())
@@ -58,6 +69,8 @@ std::wstring ContentSourceName(const core::ContentFacts* facts) {
 }
 
 // Texto de origen para una opción según de dónde salió.
+// dmFields: los campos del DEVMODE que se consultaron ("dmCopies=2"), que se
+// muestran para que el personal pueda contrastarlos.
 std::wstring OriginText(Basis basis, const std::wstring& dmFields, const core::ContentFacts* facts) {
     switch (basis) {
         case Basis::DevMode: return util::Format(Tr(S::OriginDevMode), dmFields.c_str());
@@ -75,6 +88,7 @@ std::wstring OriginText(Basis basis, const std::wstring& dmFields, const core::C
     }
 }
 
+// Fila de título de sección (sin valor).
 ui::InfoRow Section(S label) {
     ui::InfoRow row;
     row.kind = ui::InfoRow::Kind::Section;
@@ -82,6 +96,7 @@ ui::InfoRow Section(S label) {
     return row;
 }
 
+// Fila de dato: etiqueta traducida, valor y detalle (origen) en letra menor.
 ui::InfoRow Field(S label, std::wstring value, std::wstring detail = L"") {
     ui::InfoRow row;
     row.label = Tr(label);
@@ -90,12 +105,14 @@ ui::InfoRow Field(S label, std::wstring value, std::wstring detail = L"") {
     return row;
 }
 
+// Pone la insignia de fiabilidad (texto y color) a una fila.
 void SetBadge(ui::InfoRow& row, Reliability reliability) {
     row.badge = ReliabilityText(reliability);
     row.badgeTone = ToneFor(reliability);
 }
 
 // Fila de una cantidad calculada (páginas, copias, caras, hojas).
+// Valor = el número o "No determinable"; detalle = origen + motivo.
 ui::InfoRow QuantityRow(S label, const core::Quantity& q, const std::wstring& origin) {
     ui::InfoRow row = Field(label, q.Known() ? util::Format(L"%u", q.value) : std::wstring(Tr(S::ValueUndetermined)));
     // Con una repetición detectada el motivo ya explica el origen.
@@ -107,6 +124,8 @@ ui::InfoRow QuantityRow(S label, const core::Quantity& q, const std::wstring& or
 }
 
 // Fila de una opción (papel, orientación...) evaluada con AssessSetting.
+// Detalle = origen + nota extra (p. ej. "El DEVMODE dice ...") + motivo,
+// separados por puntos.
 ui::InfoRow SettingRow(S label, std::wstring value, const core::SettingAssessment& a, const std::wstring& dmFields,
                        const core::ContentFacts* facts, const std::wstring& extra = L"") {
     std::wstring detail = OriginText(a.basis, dmFields, facts);
@@ -117,6 +136,8 @@ ui::InfoRow SettingRow(S label, std::wstring value, const core::SettingAssessmen
     return row;
 }
 
+// Nombre genérico de una bandeja estándar (DMBIN_*); los códigos propios del
+// controlador se muestran como "Bandeja propia del controlador (N)".
 std::wstring SourceText(short bin) {
     switch (bin) {
         case DMBIN_UPPER: return Tr(S::BinUpper);
@@ -148,6 +169,8 @@ std::wstring ShortDriverName(const std::wstring& name) {
     return paren == std::wstring::npos ? name : name.substr(0, paren);
 }
 
+// dmPrintQuality: valores negativos = DMRES_* (borrador, baja, media, alta);
+// positivos = resolución en DPI.
 std::wstring QualityText(short quality) {
     switch (quality) {
         case DMRES_DRAFT: return Tr(S::QualityDraft);
@@ -158,6 +181,7 @@ std::wstring QualityText(short quality) {
     }
 }
 
+// dmMediaType: los tres estándar; los demás son propios del controlador.
 std::wstring MediaText(std::uint32_t media) {
     switch (media) {
         case DMMEDIA_STANDARD: return Tr(S::MediaStandard);
@@ -167,6 +191,7 @@ std::wstring MediaText(std::uint32_t media) {
     }
 }
 
+// Color / Blanco y negro (dmColor) e intercalado sí/no (dmCollate).
 std::wstring ColorText(short color) { return color == DMCOLOR_COLOR ? Tr(S::ValueColor) : Tr(S::ValueMono); }
 std::wstring CollateText(short collate) {
     return collate == DMCOLLATE_TRUE ? Tr(S::ValueCollateYes) : Tr(S::ValueCollateNo);
@@ -176,11 +201,14 @@ std::wstring CollateText(short collate) {
 // en cualquier orientación: el PrintTicket da el tamaño en vertical).
 bool SamePaper(const core::PaperSize& dm, const core::ContentFacts& facts) {
     if (!dm.known || !facts.paperWidth.valid || !facts.paperLength.valid) return false;
+    // 20 décimas de mm = 2 mm de tolerancia (redondeos entre pulgadas y mm).
     auto close = [](short a, short b) { return std::abs(a - b) <= 20; };
     return (close(dm.width, facts.paperWidth.value) && close(dm.length, facts.paperLength.value)) ||
            (close(dm.width, facts.paperLength.value) && close(dm.length, facts.paperWidth.value));
 }
 
+// Campos del DEVMODE que describen el papel, para el texto de origen
+// ("dmPaperSize=1, dmFormName=Letter"); solo los presentes.
 std::wstring PaperFields(const core::PrintSettings& s) {
     std::wstring out;
     auto add = [&](const std::wstring& part) { out += (out.empty() ? L"" : L", ") + part; };
@@ -191,6 +219,8 @@ std::wstring PaperFields(const core::PrintSettings& s) {
     return out;
 }
 
+// Datos analizados del documento de la vista previa, o nullptr si todavía no
+// hay documento o sus datos no se analizaron (no se pudieron leer).
 const core::ContentFacts* FactsOf(const preview::PreviewDocument* doc) {
     return doc && doc->facts.analyzed ? &doc->facts : nullptr;
 }
@@ -200,6 +230,8 @@ const core::ContentFacts* FactsOf(const preview::PreviewDocument* doc) {
 namespace {
 
 // Valor para la lista: sin marcas (la fiabilidad se ve en la pestaña Configuración).
+// Lo único que hace es convertir en "—" lo que no se puede determinar o no
+// tiene texto. (El nombre viene de cuando se marcaban los estimados.)
 std::wstring Marked(core::Reliability reliability, const std::wstring& text) {
     if (text.empty() || reliability == Reliability::Unknown) return L"—";
     return text;
@@ -211,6 +243,11 @@ std::wstring JobDriver(const core::JobInfo& job, const core::ContentFacts* facts
 }
 
 // Nombre corto de un papel: el del tamaño estándar, el del controlador o las medidas.
+// code: dmPaperSize (0 si no hay); custom: tamaño personalizado (no buscar
+// por código ni por medidas); width/length en décimas de mm; fallback: texto
+// si no hay nada mejor (dmFormName o el nombre que dan los datos).
+// Orden: papel propio del controlador (D34) > código estándar > medidas
+// que coinciden con un estándar > medidas > fallback.
 std::wstring ShortPaper(short code, bool custom, short width, short length, const std::wstring& fallback,
                         const core::PrinterInfo* printer = nullptr) {
     if (const core::DriverPaper* driver = DriverPaperFor(code, printer)) {
@@ -229,6 +266,8 @@ std::wstring ShortPaper(short code, bool custom, short width, short length, cons
 }  // namespace
 
 bool IsVerifiedEpsonDriver(const std::wstring& driver) {
+    // Búsqueda de subcadena en mayúsculas: el nombre del controlador puede
+    // llevar prefijos o sufijos además del modelo.
     std::wstring upper = driver;
     for (auto& c : upper) c = static_cast<wchar_t>(towupper(c));
     return upper.find(L"EPSON AM-C6000") != std::wstring::npos;
@@ -246,6 +285,8 @@ std::wstring BinName(short bin, const std::wstring& driver, const core::PrinterI
             default: break;
         }
     }
+    // Otras impresoras: el nombre que da el controlador (DeviceCapabilities,
+    // leído una vez por cola en el hilo del monitor) y, si no, el genérico.
     if (printer)
         for (const auto& [code, name] : printer->bins)
             if (code == bin && !name.empty()) return name;
@@ -256,11 +297,19 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
                                  const core::PrinterInfo* printer) {
     ListSettings out;
     short orientation = 0;  // para la presentación: 0 = no se conoce
+    // Unos ContentFacts sin analizar equivalen a no tener datos.
     const core::ContentFacts* facts = factsIn && factsIn->analyzed ? factsIn : nullptr;
+    // DEVMODE efectivo: en EMF, el del spool (D23); si no, el de JOB_INFO_2.
     const core::PrintSettings& dm = core::EffectiveDevMode(job, facts);
     const core::PageAccounting acc = core::ComputePageAccounting(job, facts);
+    // documented: los datos usan una sintaxis documentada o verificada, así
+    // que mandan sobre el DEVMODE si no coinciden.
     const bool documented = facts && facts->settingsDocumented;
     const bool dataRead = facts != nullptr;
+
+    // Cada bloque sigue el mismo patrón que la ficha: ¿está en el DEVMODE?
+    // ¿en los datos? ¿coinciden? -> AssessSetting da la fiabilidad, y el valor
+    // sale de los datos si son documentados (o si el DEVMODE no lo declara).
 
     // Papel.
     {
@@ -286,6 +335,7 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
         const bool agree = inDm && inContent && dm.orientation.value == facts->orientation.value;
         auto a = core::AssessSetting(acc.kind, inDm, inContent, documented, agree, dataRead);
         short value = inContent && (documented || !inDm) ? facts->orientation.value : dm.orientation.value;
+        // Solo una orientación determinable alimenta la Presentación (D55).
         if ((inDm || inContent) && a.reliability != Reliability::Unknown) orientation = value;
         out.orientation = Marked(a.reliability, inDm || inContent ? std::wstring(value == DMORIENT_LANDSCAPE
                                                                                      ? Tr(S::ValueLandscapeShort)
@@ -303,6 +353,8 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
                                   IsVerifiedEpsonDriver(job.driver);
         const Reliability reliability = queueDefault ? Reliability::Unknown : acc.duplex.reliability;
         out.duplex = Marked(reliability, text);
+        // Presentación (Cuaderno/Libreta, D55): a partir de la doble cara
+        // determinable (0 = no se sabe) y la orientación calculada arriba.
         const short duplex = reliability == Reliability::Unknown ? 0
                              : acc.duplex.value == DMDUP_VERTICAL || acc.duplex.value == DMDUP_HORIZONTAL
                                  ? static_cast<short>(acc.duplex.value)
@@ -323,12 +375,14 @@ ListSettings ResolveListSettings(const core::JobInfo& job, const core::ContentFa
 }
 
 std::wstring BindingText(short orientation, short duplex) {
+    // A una cara la orientación no importa: "No aplica".
     if (duplex == DMDUP_SIMPLEX) return Tr(S::ValueBindingNone);
     if ((duplex != DMDUP_VERTICAL && duplex != DMDUP_HORIZONTAL) ||
         (orientation != DMORIENT_PORTRAIT && orientation != DMORIENT_LANDSCAPE))
         return L"—";
     const bool longEdge = duplex == DMDUP_VERTICAL;
     const bool portrait = orientation == DMORIENT_PORTRAIT;
+    // Vertical+largo o horizontal+corto (ambos iguales) = Cuaderno; si no, Libreta.
     return Tr(longEdge == portrait ? S::ValueBindingBook : S::ValueBindingNotepad);
 }
 
@@ -337,6 +391,8 @@ std::wstring PaperText(const core::PrintSettings& s, const core::PrinterInfo* pr
     if (s.paperSize.valid)
         if (const core::DriverPaper* driver = DriverPaperFor(s.paperSize.value, printer))
             return ShortDriverName(driver->name) + L" — " + SizeText(driver->width, driver->length);
+    // Nombre: personalizado, estándar por código, dmFormName o el código
+    // crudo; luego " — medidas" si se conocen.
     core::PaperSize size = core::EffectivePaper(s);
     const core::PaperInfo* info = s.paperSize.valid ? core::FindPaper(s.paperSize.value) : nullptr;
     std::wstring name;
@@ -396,6 +452,7 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
                                        const preview::PreviewDocument* doc) {
     std::vector<ui::InfoRow> rows;
     const core::ContentFacts* facts = FactsOf(doc);
+    // fromSpool = el DEVMODE efectivo es el EMRI_DEVMODE del spool (D23).
     bool fromSpool = false;
     const core::PrintSettings& dm = core::EffectiveDevMode(job, facts, &fromSpool);
     const core::PageAccounting acc = core::ComputePageAccounting(job, facts);
@@ -405,11 +462,14 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         if (fromSpool && a.basis == Basis::DevMode) a.basis = Basis::SpoolDevMode;
         return a;
     };
+    // Texto de origen de un campo que solo existe en el DEVMODE.
     auto devModeOrigin = [&](const std::wstring& fields) {
         return util::Format(fromSpool ? Tr(S::OriginSpoolDevMode) : Tr(S::OriginDevMode), fields.c_str());
     };
 
     // --- Trabajo (JOB_INFO_2) ---
+    // Datos crudos del spooler, con el campo de origen como detalle. Esta
+    // sección se arma primero pero al final se rota al último lugar.
     rows.push_back(Section(S::SheetSectionJob));
     rows.push_back(Field(S::SheetId, util::Format(L"%u", job.id), L"JOB_INFO_2.JobId"));
     rows.push_back(Field(S::SheetDocument, job.document, L"JOB_INFO_2.pDocument"));
@@ -438,12 +498,16 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
 
     // --- Configuración solicitada ---
     rows.push_back(Section(S::SheetSectionSettings));
+    // Sin DEVMODE (algunos trabajos RAW): se avisa, y las opciones salen
+    // solo de los datos o quedan "No declarado".
     if (!dm.present) {
         ui::InfoRow row = Field(S::SheetDevMode, Tr(S::ValueNoDevMode), Tr(S::ReasonNoDevMode));
         SetBadge(row, Reliability::Unknown);
         rows.push_back(row);
     }
     {
+        // Papel: valor largo (nombre + medidas). Si los datos no coinciden
+        // con el DEVMODE, se muestra el que manda y la otra versión como nota.
         core::PaperSize size = core::EffectivePaper(dm);
         const bool inDm = dm.paperSize.valid || dm.formName.valid || size.known;
         const bool inContent = facts && (facts->paperName.valid || facts->paperWidth.valid);
@@ -476,6 +540,10 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         }
         rows.push_back(SettingRow(S::SheetPaper, value, a, PaperFields(dm), facts, extra));
     }
+    // Fila genérica para una opción numérica que puede estar en el DEVMODE y
+    // en los datos (orientación, intercalado, color): elige el valor que
+    // manda, agrega "El DEVMODE dice ..." si no coinciden y la fiabilidad.
+    // text: función que traduce el valor a texto.
     auto optionRow = [&](S label, const core::Field<short>& dmField, const core::Field<short>& contentField,
                          const wchar_t* fieldName, std::wstring (*text)(short)) {
         const bool inDm = dmField.valid;
@@ -491,6 +559,7 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
             extra = util::Format(Tr(S::NoteDevModeSays), text(dmField.value).c_str());
         rows.push_back(SettingRow(label, value, a, util::Format(L"%ls=%d", fieldName, dmField.value), facts, extra));
     };
+    // Campo vacío (no válido) para cuando no hay datos analizados.
     static const core::Field<short> kNone;
     optionRow(S::SheetOrientation, dm.orientation, facts ? facts->orientation : kNone, L"dmOrientation",
               &OrientationText);
@@ -509,6 +578,8 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         rows.push_back(row);
     }
     {
+        // Copias: de la contabilidad (D24); si el DEVMODE y los datos dicen
+        // cantidades distintas, se muestran ambas.
         std::wstring origin = OriginText(acc.copies.basis, util::Format(L"dmCopies=%d", dm.copies.value), facts);
         if (acc.copiesConflict && facts)
             origin = Join(origin + L".", util::Format(Tr(S::NoteCopiesConflict), dm.copies.value, facts->copies.value));
@@ -532,6 +603,7 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
                                       util::Format(L"dmDefaultSource=%d", dm.defaultSource.value), facts, extra));
         }
     }
+    // Calidad, escala y tipo de papel: solo existen en el DEVMODE (sin insignia).
     if (dm.printQuality.valid)
         rows.push_back(Field(S::SheetQuality, QualityText(dm.printQuality.value),
                              devModeOrigin(util::Format(L"dmPrintQuality=%d", dm.printQuality.value))));
@@ -542,8 +614,11 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         rows.push_back(Field(S::SheetMedia, MediaText(dm.mediaType.value),
                              devModeOrigin(util::Format(L"dmMediaType=%lu",
                                                         static_cast<unsigned long>(dm.mediaType.value)))));
+    // Páginas por cara (N-up).
     rows.push_back(QuantityRow(S::SheetNup, acc.pagesPerSide,
                                acc.pagesPerSide.Known() ? OriginText(acc.pagesPerSide.basis, L"", facts) : L""));
+    // Opciones crudas encontradas en los datos (PJL/EJL...), tal cual, para
+    // lo que no se interpreta (D25: CO/QT del EJL no documentado).
     if (facts && !facts->rawSettings.empty())
         rows.push_back(Field(S::SheetInData, facts->rawSettings, ContentSourceName(facts)));
     if (facts && facts->sheetsCounter.valid)
@@ -559,13 +634,18 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         rows.push_back(Field(S::SheetJobDevMode, util::Format(Tr(S::ValueJobDevModeStale), stale.c_str()),
                              Tr(S::DetailJobDevModeStale)));
     }
+    // El DEVMODE cambia dentro del spool (p. ej. distinto entre páginas).
     if (facts && facts->spoolDevModeChanges)
         rows.push_back(Field(S::SheetDevModeChanges, Tr(S::ValueDevModeChanges), Tr(S::OriginSpoolDevModeRecords)));
+    // ¿El trabajo usa los predeterminados de la cola? Si sí, puede que la
+    // aplicación no haya elegido nada (o, en CSR, que el servidor no sepa
+    // lo que eligió el usuario, D29).
     if (printer && printer->defaults.present && dm.present) {
         const bool same = core::SameVisibleSettings(dm, printer->defaults);
         rows.push_back(Field(S::SheetDefaults, same ? Tr(S::ValueDefaultsSame) : Tr(S::ValueDefaultsDiffer),
                              same ? Tr(S::DetailDefaultsSame) : Tr(S::OriginPrinterDevMode)));
     }
+    // Datos técnicos del DEVMODE (dmFields, tamaños y versiones) para diagnóstico.
     if (dm.present)
         rows.push_back(Field(S::SheetDevMode,
                              util::Format(Tr(S::ValueDevModeTech), static_cast<unsigned long>(dm.fields), dm.size,
@@ -573,8 +653,13 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
                              fromSpool ? Tr(S::OriginDevModeTechSpool) : Tr(S::OriginDevModeTech)));
 
     // --- Páginas, caras y hojas ---
+    // Separación de D24: páginas del documento, páginas lógicas, páginas a
+    // imprimir (= columna Páginas, D31), copias hechas por la aplicación,
+    // caras y hojas físicas, cada una con su fiabilidad.
     rows.push_back(Section(S::SheetSectionPages));
     {
+        // Páginas en los datos; si no coinciden con TotalPages del spooler
+        // (p. ej. el dorso en blanco de las Epson, D46) se muestran ambos.
         std::wstring origin = OriginText(acc.dataPages.basis, L"", facts);
         if (acc.pagesMismatch && facts)
             origin = Join(origin + L".", util::Format(Tr(S::NotePagesMismatch), acc.spoolerTotalPages, facts->pages));
@@ -582,14 +667,19 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
     }
     rows.push_back(QuantityRow(S::SheetLogical, acc.logicalPages, OriginText(acc.logicalPages.basis, L"", facts)));
     {
+        // Páginas a imprimir = páginas x copias del dispositivo.
         std::wstring origin;
         if (acc.printPages.Known())
             origin = util::Format(Tr(S::OriginCalcPrintPages), acc.dataPages.value, acc.deviceCopies.value);
         rows.push_back(QuantityRow(S::SheetPrintPages, acc.printPages, origin));
     }
+    // Copias que hizo la aplicación repitiendo páginas (detectadas por
+    // huellas, D24); solo si hay más de una.
     if (acc.appCopies.Known() && acc.appCopies.value > 1)
         rows.push_back(QuantityRow(S::SheetAppCopies, acc.appCopies, OriginText(acc.appCopies.basis, L"", facts)));
     {
+        // Caras: del contador del controlador (EJL "JI PAGES") o calculadas
+        // como caras por copia x copias.
         std::wstring origin;
         if (acc.sides.basis == Basis::DriverSheets)
             origin = Tr(S::OriginSidesFromSheets);
@@ -600,6 +690,8 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         rows.push_back(QuantityRow(S::SheetSides, acc.sides, origin));
     }
     {
+        // Hojas físicas: las que declara el controlador (y el cálculo si
+        // difiere) o las calculadas a partir de caras y doble cara.
         std::wstring origin;
         if (acc.sheets.basis == Basis::DriverSheets) {
             origin = Tr(S::OriginDriverSheets);
@@ -612,10 +704,13 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
         }
         rows.push_back(QuantityRow(S::SheetSheets, acc.sheets, origin));
     }
+    // Avance que informa el spooler (PagesPrinted / TotalPages), sin interpretar.
     rows.push_back(Field(S::SheetProgress, util::Format(Tr(S::ValueProgress), job.pagesPrinted, job.totalPages),
                          Tr(S::NoteProgress)));
 
     // --- Datos y vista previa ---
+    // Formato detectado, de dónde se leyeron los datos (API del spooler, D22,
+    // o archivo de spool) y si hay vista previa o por qué no (D21).
     rows.push_back(Section(S::SheetSectionData));
     if (doc && doc->facts.analyzed) {
         rows.push_back(Field(S::SheetFormat, doc->facts.language,
@@ -639,6 +734,8 @@ std::vector<ui::InfoRow> BuildJobSheet(const core::JobInfo& job, const core::Pri
     }
     // Lo que más se consulta primero: la sección "Trabajo" (casi todo ya está
     // en el encabezado del panel) pasa al final.
+    // rows[0] es el título "Trabajo"; se busca el título de la sección
+    // siguiente y se rota para que todo lo anterior quede al final.
     auto second = std::find_if(rows.begin() + 1, rows.end(),
                                [](const ui::InfoRow& r) { return r.kind == ui::InfoRow::Kind::Section; });
     std::rotate(rows.begin(), second, rows.end());
@@ -650,6 +747,7 @@ std::wstring SettingsSummary(const core::JobInfo& job, const preview::PreviewDoc
     const core::PageAccounting acc = core::ComputePageAccounting(job, facts);
     const core::PrintSettings& dm = core::EffectiveDevMode(job, facts);
     // Sin marcas de estimado: la fiabilidad se ve en la pestaña Configuración.
+    // (mark se conserva como punto único por si se vuelven a marcar.)
     auto mark = [](const core::Quantity&) { return L""; };
     std::vector<std::wstring> parts;
     // Si los datos declaran el papel con una sintaxis documentada y no coincide, mandan los datos
@@ -667,6 +765,8 @@ std::wstring SettingsSummary(const core::JobInfo& job, const preview::PreviewDoc
         else if (info) parts.push_back(i18n::GetLanguage() == i18n::Language::Spanish ? info->nameEs : info->nameEn);
         else if (dm.formName.valid) parts.push_back(dm.formName.value);
     }
+    // Orientación del DEVMODE y doble cara de la contabilidad (que supone
+    // "una cara" si no se declara).
     if (dm.orientation.valid) parts.push_back(OrientationText(dm.orientation.value));
     parts.push_back(DuplexText(static_cast<short>(acc.duplex.value)));
     if (acc.copies.Known())
@@ -680,6 +780,7 @@ std::wstring SettingsSummary(const core::JobInfo& job, const preview::PreviewDoc
                                                        acc.sides.value));
     else
         parts.push_back(Tr(S::SummarySidesUnknown));
+    // Partes unidas con " · ".
     std::wstring out;
     for (const auto& p : parts) out += (out.empty() ? L"" : L" · ") + p;
     return out;

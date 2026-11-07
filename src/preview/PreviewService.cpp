@@ -1,9 +1,12 @@
+// Caché LRU de vistas previas y cola de generación en segundo plano.
+// Ver PreviewService.h.
 #include "preview/PreviewService.h"
 
 #include "util/Log.h"
 
 namespace cola::preview {
 
+// El hilo de trabajo (worker_) ya arrancó al construirse el miembro.
 PreviewService::PreviewService(ReadyCallback onReady, size_t memoryBudgetBytes)
     : onReady_(std::move(onReady)), budget_(memoryBudgetBytes) {}
 
@@ -33,13 +36,19 @@ void PreviewService::Request(const PreviewRequest& request, bool urgent) {
     const std::wstring key = request.Key();
     {
         std::lock_guard lock(mutex_);
+        // Ya está hecha o en camino: nada que hacer.
         if (index_.count(key) || pending_.count(key)) return;
         if (urgent) {
+            // Las tareas encoladas se descartan; vaciar pending_ también hace
+            // que una tarea que ya salió de la cola pero aún no empezó se
+            // detenga (ver la comprobación al inicio de la tarea).
             worker_.Clear();
             pending_.clear();
         }
         pending_.insert(key);
     }
+    // La tarea copia el pedido completo (no comparte nada con la UI). Corre
+    // en el hilo del servicio: genera, guarda y avisa.
     worker_.Post([this, request, key] {
         {
             std::lock_guard lock(mutex_);
@@ -54,7 +63,7 @@ void PreviewService::Request(const PreviewRequest& request, bool urgent) {
 void PreviewService::Store(const std::wstring& key, DocumentPtr doc) {
     std::lock_guard lock(mutex_);
     pending_.erase(key);
-    if (index_.count(key)) return;
+    if (index_.count(key)) return;  // otra generación de la misma clave ganó (raro)
     used_ += doc->MemoryBytes();
     lru_.emplace_front(key, std::move(doc));
     index_[key] = lru_.begin();
@@ -67,6 +76,8 @@ void PreviewService::Store(const std::wstring& key, DocumentPtr doc) {
     }
 }
 
+// Los documentos que la UI todavía tenga (DocumentPtr) siguen vivos hasta
+// que los suelte: la caché solo deja de referenciarlos.
 void PreviewService::Clear() {
     std::lock_guard lock(mutex_);
     worker_.Clear();

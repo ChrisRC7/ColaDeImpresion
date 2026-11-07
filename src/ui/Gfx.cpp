@@ -1,5 +1,11 @@
+// Primitivas de dibujo: doble búfer, rellenos y texto con GDI, formas
+// redondeadas y círculos con GDI+ (antialias). GDI+ solo se usa donde hace
+// falta suavizado: su texto no tiene ClearType y es más lento.
+
 #include "ui/Gfx.h"
 
+// <objidl.h> declara IStream y otros tipos COM que <gdiplus.h> necesita y que
+// WIN32_LEAN_AND_MEAN deja fuera de <windows.h>.
 #include <objidl.h>
 // GDI+ usa min/max sin prefijo; con NOMINMAX hay que proveerlos.
 #include <algorithm>
@@ -12,21 +18,31 @@ using std::min;
 namespace cola::ui::gfx {
 
 namespace {
+// Token de GdiplusStartup; 0 = GDI+ no iniciado.
 ULONG_PTR g_gdiplusToken = 0;
 
+// COLORREF (0x00BBGGRR) a color GDI+ opaco (ARGB).
 Gdiplus::Color ToColor(COLORREF c) { return Gdiplus::Color(255, GetRValue(c), GetGValue(c), GetBValue(c)); }
 
+// Agrega a `path` el contorno de r con esquinas de radio `radius`, armado con
+// cuatro arcos de 90° (sentido horario desde la esquina superior izquierda);
+// CloseFigure une los arcos con los lados rectos.
 void AddRoundedRect(Gdiplus::GraphicsPath& path, const RECT& r, int radius) {
     const float x = static_cast<float>(r.left);
     const float y = static_cast<float>(r.top);
     const float w = static_cast<float>(r.right - r.left);
     const float h = static_cast<float>(r.bottom - r.top);
+    // d = diámetro del arco. Se limita al lado menor: con un rectángulo más
+    // chico que el radio los arcos se cruzarían y el relleno saldría deformado
+    // (así un radio grande da una "píldora").
     float d = static_cast<float>(radius * 2);
     d = std::min({d, w, h});
+    // Radio 0 (o rectángulo vacío): rectángulo recto.
     if (d <= 0) {
         path.AddRectangle(Gdiplus::RectF(x, y, w, h));
         return;
     }
+    // Ángulos de GDI+ en grados desde el eje X positivo, en sentido horario.
     path.AddArc(x, y, d, d, 180, 90);
     path.AddArc(x + w - d, y, d, d, 270, 90);
     path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
@@ -36,16 +52,26 @@ void AddRoundedRect(Gdiplus::GraphicsPath& path, const RECT& r, int radius) {
 }  // namespace
 
 BufferedPaint::BufferedPaint(HWND hwnd) : hwnd_(hwnd) {
+    // BeginPaint valida la región inválida (si no se llamara, Windows seguiría
+    // enviando WM_PAINT sin parar).
     windowDc_ = BeginPaint(hwnd, &ps_);
+    // Se pinta el área cliente entera, no solo ps_.rcPaint: es más simple y el
+    // coste es bajo para controles de este tamaño.
     GetClientRect(hwnd, &client_);
     memDc_ = CreateCompatibleDC(windowDc_);
+    // Mínimo 1×1: CreateCompatibleBitmap con tamaño 0 falla (ventana minimizada
+    // o colapsada) y el resto del código no tendría dónde dibujar.
     bitmap_ = CreateCompatibleBitmap(windowDc_, std::max(1, Width(client_)), std::max(1, Height(client_)));
     oldBitmap_ = SelectObject(memDc_, bitmap_);
+    // El texto se dibuja sin rellenar su fondo: los controles pintan el fondo antes.
     SetBkMode(memDc_, TRANSPARENT);
 }
 
 BufferedPaint::~BufferedPaint() {
+    // Copia el búfer terminado a la ventana de una sola vez (sin parpadeo).
     BitBlt(windowDc_, 0, 0, Width(client_), Height(client_), memDc_, 0, 0, SRCCOPY);
+    // Limpieza en orden inverso: devolver el mapa de bits original antes de
+    // borrar el propio (GDI no borra objetos seleccionados en un DC).
     SelectObject(memDc_, oldBitmap_);
     DeleteObject(bitmap_);
     DeleteDC(memDc_);
@@ -63,6 +89,9 @@ void StopGdiPlus() {
 }
 
 void Fill(HDC dc, const RECT& rect, COLORREF color) {
+    // Truco clásico de GDI: ExtTextOut con ETO_OPAQUE y sin texto rellena el
+    // rectángulo con el color de fondo. Evita crear y borrar un HBRUSH por
+    // cada relleno (se llama muchas veces por cuadro).
     COLORREF old = SetBkColor(dc, color);
     ExtTextOutW(dc, 0, 0, ETO_OPAQUE, &rect, nullptr, 0, nullptr);
     SetBkColor(dc, old);
@@ -71,6 +100,8 @@ void Fill(HDC dc, const RECT& rect, COLORREF color) {
 void FillRounded(HDC dc, const RECT& rect, int radius, COLORREF color) {
     Gdiplus::Graphics g(dc);
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    // PixelOffsetModeHalf hace que las coordenadas enteras caigan en el borde
+    // del píxel (como en GDI), así el relleno ocupa exactamente el RECT.
     g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     Gdiplus::GraphicsPath path;
     AddRoundedRect(path, rect, radius);
@@ -84,6 +115,7 @@ void FillRoundedAlpha(HDC dc, const RECT& rect, int radius, COLORREF color, int 
     g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     Gdiplus::GraphicsPath path;
     AddRoundedRect(path, rect, radius);
+    // GDI+ mezcla con lo ya dibujado en el búfer según alpha (GDI no sabe).
     Gdiplus::SolidBrush brush(Gdiplus::Color(static_cast<BYTE>(std::clamp(alpha, 0, 255)), GetRValue(color),
                                              GetGValue(color), GetBValue(color)));
     g.FillPath(&brush, &path);
@@ -92,6 +124,9 @@ void FillRoundedAlpha(HDC dc, const RECT& rect, int radius, COLORREF color, int 
 void StrokeRounded(HDC dc, const RECT& rect, int radius, COLORREF color, float width) {
     Gdiplus::Graphics g(dc);
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    // Sin PixelOffsetModeHalf: el trazo se centra sobre la línea y, al achicar
+    // el rectángulo 1 píxel a la derecha y abajo, el contorno queda dentro del
+    // RECT (right/bottom son exclusivos).
     Gdiplus::GraphicsPath path;
     RECT r = rect;
     r.right -= 1;
@@ -119,6 +154,7 @@ void VLine(HDC dc, int x, int y1, int y2, COLORREF color) {
     Fill(dc, r, color);
 }
 
+// rect va por valor porque DrawTextW puede modificarlo (p. ej. con DT_CALCRECT).
 void Text(HDC dc, const std::wstring& text, RECT rect, HFONT font, COLORREF color, UINT format) {
     HGDIOBJ old = SelectObject(dc, font);
     SetTextColor(dc, color);
@@ -137,6 +173,8 @@ SIZE MeasureText(HDC dc, const std::wstring& text, HFONT font) {
 
 int MeasureWrapped(HDC dc, const std::wstring& text, HFONT font, int width) {
     HGDIOBJ old = SelectObject(dc, font);
+    // Con DT_CALCRECT DrawTextW no dibuja: ajusta r.bottom al alto necesario
+    // para el texto partido en líneas dentro de `width`.
     RECT r{0, 0, width, 0};
     DrawTextW(dc, text.c_str(), static_cast<int>(text.size()), &r, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
     SelectObject(dc, old);
@@ -144,6 +182,7 @@ int MeasureWrapped(HDC dc, const std::wstring& text, HFONT font, int width) {
 }
 
 void Glyph(HDC dc, wchar_t glyph, const RECT& rect, HFONT iconFont, COLORREF color) {
+    // El glifo es un único carácter de la fuente de íconos (ver ui::glyph).
     wchar_t text[2] = {glyph, 0};
     Text(dc, text, rect, iconFont, color, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 }

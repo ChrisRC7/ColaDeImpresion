@@ -1,3 +1,4 @@
+// Primitivas de reimpresión: páginas por GDI y envío RAW. Ver Reprint.h.
 #include "preview/Reprint.h"
 
 #include <windows.h>
@@ -12,6 +13,10 @@ namespace cola::preview {
 namespace {
 
 // DEVMODE por defecto de la impresora (para poder cambiar la orientación por página).
+// Patrón de dos llamadas de DocumentProperties: la primera (fMode = 0)
+// devuelve el tamaño del DEVMODE completo (incluida la parte privada del
+// driver) y la segunda (DM_OUT_BUFFER) lo copia. Vacío si algo falla; en ese
+// caso se imprime con el DEVMODE predeterminado y sin cambiar orientación.
 std::vector<BYTE> DefaultDevMode(const std::wstring& printer) {
     core::PrinterHandle h;
     if (!h.Open(printer, false)) return {};
@@ -29,9 +34,13 @@ std::vector<BYTE> DefaultDevMode(const std::wstring& printer) {
 ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& docName,
                             const std::function<std::vector<PagePtr>()>& nextPages) {
     ReprintResult result;
+    // DEVMODE propio (modificable) para poder cambiar la orientación con
+    // ResetDC entre páginas.
     std::vector<BYTE> devModeBuffer = DefaultDevMode(printer);
     auto* devMode = devModeBuffer.empty() ? nullptr : reinterpret_cast<DEVMODEW*>(devModeBuffer.data());
 
+    // DC de impresora: todo lo que se dibuje entre StartDoc y EndDoc se
+    // convierte en un trabajo nuevo en la cola destino.
     HDC dc = CreateDCW(L"WINSPOOL", printer.c_str(), nullptr, devMode);
     if (!dc) {
         result.error = GetLastError();
@@ -47,12 +56,16 @@ ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& doc
     }
 
     bool failed = false;
+    // Pide lotes hasta que el proveedor devuelva uno vacío; cada lote se
+    // suelta al terminar (memoria acotada aunque el documento sea largo).
     for (;;) {
         std::vector<PagePtr> batch = nextPages();
         if (batch.empty()) break;
         for (const auto& page : batch) {
             SIZE size = page->SizeHimetric();
             // Orientación según el aspecto de la página.
+            // ResetDC entre páginas (antes de StartPage) es la forma
+            // documentada de cambiar la orientación dentro de un documento.
             if (devMode && (devMode->dmFields & DM_ORIENTATION)) {
                 short wanted = size.cx > size.cy ? DMORIENT_LANDSCAPE : DMORIENT_PORTRAIT;
                 if (devMode->dmOrientation != wanted) {
@@ -65,6 +78,10 @@ ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& doc
                 break;
             }
             // Mapea la página física completa (no solo el área imprimible) para conservar la escala.
+            // El origen del DC es la esquina del área imprimible; la hoja
+            // física empieza PHYSICALOFFSET píxeles antes (coordenadas
+            // negativas). Si el driver no informa el tamaño físico se usa el
+            // área imprimible (HORZRES/VERTRES).
             int offX = GetDeviceCaps(dc, PHYSICALOFFSETX);
             int offY = GetDeviceCaps(dc, PHYSICALOFFSETY);
             int physW = GetDeviceCaps(dc, PHYSICALWIDTH);
@@ -85,6 +102,8 @@ ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& doc
         if (failed) break;
     }
 
+    // Sin páginas o con un fallo: se cancela para no dejar en la cola un
+    // trabajo vacío o a medias.
     if (failed || result.pages == 0) {
         result.error = failed ? GetLastError() : ERROR_NO_DATA;
         AbortDoc(dc);
@@ -104,6 +123,7 @@ ReprintResult SendRawData(const std::wstring& printer, const std::wstring& docNa
         result.error = GetLastError();
         return result;
     }
+    // DOC_INFO_1: nombre, archivo de salida (nulo = la impresora) y datatype.
     DOC_INFO_1W doc{};
     doc.pDocName = const_cast<LPWSTR>(docName.c_str());
     doc.pDatatype = const_cast<LPWSTR>(datatype);
@@ -111,6 +131,8 @@ ReprintResult SendRawData(const std::wstring& printer, const std::wstring& docNa
         result.error = GetLastError();
         return result;
     }
+    // Escritura en bloques de 1 MB; WritePrinter puede aceptar menos de lo
+    // pedido, por eso se avanza con lo realmente escrito.
     size_t offset = 0;
     bool ok = true;
     while (offset < size) {
@@ -123,6 +145,8 @@ ReprintResult SendRawData(const std::wstring& printer, const std::wstring& docNa
         }
         offset += written;
     }
+    // Se cierra el documento aunque haya fallado: lo escrito queda como un
+    // trabajo (incompleto) en la cola destino y el error se informa.
     EndDocPrinter(h.get());
     result.ok = ok;
     return result;

@@ -1,3 +1,4 @@
+// Carpeta temporal privada por proceso y limpieza de restos. Ver TempFiles.h.
 #include "preview/TempFiles.h"
 
 #include <windows.h>
@@ -15,11 +16,13 @@ namespace cola::preview {
 
 namespace {
 
-std::mutex g_mutex;
-std::wstring g_dir;
-bool g_tried = false;
-std::atomic<unsigned> g_counter{0};
+std::mutex g_mutex;                  // protege g_dir y g_tried
+std::wstring g_dir;                  // carpeta privada creada ("" = ninguna)
+bool g_tried = false;                // ya se intentó crearla en este proceso
+std::atomic<unsigned> g_counter{0};  // número del próximo archivo temporal
 
+// %TEMP%\ColaDeImpresion: carpeta común que contiene las carpetas privadas
+// de cada proceso (esta sí hereda los permisos normales de %TEMP%).
 std::wstring BaseDir() {
     wchar_t temp[MAX_PATH] = {};
     GetTempPathW(MAX_PATH, temp);
@@ -30,6 +33,8 @@ std::wstring BaseDir() {
 std::wstring CurrentUserSid() {
     HANDLE token = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return L"";
+    // Primera llamada solo para saber el tamaño de TOKEN_USER (falla a
+    // propósito con ERROR_INSUFFICIENT_BUFFER); la segunda lo llena.
     DWORD size = 0;
     GetTokenInformation(token, TokenUser, nullptr, 0, &size);
     std::vector<BYTE> buffer(size);
@@ -50,16 +55,24 @@ bool CreatePrivateDirectory(const std::wstring& path) {
     const std::wstring sid = CurrentUserSid();
     if (sid.empty()) return false;
     // D:P = DACL protegida (no hereda de %TEMP%); OICI = la heredan archivos y subcarpetas.
+    // (A;OICI;FA;;;<SID>) = un único ACE "Allow, File All access" para el
+    // SID del usuario; nadie más tiene entrada en la DACL.
     const std::wstring sddl = L"D:P(A;OICI;FA;;;" + sid + L")";
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr))
         return false;
+    // La DACL se aplica al crear (no hay un instante sin protección). Falla
+    // si la carpeta ya existe: así nunca se reutiliza una ajena.
     SECURITY_ATTRIBUTES sa{sizeof(sa), sd, FALSE};
     BOOL ok = CreateDirectoryW(path.c_str(), &sa);
     LocalFree(sd);
     return ok != FALSE;
 }
 
+// Borra recursivamente una carpeta y su contenido. Lo que no se pueda borrar
+// (un archivo todavía abierto por otro proceso) se deja; la próxima
+// limpieza al iniciar lo vuelve a intentar. Omite "." y ".." (y cualquier
+// nombre que empiece con punto).
 void DeleteTree(const std::wstring& dir) {
     WIN32_FIND_DATAW fd{};
     HANDLE find = FindFirstFileW((dir + L"\\*").c_str(), &fd);
@@ -75,6 +88,10 @@ void DeleteTree(const std::wstring& dir) {
     RemoveDirectoryW(dir.c_str());
 }
 
+// true si sigue vivo el proceso 'pid' (el que creó una carpeta s<pid>-...).
+// Ante la duda (acceso denegado) se supone vivo para no borrarle la carpeta
+// a otra copia de la app en uso. Un pid reutilizado por otro programa solo
+// hace que la carpeta vieja espere a la siguiente limpieza.
 bool ProcessAlive(DWORD pid) {
     HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
     if (!process) return GetLastError() == ERROR_ACCESS_DENIED;  // existe, pero es de otro usuario
@@ -90,7 +107,9 @@ std::wstring PrivateTempDir() {
     if (g_tried) return g_dir;
     g_tried = true;
     const std::wstring base = BaseDir();
-    CreateDirectoryW(base.c_str(), nullptr);
+    CreateDirectoryW(base.c_str(), nullptr);  // puede existir ya: no importa
+    // Nombre s<pid>-<tick>: el pid permite saber después si su dueño sigue
+    // vivo; el tick evita chocar con una carpeta de un pid reutilizado.
     std::wstring dir = base + util::Format(L"\\s%lu-%llu", GetCurrentProcessId(),
                                            static_cast<unsigned long long>(GetTickCount64()));
     if (CreatePrivateDirectory(dir)) {
@@ -104,6 +123,7 @@ std::wstring PrivateTempDir() {
 std::wstring NewTempPath(const wchar_t* extension) {
     std::wstring dir = PrivateTempDir();
     if (dir.empty()) return L"";
+    // El contador atómico garantiza nombres distintos entre hilos.
     return dir + util::Format(L"\\t%u%ls", ++g_counter, extension ? extension : L"");
 }
 
@@ -114,6 +134,9 @@ void RemovePrivateTempDir() {
     g_tried = false;
 }
 
+// Recorre %TEMP%\ColaDeImpresion: carpetas s<pid>-<tick> de procesos que ya
+// no existen y archivos sueltos r* de versiones anteriores. Después borra
+// las miniaturas viejas "ColaDeImpresion_thumb_*" de la raíz de %TEMP%.
 void CleanupStaleTempFiles() {
     const std::wstring base = BaseDir();
     WIN32_FIND_DATAW fd{};

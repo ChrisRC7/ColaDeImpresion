@@ -1,3 +1,5 @@
+// Interpretación segura del DEVMODE de un trabajo (ver PrintSettings.h) y
+// tabla de papeles estándar para nombrarlos y reconocerlos por medidas.
 #include "core/PrintSettings.h"
 
 #include <cstddef>
@@ -9,6 +11,8 @@ namespace cola::core {
 namespace {
 
 // Tamaños DMPAPER_* habituales (wingdi.h), en décimas de milímetro.
+// Siempre en retrato (ancho <= alto), salvo los que wingdi define apaisados
+// (Ledger, papel continuo). FindPaperBySize compara en ambas orientaciones.
 const PaperInfo kPapers[] = {
     {DMPAPER_LETTER, L"Carta", L"Letter", 2159, 2794},
     {DMPAPER_LETTERSMALL, L"Carta pequeña", L"Letter Small", 2159, 2794},
@@ -56,6 +60,7 @@ const PaperInfo kPapers[] = {
 };
 
 // true si el campo [offset, offset+size) cabe en los bytes que declara dmSize.
+// El tercer parámetro solo sirve para deducir el tipo (y su sizeof) del miembro.
 template <typename Member>
 bool Fits(std::uint16_t dmSize, std::size_t offset, const Member&) {
     return offset + sizeof(Member) <= dmSize;
@@ -69,16 +74,21 @@ PrintSettings ParseDevMode(const DEVMODEW* dm, size_t available) {
     // dmSize está en un desplazamiento fijo: hace falta poder leer al menos hasta ahí.
     constexpr size_t kMinHeader = offsetof(DEVMODEW, dmFields) + sizeof(DWORD);
     if (available && available < kMinHeader) return s;
+    // Un dmSize menor que la cabecera es un DEVMODE corrupto: se ignora.
     if (dm->dmSize < kMinHeader) return s;
+    // Límite efectivo para leer campos: dmSize, recortado a lo realmente
+    // accesible si se indicó (un DEVMODE truncado en los datos del spool).
     std::uint16_t size = dm->dmSize;
     if (available && available < size) size = static_cast<std::uint16_t>(available);
 
+    // Cabecera: se copia tal cual (diagnóstico en la ficha del trabajo).
     s.present = true;
     s.size = dm->dmSize;
     s.driverExtra = dm->dmDriverExtra;
     s.specVersion = dm->dmSpecVersion;
     s.driverVersion = dm->dmDriverVersion;
     s.fields = dm->dmFields;
+    // wcsnlen: dmDeviceName puede no terminar en nulo si ocupa los 32 caracteres.
     s.deviceName.assign(dm->dmDeviceName, wcsnlen(dm->dmDeviceName, CCHDEVICENAME));
 
     const DWORD f = dm->dmFields;
@@ -103,11 +113,15 @@ PrintSettings ParseDevMode(const DEVMODEW* dm, size_t available) {
     COLA_DM_FIELD(DM_MEDIATYPE, dmMediaType, mediaType);
 #undef COLA_DM_FIELD
 
+    // El nombre del formulario es una cadena: se copia hasta el nulo (o los 32
+    // caracteres) y un nombre vacío se trata como no declarado.
     if ((f & DM_FORMNAME) && Fits(size, offsetof(DEVMODEW, dmFormName), dm->dmFormName)) {
         std::wstring form(dm->dmFormName, wcsnlen(dm->dmFormName, CCHFORMNAME));
         if (!form.empty()) s.formName.Set(std::move(form));
     }
     // Valores fuera de rango = el campo no es utilizable aunque el bit esté puesto.
+    // (Algunos controladores ponen el bit con basura o con 0; mostrar "0 copias"
+    // o una orientación inexistente confundiría más que mostrar "—".)
     if (s.copies.valid && s.copies.value < 1) s.copies.valid = false;
     if (s.duplex.valid && (s.duplex.value < DMDUP_SIMPLEX || s.duplex.value > DMDUP_HORIZONTAL)) s.duplex.valid = false;
     if (s.orientation.valid && s.orientation.value != DMORIENT_PORTRAIT && s.orientation.value != DMORIENT_LANDSCAPE)
@@ -121,13 +135,18 @@ PrintSettings ParseDevMode(const DEVMODEW* dm, size_t available) {
 }
 
 const PaperInfo* FindPaper(short code) {
+    // Las entradas con código 0 (sin DMPAPER estándar) nunca se encuentran
+    // por código, solo por medidas.
     for (const auto& p : kPapers)
         if (p.code != 0 && p.code == code) return &p;
     return nullptr;
 }
 
 const PaperInfo* FindPaperBySize(short width, short length) {
+    // Tolerancia de 20 décimas de mm (2 mm): los controladores redondean las
+    // medidas de pulgadas a milímetros de forma distinta.
     auto close = [](short a, short b) { return a - b <= 20 && b - a <= 20; };
+    // Primera coincidencia de la tabla, en retrato o apaisado.
     for (const auto& p : kPapers) {
         if ((close(p.width, width) && close(p.length, length)) || (close(p.width, length) && close(p.length, width)))
             return &p;
@@ -137,14 +156,19 @@ const PaperInfo* FindPaperBySize(short width, short length) {
 
 PaperSize EffectivePaper(const PrintSettings& s) {
     PaperSize out;
+    // 1) Medidas explícitas: mandan sobre el código (documentación de DEVMODE).
     if (s.paperWidth.valid && s.paperLength.valid) {
         out.known = true;
         out.width = s.paperWidth.value;
         out.length = s.paperLength.value;
+        // Es "personalizado" si no hay un código estándar que tenga
+        // exactamente esas medidas.
         const PaperInfo* p = s.paperSize.valid ? FindPaper(s.paperSize.value) : nullptr;
         out.custom = !p || p->width != out.width || p->length != out.length;
         return out;
     }
+    // 2) Solo el código: medidas de la tabla. Un código propio del
+    //    controlador (>= 256) queda desconocido (known = false).
     if (s.paperSize.valid) {
         if (const PaperInfo* p = FindPaper(s.paperSize.value)) {
             out.known = true;
@@ -158,7 +182,9 @@ PaperSize EffectivePaper(const PrintSettings& s) {
 }
 
 bool SameVisibleSettings(const PrintSettings& a, const PrintSettings& b) {
+    // Sin DEVMODE en alguno de los dos no se puede afirmar que coincidan.
     if (!a.present || !b.present) return false;
+    // Dos campos son iguales si ambos faltan, o si ambos existen con el mismo valor.
     auto same = [](const auto& x, const auto& y) { return x.valid == y.valid && (!x.valid || x.value == y.value); };
     return same(a.paperSize, b.paperSize) && same(a.orientation, b.orientation) && same(a.duplex, b.duplex) &&
            same(a.copies, b.copies) && same(a.color, b.color) && same(a.collate, b.collate) &&

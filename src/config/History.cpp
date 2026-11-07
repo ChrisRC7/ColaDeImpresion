@@ -1,3 +1,18 @@
+// Implementación del historial: lectura/escritura de historial.json y
+// estadísticas (ver History.h).
+//
+// Formato del archivo:
+//   { "version": 1,
+//     "entries": [ { "time": <unix>, "server": "...", "printer": "...",
+//                    "document": "...", "user": "...", "machine": "...",
+//                    "pages": N, "size": N, "outcome": "printed|cancelled|failed|removed",
+//                    "position": N, "printPages": "...", "carnet": "...",
+//                    "paper": "...", "orientation": "...", "duplex": "...",
+//                    "binding": "...", "source": "...", "submitted": <unix> }, ... ] }
+// Los campos nuevos se agregan sin subir "version": al leer un registro
+// anterior que no los tiene, los accesores tolerantes de JsonValue devuelven
+// "" o 0, que la UI muestra como "—".
+
 #include "config/History.h"
 
 #include <windows.h>
@@ -8,6 +23,8 @@
 
 namespace cola::config {
 
+// Las claves son estables (en inglés y sin traducir) porque se guardan en el
+// archivo; el texto que ve el operador lo da i18n.
 const wchar_t* JobOutcomeToString(JobOutcome outcome) {
     switch (outcome) {
         case JobOutcome::Cancelled: return L"cancelled";
@@ -26,6 +43,9 @@ JobOutcome JobOutcomeFromString(const std::wstring& text) {
 
 std::uint32_t HistoryEntry::PrintPagesCount() const {
     if (printPages.empty()) return pages;  // registro de una versión anterior
+    // printPages es el texto de la columna (D41, D42); se convierte a número a
+    // mano, dígito a dígito, para rechazar cualquier otro contenido (stoul
+    // aceptaría prefijos como "12 aprox.").
     std::uint64_t value = 0;
     for (wchar_t c : printPages) {
         if (c < L'0' || c > L'9') return 0;  // "—": no determinable
@@ -38,6 +58,7 @@ std::uint32_t HistoryEntry::PrintPagesCount() const {
 History::History(std::wstring path, size_t limit) : path_(std::move(path)), limit_(limit) {}
 
 bool History::Load() {
+    // Se parte de cero: lo que hubiera en memoria se descarta.
     entries_.clear();
     protectFile_ = false;
     JsonValue json;
@@ -46,6 +67,8 @@ bool History::Load() {
     // Un bloqueo momentáneo (antivirus, otra copia de la app reemplazándolo) no
     // es un archivo dañado: se reintenta antes de copiarlo aparte.
     bool loaded = LoadJsonFile(path_, json, &error);
+    // Solo se reintenta si el archivo existe: si no existe es el primer uso
+    // y no hay nada que esperar.
     for (int attempt = 0; !loaded && attempt < 2 && GetFileAttributesW(path_.c_str()) != INVALID_FILE_ATTRIBUTES;
          ++attempt) {
         Sleep(200);
@@ -55,6 +78,9 @@ bool History::Load() {
     if (!loaded) {
         if (GetFileAttributesW(path_.c_str()) != INVALID_FILE_ATTRIBUTES) {
             // Existe pero no se pudo leer (dañado, bloqueado...): se conserva una copia.
+            // (D52) Con la copia hecha, Save puede reemplazar el original sin
+            // perder nada; si ni la copia sale, protectFile_ impide que Save
+            // lo pise con el historial vacío de esta sesión.
             if (CopyFileW(path_.c_str(), BackupPath().c_str(), FALSE)) {
                 util::LogError(L"No se pudo leer el historial %ls (%ls); copia en %ls", path_.c_str(), error.c_str(),
                                BackupPath().c_str());
@@ -66,6 +92,8 @@ bool History::Load() {
         }
         return false;
     }
+    // Cada elemento de "entries" es un registro; si falta "entries" o no es
+    // un arreglo, AsArray() da uno vacío y el historial queda vacío.
     for (const auto& item : json[L"entries"].AsArray()) {
         HistoryEntry e;
         e.timeUnix = item[L"time"].AsInt64();
@@ -88,6 +116,9 @@ bool History::Load() {
         e.submittedUnix = item[L"submitted"].AsInt64();
         entries_.push_back(std::move(e));
     }
+    // Si el límite se bajó desde la última vez, se descartan los más viejos
+    // (están al final). No se marca como "sin guardar": el archivo se
+    // recortará en el próximo Save.
     if (entries_.size() > limit_) entries_.resize(limit_);
     dirty_ = false;
     return true;
@@ -95,6 +126,9 @@ bool History::Load() {
 
 bool History::Save() {
     if (path_.empty() || protectFile_) return false;
+    // Se arma el JSON completo (mismas claves que lee Load) y se escribe de
+    // forma atómica. Las enumeraciones van como texto y los enteros de 64
+    // bits como long long (JsonValue no tiene constructor para uint64).
     JsonValue json = JsonValue::MakeObject();
     json[L"version"] = 1;
     JsonValue list = JsonValue::MakeArray();
@@ -127,6 +161,8 @@ bool History::Save() {
 }
 
 void History::Add(HistoryEntry entry) {
+    // Insertar al principio de un vector es O(n), pero n <= límite (2000) y
+    // ocurre una vez por trabajo terminado: no vale la pena otra estructura.
     entries_.insert(entries_.begin(), std::move(entry));
     if (entries_.size() > limit_) entries_.resize(limit_);
     dirty_ = true;
@@ -147,10 +183,15 @@ void History::SetLimit(size_t limit) {
 
 HistoryStats History::ComputeStats(std::int64_t nowUnix) const {
     HistoryStats stats;
+    // "Hoy" y el día de cada registro se comparan como claves "AAAA-MM-DD"
+    // en hora local (FormatDateKey convierte de UTC a local).
     const std::wstring today = util::FormatDateKey(util::FromUnixSeconds(nowUnix));
+    // La semana es una ventana móvil de 7 × 24 h hacia atrás desde ahora.
     const std::int64_t weekAgo = nowUnix - 7 * 24 * 3600;
     for (const auto& e : entries_) {
+        // Cancelados, fallidos y retirados no consumieron papel (o no se sabe).
         if (e.outcome != JobOutcome::Printed) continue;
+        // Páginas como la columna "Páginas" (D42); 0 si no se pudo determinar.
         const std::uint32_t pages = e.PrintPagesCount();
         std::wstring day = util::FormatDateKey(util::FromUnixSeconds(e.timeUnix));
         stats.pagesPerDay[day] += pages;

@@ -18,6 +18,15 @@
 //    Pausarlo a mitad del envío hacía que la impresora recibiera datos
 //    incompletos (hojas en blanco y la impresora se reiniciaba). Se retiene el
 //    trabajo del servidor, que aparece apenas empieza a llegar.
+//
+// Contexto: D17 (retención automática, pedido del usuario: nada se imprime sin
+// que un operador lo libere) y D18 (al iniciar/conectar se pausa todo). Esta
+// clase solo DECIDE; la pausa real (SetJob con JOB_CONTROL_PAUSE) la hace el
+// QueueMonitor y, si funciona, llama a MarkHeld. Limitación conocida: solo
+// funciona con la app abierta y un trabajo muy pequeño puede empezar a
+// imprimirse antes de que se vea (se pausa igual).
+//
+// Hilos: no es thread-safe; la usa únicamente el hilo del QueueMonitor.
 
 #include <cstdint>
 #include <map>
@@ -29,21 +38,35 @@
 
 namespace cola::core {
 
+// Memoria de la retención automática: qué trabajos ya se evaluaron por
+// impresora y cuáles quedaron pausados por la app (para mostrarlos como
+// "Retenido").
 class AutoHoldTracker {
 public:
     // Registra los trabajos de una impresora y devuelve los ids a pausar.
+    //  printer:       PrinterInfo::name de la cola (clave de seen_).
+    //  jobs:          todos los trabajos actuales de ESA impresora.
     //  enabled:       retener los trabajos que llegan después de la primera vez.
     //  holdExisting:  la primera vez que se ve la impresora (al iniciar/conectar),
     //                 retener también los trabajos que ya estaban en la cola.
+    // Efectos: actualiza seen_ con los ids actuales y limpia de held_ los
+    // trabajos liberados por un operador o que ya salieron de la cola.
+    // Devuelve los ids que el llamador debe pausar (y luego MarkHeld si pudo).
     std::vector<std::uint32_t> Process(const std::wstring& printer, const std::vector<JobInfo>& jobs, bool enabled,
                                        bool holdExisting = false);
 
+    // Anota que la app pausó el trabajo (clave JobInfo::Key) con éxito.
     void MarkHeld(const std::wstring& jobKey) { held_.insert(jobKey); }
+    // true si el trabajo figura como retenido por la app.
     bool IsHeld(const std::wstring& jobKey) const { return held_.count(jobKey) > 0; }
 
     // Marca jobs[i].heldByApp según corresponda.
+    // Solo es "retenido" si además sigue en pausa: uno que la app pausó y luego
+    // alguien reanudó deja de mostrarse así aunque Process aún no lo limpiara.
     void Annotate(std::vector<JobInfo>& jobs) const;
 
+    // Olvida todo (al cambiar de servidor): la próxima vez cada impresora
+    // vuelve a ser "nueva" y sus trabajos existentes se tratan como tales.
     void Reset();
 
 private:
@@ -51,6 +74,9 @@ private:
     std::set<std::wstring> held_;                           // claves de trabajos que pausó la app
 };
 
+// true si conviene pausar este trabajo: no es la copia local de CSR (D39) y no
+// está ya pausado, borrándose ni impreso. Los que se imprimen sí se pausan
+// (la carrera se perdió por poco y aún se puede frenar el resto).
 bool ShouldHold(const JobInfo& job);
 
 }  // namespace cola::core

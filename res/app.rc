@@ -2,12 +2,21 @@
 // La información de versión se llena completa a propósito: un ejecutable sin
 // metadatos (empresa, descripción, copyright) es más propenso a que SmartScreen
 // o un antivirus lo traten como sospechoso.
+// La versión (0.5.17) se actualiza a mano en cada versión, igual que
+// CMakeLists.txt e installer\ColaDeImpresion.iss.
 #include <windows.h>
 
+// Ícono de la aplicación. El de id más bajo es el que muestra el Explorador
+// para el .exe.
 1 ICON "app.ico"
 
+// Manifiesto incrustado (id 1): ejecución asInvoker (D15), DPI y estilos
+// visuales de los controles comunes.
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
 
+// Información de versión (Propiedades > Detalles del .exe). FILEVERSION y
+// PRODUCTVERSION son numéricas (mayor, menor, revisión, compilación); los
+// VALUE de texto son lo que se muestra.
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION 0,5,17,0
 PRODUCTVERSION 0,5,17,0
@@ -19,6 +28,9 @@ FILESUBTYPE VFT2_UNKNOWN
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
+        // Textos en español: 0C0A = español (alfabetización internacional),
+        // 04B0 = 1200 (Unicode). Sin tildes para no depender de la página de
+        // códigos con que rc.exe/windres leen este archivo.
         BLOCK "0C0A04B0"
         BEGIN
             VALUE "CompanyName", "ChrisCorp"
@@ -32,6 +44,7 @@ BEGIN
             VALUE "ProductVersion", "0.5.17.0"
             VALUE "Comments", "Administra las colas de un servidor de impresion: ver, pausar, retener, cancelar, reordenar y previsualizar trabajos. Desarrollado por ChrisCorp para el LAIMI del Instituto Tecnologico de Costa Rica."
         END
+        // Textos en inglés (0409 = inglés de EE. UU., Unicode).
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "ChrisCorp"
@@ -46,6 +59,8 @@ BEGIN
             VALUE "Comments", "Manages the queues of a Windows print server: view, pause, hold, cancel, reorder and preview jobs. Built by ChrisCorp for LAIMI, Costa Rica Institute of Technology."
         END
     END
+    // Idiomas disponibles (pares idioma, página de códigos); deben coincidir
+    // con los bloques de StringFileInfo.
     BLOCK "VarFileInfo"
     BEGIN
         VALUE "Translation", 0x0C0A, 1200, 0x0409, 1200

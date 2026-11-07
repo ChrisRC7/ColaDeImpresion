@@ -1,15 +1,21 @@
+# Carpetas de compilación de CMake (build.ps1 usa build-debug/ y build-release/).
 build/
 build-*/
 out/
+# Paquete portable que genera scripts\build.ps1 -Package (se regenera siempre).
 dist/
+# Binarios y archivos intermedios del compilador/enlazador (MinGW y MSVC).
 *.exe
 *.obj
 *.o
 *.pdb
 *.ilk
+# Configuración local de los editores.
 .vs/
 .vscode/
 CMakeUserPresets.json
+# Ghostscript/GhostPCL/GhostXPS que baja scripts\get-renderers.ps1 (binarios
+# grandes y con licencia AGPL: no se versionan).
 third_party/
 
 # Copias del servidor (spool, logs, historial): contienen datos de usuarios

@@ -13,19 +13,36 @@
     .\scripts\build.ps1 -Config Debug   # Debug
     .\scripts\build.ps1 -Package        # además arma dist\ limpia (sin logs ni historial) y "dist\ColaDeImpresion <versión>.zip"
     .\scripts\build.ps1 -Installer      # además compila el instalador (requiere Inno Setup 6)
+
+.NOTES
+    Pasos: 1) busca la toolchain; 2) configura y compila con CMake en
+    build-release\ o build-debug\ (con pruebas, COLA_BUILD_TESTS=ON);
+    3) ejecuta cola_tests.exe salvo -SkipTests; 4) con -Package o -Installer
+    arma dist\ y el .zip (D45: se hace al terminar cada tarea); 5) con
+    -Installer compila installer\ColaDeImpresion.iss.
+    Cualquier error detiene el script ($ErrorActionPreference = "Stop" y
+    comprobación de $LASTEXITCODE tras cada programa externo).
 #>
 param(
+    # Tipo de compilación de CMake (carpeta build-release o build-debug).
     [ValidateSet("Release", "Debug")] [string]$Config = "Release",
+    # Armar dist\ y "dist\ColaDeImpresion <versión>.zip".
     [switch]$Package,
+    # Además del paquete, compilar el instalador con Inno Setup 6.
     [switch]$Installer,
+    # No ejecutar las pruebas unitarias (cola_tests.exe).
     [switch]$SkipTests
 )
 
 $ErrorActionPreference = "Stop"
+# Raíz del repositorio (este script está en scripts\).
 $root = Split-Path -Parent $PSScriptRoot
 $buildDir = Join-Path $root ("build-" + $Config.ToLower())
 
 # --- Toolchain ---------------------------------------------------------------
+# Solo se buscan rutas conocidas si cmake no está ya en el PATH (p. ej. en una
+# "Developer PowerShell" de Visual Studio). El primer candidato que tenga
+# bin\cmake.exe se antepone al PATH de esta sesión (no se modifica el del sistema).
 if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
     # Además de las rutas habituales, "Herramientas\winlibs" junto a la carpeta del proyecto.
     $sibling = Join-Path (Split-Path -Parent $root) "Herramientas\winlibs\mingw64"
@@ -43,26 +60,38 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
     throw "No se encontró cmake. Instale WinLibs (https://winlibs.com) o Visual Studio y vuelva a intentar."
 }
 
+# Ninja si está disponible (más rápido); si no, el generador predeterminado
+# de CMake. @generator se expande como argumentos sueltos (splatting).
 $generator = @()
 if (Get-Command ninja -ErrorAction SilentlyContinue) { $generator = @("-G", "Ninja") }
 
 # --- Compilación -------------------------------------------------------------
+# CMAKE_BUILD_TYPE sirve a generadores de una sola configuración (Ninja,
+# Makefiles); --config, a los de varias (Visual Studio).
 cmake -S $root -B $buildDir @generator "-DCMAKE_BUILD_TYPE=$Config" -DCOLA_BUILD_TESTS=ON
 if ($LASTEXITCODE -ne 0) { throw "Falló la configuración de CMake" }
 cmake --build $buildDir --config $Config
 if ($LASTEXITCODE -ne 0) { throw "Falló la compilación" }
 
 # --- Pruebas -----------------------------------------------------------------
+# Se busca el ejecutable de pruebas recursivamente porque con Visual Studio
+# queda en una subcarpeta por configuración (Release\, Debug\). Un código de
+# salida distinto de 0 = alguna prueba falló.
 if (-not $SkipTests) {
     $tests = Get-ChildItem -Path $buildDir -Recurse -Filter cola_tests.exe | Select-Object -First 1
     & $tests.FullName
     if ($LASTEXITCODE -ne 0) { throw "Hay pruebas fallidas" }
 }
 
+# Ejecutable principal (misma búsqueda recursiva).
 $exe = Get-ChildItem -Path $buildDir -Recurse -Filter ColaDeImpresion.exe | Select-Object -First 1
 Write-Host "`nEjecutable: $($exe.FullName)"
 
 # --- Carpeta de distribución -------------------------------------------------
+# dist\ se borra y se vuelve a armar desde cero en cada ejecución: .exe,
+# documentación, renderizadores, archivos de ayuda para la prueba en el LAIMI,
+# herramientas de diagnóstico y el .zip. El instalador (.iss) toma de aquí lo
+# que necesita.
 if ($Package -or $Installer) {
     $dist = Join-Path $root "dist"
     $thirdParty = Join-Path $root "third_party\renderers"
@@ -77,6 +106,7 @@ if ($Package -or $Installer) {
     }
     if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
     New-Item -ItemType Directory $dist | Out-Null
+    # MANUAL.md es opcional (SilentlyContinue por si no existe).
     Copy-Item $exe.FullName $dist
     Copy-Item (Join-Path $root "README.md") $dist
     Copy-Item (Join-Path $root "docs\MANUAL.md") $dist -ErrorAction SilentlyContinue
@@ -86,6 +116,9 @@ if ($Package -or $Installer) {
         Copy-Item (Join-Path $thirdParty "*") (Join-Path $dist "renderers")
         Write-Host "Renderizadores (Ghostscript/GhostPCL/GhostXPS) incluidos."
     } else {
+        # Sin renderizadores: se deja una nota que explica cómo agregarlos.
+        # (Dentro de los here-strings @"..."@ todo es contenido del archivo,
+        # por eso los comentarios van fuera.)
         Set-Content -Path (Join-Path $dist "renderers\LEEME.txt") -Encoding utf8 -Value @"
 Copie aquí (opcional) gswin64c.exe, gpcl6win64.exe o gxpswin64.exe y sus DLL
 para habilitar la vista previa de trabajos PostScript, PCL y XPS
@@ -109,6 +142,8 @@ C:\Program Files\gs\.
 \\vtec-laimiprint
 "@
     # Lanzador que conecta directo al servidor del laboratorio (el de servidor-laimi.txt).
+    # %~dp0 = carpeta del .bat; start "" evita que la consola quede abierta.
+    # ASCII porque cmd.exe no lee bien UTF-8 con BOM.
     Set-Content -Path (Join-Path $dist "Abrir vtec-laimiprint.bat") -Encoding ascii -Value @"
 @echo off
 start "" "%~dp0ColaDeImpresion.exe" --laimi
@@ -122,6 +157,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Get-ChildItem -LiteralPath '%~dp0' -Recurse -File | Unblock-File; Write-Host 'Listo: archivos desbloqueados.'"
 pause
 "@
+    # Documentación de pruebas y las herramientas de diagnóstico de tools\
+    # (cola_testjob crea trabajos de prueba; cola_jobinspect muestra la ficha
+    # de cada trabajo en consola), si se compilaron.
     Copy-Item (Join-Path $root "docs\PRUEBAS.md") $dist -ErrorAction SilentlyContinue
     Copy-Item (Join-Path $root "docs\DATOS_DE_IMPRESION.md") $dist -ErrorAction SilentlyContinue
     New-Item -ItemType Directory (Join-Path $dist "herramientas") -Force | Out-Null
@@ -129,6 +167,9 @@ pause
         $found = Get-ChildItem -Path $buildDir -Recurse -Filter $tool | Select-Object -First 1
         if ($found) { Copy-Item $found.FullName (Join-Path $dist "herramientas") }
     }
+    # Instrucciones para quien lleva la carpeta al LAIMI: pasos de la prueba y
+    # novedades de cada versión que conviene verificar. Se actualiza con cada
+    # versión (el texto es el contenido del here-string, sin comentarios dentro).
     Set-Content -Path (Join-Path $dist "LEEME - PRUEBA EN EL LAIMI.txt") -Encoding utf8 -Value @"
 COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
 ======================================
@@ -349,13 +390,18 @@ OPCIONAL
     # Las rutas internas se escriben con "/" (CreateFromDirectory de .NET
     # Framework usa "\", que otros descompresores no entienden).
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    # La versión sale de la línea "project(ColaDeImpresion VERSION x.y.z" de
+    # CMakeLists.txt (única fuente de la versión).
     $version = ([regex]::Match((Get-Content (Join-Path $root "CMakeLists.txt") -Raw),
                                "project\(ColaDeImpresion VERSION ([0-9.]+)")).Groups[1].Value
     $zipName = "ColaDeImpresion $version.zip"
+    # La lista de archivos se toma ANTES de crear el .zip (que también queda
+    # en dist\) para que no se incluya a sí mismo.
     $files = Get-ChildItem $dist -Recurse -File
     $zipPath = Join-Path $dist $zipName
     $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
     try {
+        # Cada archivo entra como "ColaDeImpresion <versión>/<ruta relativa>".
         foreach ($file in $files) {
             $relative = $file.FullName.Substring($dist.Length + 1).Replace("\", "/")
             [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName,
@@ -365,6 +411,9 @@ OPCIONAL
     Write-Host "Distribución lista en $dist (y $zipName)"
 }
 
+# --- Instalador --------------------------------------------------------------
+# ISCC.exe es el compilador de línea de comandos de Inno Setup 6; se busca en
+# las dos carpetas de Program Files. El .iss toma los archivos de dist\.
 if ($Installer) {
     $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
         Where-Object { Test-Path $_ } | Select-Object -First 1

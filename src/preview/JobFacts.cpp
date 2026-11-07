@@ -1,3 +1,5 @@
+// Análisis en segundo plano de los datos de todos los trabajos de la cola.
+// Ver JobFacts.h.
 #include "preview/JobFacts.h"
 
 #include <winspool.h>
@@ -15,11 +17,13 @@ std::wstring JobFactsService::Key(const core::JobInfo& job) {
     const unsigned spooling = (job.rawStatus & JOB_STATUS_SPOOLING) ? 1u : 0u;
     // Si se puede leer NO forma parte de la clave: al liberar el trabajo (pasa a
     // imprimirse) sus datos analizados deben seguir valiendo, para la fila y
-    // para el historial cuando sale de la cola.
+    // para el historial cuando sale de la cola (D42).
+    // Formato: "cola#id|bytes|recibiendo".
     return util::Format(L"%ls#%u|%llu|%u", job.printer.c_str(), job.id,
                         static_cast<unsigned long long>(job.sizeBytes), spooling);
 }
 
+// "cola#id": el mismo trabajo aunque cambie su tamaño o estado.
 std::wstring JobFactsService::IdKey(const core::JobInfo& job) {
     return util::Format(L"%ls#%u", job.printer.c_str(), job.id);
 }
@@ -27,6 +31,8 @@ std::wstring JobFactsService::IdKey(const core::JobInfo& job) {
 void JobFactsService::Remember(const core::JobInfo& job, const std::shared_ptr<const core::ContentFacts>& facts) {
     if (!facts || !facts->analyzed) return;
     auto& slot = latest_[IdKey(job)];
+    // Se reemplaza si no había nada, si lo anterior era parcial, o si lo
+    // nuevo es completo.
     if (!slot || !slot->complete || facts->complete) slot = facts;
 }
 
@@ -34,13 +40,16 @@ std::shared_ptr<const core::ContentFacts> JobFactsService::Find(const core::JobI
     std::lock_guard lock(mutex_);
     auto it = cache_.find(Key(job));
     std::shared_ptr<const core::ContentFacts> exact = it == cache_.end() ? nullptr : it->second;
+    // 1. Análisis con datos para esta misma clave (mismo tamaño).
     if (exact && exact->analyzed) return exact;
+    // 2. Si no, el último análisis con datos del mismo trabajo (D42).
     // Mientras se imprime, el spooler puede informar otro tamaño (0 bytes al
     // final): sigue siendo el mismo trabajo, ya recibido, y valen sus datos.
     if (!(job.rawStatus & JOB_STATUS_SPOOLING)) {
         auto last = latest_.find(IdKey(job));
         if (last != latest_.end()) return last->second;
     }
+    // 3. El resultado vacío (sin datos legibles) o nullptr si nunca se analizó.
     return exact;
 }
 
@@ -71,9 +80,12 @@ void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std:
             if (it != cache_.end() && !it->second->analyzed) cache_.erase(it);
             continue;
         }
+        // Ya analizado, ya en camino, o esperando su turno de reintento.
         if (cache_.count(key) || pending_.count(key)) continue;
         if (auto r = retries_.find(key); r != retries_.end() && now < r->second.notBefore) continue;
         pending_.insert(key);
+        // Tarea del hilo de fondo: lee hasta kMaxBytes solo por la API
+        // (allowFile = false) y analiza. Copia el trabajo y los parámetros.
         worker_.Post([this, job, key, server, overrideDir] {
             auto facts = std::make_shared<core::ContentFacts>();
             SpoolSearch search{server, job.printer, overrideDir};
@@ -91,6 +103,7 @@ void JobFactsService::Request(const std::vector<core::JobInfo>& jobs, const std:
                         retry.notBefore = GetTickCount64() + kIncompleteRetryMs;
                         return;
                     }
+                    // Agotados los intentos: se guarda el resultado vacío.
                 }
                 Remember(job, facts);
                 cache_[key] = std::move(facts);
@@ -109,6 +122,8 @@ void JobFactsService::Store(const core::JobInfo& job, const core::ContentFacts& 
     Remember(job, slot);
 }
 
+// Una tarea que ya esté leyendo termina y guarda su resultado igual (con
+// una clave que quizá ya no se pida); es inofensivo.
 void JobFactsService::Clear() {
     std::lock_guard lock(mutex_);
     worker_.Clear();

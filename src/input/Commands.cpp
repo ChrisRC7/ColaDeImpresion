@@ -1,3 +1,6 @@
+// Tabla de comandos: id estable, texto y atajos predeterminados de cada uno
+// (ver Commands.h).
+
 #include "input/Commands.h"
 
 #include <cwchar>
@@ -10,6 +13,8 @@ namespace {
 // El orden debe coincidir con el enum Command (ver el orden por grupos allí).
 // El id es estable: es lo que se guarda en config.json cuando el usuario
 // reasigna un atajo, así que no debe cambiarse aunque se mueva la fila.
+// Los atajos predeterminados son los que documenta el panel de ayuda (F1);
+// Ctrl+1…Ctrl+9 no están aquí porque son fijos (D19) y los maneja MainWindow.
 const CommandInfo kCommandTable[] = {
     // --- Trabajos ---
     {Command::Pause, L"pause", S::CmdPause, L"Ctrl+P"},
@@ -58,13 +63,18 @@ const CommandInfo kCommandTable[] = {
     {Command::Menu, L"menu", S::CmdMenu, L"F10"},
     {Command::Help, L"help", S::CmdHelp, L"F1"},
 };
+// Comprobación en compilación: si se agrega un comando al enum y no a la
+// tabla (o al revés), el proyecto no compila. No verifica el ORDEN: eso
+// depende de mantener ambas listas alineadas.
 static_assert(sizeof(kCommandTable) / sizeof(kCommandTable[0]) == kCommandCount,
               "kCommandTable debe tener una entrada por Command");
 }  // namespace
 
+// Acceso O(1): la tabla está en el mismo orden que el enum.
 const CommandInfo& GetCommandInfo(Command command) { return kCommandTable[static_cast<int>(command)]; }
 
 bool CommandFromId(const wchar_t* id, Command& out) {
+    // Búsqueda lineal: son ~40 comandos y solo se usa al cargar la configuración.
     for (const auto& info : kCommandTable) {
         if (std::wcscmp(info.id, id) == 0) {
             out = info.command;

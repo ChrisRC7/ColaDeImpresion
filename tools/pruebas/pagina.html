@@ -1,8 +1,18 @@
 <!doctype html>
+<!-- Página de prueba para imprimir desde el navegador: 2 páginas tamaño Carta
+     (una por div gracias a page-break-after) que se abren y lanzan el diálogo de
+     impresión solas a los 500 ms. Sirve para la matriz de pruebas
+     (docs/DATOS_DE_IMPRESION.md) con trabajos de Edge/Chrome. -->
 <html lang="es"><head><meta charset="utf-8"><title>Prueba navegador LAIMI</title>
+<!-- @page fija el papel (Carta vertical) y los márgenes que pide el navegador
+     al imprimir; .p fuerza un salto de página después de la primera hoja. -->
 <style>@page { size: letter portrait; margin: 15mm } h1 { font: 28px sans-serif } .p { page-break-after: always }</style>
 </head><body>
+<!-- Cada página dice su número para verificar en la vista previa de la app
+     que llegaron las 2 y en orden. -->
 <div class="p"><h1>Página 1 de 2 — prueba desde navegador</h1><p>Cola de impresión LAIMI.</p></div>
 <div><h1>Página 2 de 2</h1><p>Fin.</p></div>
+<!-- Abre el diálogo de impresión al cargar; la espera deja que la página
+     termine de dibujarse antes de imprimir. -->
 <script>window.onload = () => setTimeout(() => window.print(), 500);</script>
 </body></html>

@@ -243,6 +243,7 @@ Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
 - [x] Modo "silencioso" que minimiza la app a la bandeja del sistema
 - [x] Exportar historial/estadísticas → a Excel (`.xlsx`) con hoja de resumen (0.5.1)
 - [ ] Vista de estadísticas más completa (gráfico por día, ranking por usuario)
+- [x] Código comentado a detalle en español: cada .h/.cpp de src/, las pruebas, las herramientas, los scripts (incluido make_icon.py), el .rc, el manifiesto, el instalador, la página de prueba, .gitignore/.gitattributes y CMakeLists.txt explican qué hace cada parte y por qué (solo comentarios, sin cambios de comportamiento)
 - [ ] Notificaciones tipo toast de Windows con acciones (cancelar/reanudar)
 - [ ] Registro de qué operador realizó cada acción (auditoría)
 - [ ] Cuotas o límites de páginas por estudiante (idea)

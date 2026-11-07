@@ -1,8 +1,27 @@
 // Tabla de textos de la interfaz. Formato: X(Id, "español", "inglés")
 // Para agregar un texto: añadir una línea aquí y usar i18n::Tr(i18n::S::Id).
 // Los textos con %ls / %u / %d se usan con util::Format.
+//
+// Cómo funciona (X-macro, D16): este archivo NO tiene include guard ni
+// #pragma once a propósito; se incluye tres veces con distintas definiciones
+// de X: en Strings.h para generar el enum i18n::S (toma el Id) y en
+// Strings.cpp para los arreglos kSpanish y kEnglish (toman la 2.ª y la 3.ª
+// columna). Reglas:
+//  - El Id es un identificador de C++ (CamelCase, prefijo por área: Col*,
+//    State*, Menu*, Cmd*, Xls*...). El orden de las líneas no importa para
+//    el código, pero se agrupan por pantalla para encontrarlas.
+//  - Los dos textos deben tener los MISMOS especificadores de formato en el
+//    mismo orden (%ls, %u, %llu...), porque se llaman con los mismos
+//    argumentos; si no, util::Format leería mal la pila.
+//  - "%%" es un "%" literal en los textos que pasan por Format.
+//  - "\t" en un texto de menú separa el atajo, que Windows alinea a la derecha.
+//  - Se pueden escribir acentos y símbolos directamente: el archivo está en
+//    UTF-8 y el compilador lo lee como tal (MSVC con /utf-8, ver
+//    CMakeLists.txt; GCC/MinGW usa UTF-8 por defecto).
+//  - Un texto puede ocupar varias líneas (argumentos de X en líneas aparte).
 
 // --- General ---
+// Textos comunes a varias pantallas.
 X(AppTitle, L"Cola de impresión", L"Print queue")
 X(LocalServer, L"Este equipo", L"This computer")
 X(AllPrinters, L"Todas las impresoras", L"All printers")
@@ -11,6 +30,9 @@ X(Yes, L"Sí", L"Yes")
 X(No, L"No", L"No")
 
 // --- Columnas ---
+// Títulos de las columnas de la tabla de la cola y del historial
+// (ui::ListColumn, JobColumns/HistoryColumns; D30). También se usan como
+// encabezados de la hoja "Historial" del Excel.
 X(ColDocument, L"Documento", L"Document")
 X(ColPrinter, L"Impresora", L"Printer")
 X(ColUser, L"Usuario", L"User")
@@ -31,6 +53,9 @@ X(ColCarnet, L"Carnet", L"Student ID")
 X(ColBinding, L"Presentación", L"Binding")
 
 // --- Páginas ---
+// Formato de cantidades de páginas en la lista y en el panel de detalles.
+// PagesProgress = enviadas / total mientras se imprime. DetailPosition =
+// posición en la cola y prioridad del spooler (1..99).
 X(PagesCount, L"%u págs.", L"%u pp.")
 X(PagesOne, L"1 pág.", L"1 page")
 X(PagesProgress, L"%u/%u págs.", L"%u/%u pp.")
@@ -40,6 +65,9 @@ X(DetailPosition, L"Posición %u · prioridad %u", L"Position %u · priority %u"
 X(DetailFormat, L"Datos: %ls", L"Data: %ls")
 
 // --- Estados de trabajo ---
+// Texto de la columna Estado (core/JobStatus traduce JOB_STATUS_*).
+// StateHeld ("Retenido") = en pausa por la retención automática de la app
+// (heldByApp, D17), para distinguirlo de una pausa manual (StatePaused).
 X(StateQueued, L"En espera", L"Waiting")
 X(StateSpooling, L"Recibiendo", L"Spooling")
 X(StatePrinting, L"Imprimiendo", L"Printing")
@@ -52,6 +80,9 @@ X(StateRestarting, L"Reiniciando", L"Restarting")
 X(StateHeld, L"Retenido", L"Held")
 
 // --- Problemas de impresora ---
+// Estado de la impresora (PRINTER_STATUS_*) que se muestra en la barra de
+// acceso rápido, la barra de estado y las notificaciones. ProblemNotAvailable
+// es también el caso de una impresora que no responde (corte de red, D52).
 X(ProblemOffline, L"Impresora fuera de línea", L"Printer offline")
 X(ProblemPaperJam, L"Papel atascado", L"Paper jam")
 X(ProblemPaperOut, L"Sin papel", L"Out of paper")
@@ -67,12 +98,16 @@ X(ProblemPaperProblem, L"Problema con el papel", L"Paper problem")
 X(ProblemOutOfMemory, L"Impresora sin memoria", L"Printer out of memory")
 
 // --- Resultados de historial ---
+// Columna Resultado del historial (config::JobOutcome, D13/D47). "Retirado"
+// = salió de la cola sin que se pueda saber si se imprimió.
 X(OutcomePrinted, L"Impreso", L"Printed")
 X(OutcomeCancelled, L"Cancelado", L"Cancelled")
 X(OutcomeFailed, L"Falló", L"Failed")
 X(OutcomeRemoved, L"Retirado", L"Removed")
 
 // --- Orden de la cola ---
+// Nombres de los criterios de orden (app::SortBy, D20) en el menú "Ordenar
+// la cola por" y en la barra de estado. SortQueue = orden real de impresión.
 X(SortQueue, L"Orden de la cola", L"Queue order")
 X(SortMachine, L"Equipo", L"Computer")
 X(SortTime, L"Hora de envío", L"Time submitted")
@@ -90,6 +125,10 @@ X(SortCarnet, L"Carnet", L"Student ID")
 X(SortBinding, L"Presentación", L"Binding")
 
 // --- Barra de estado ---
+// Indicadores de la barra inferior. StatusLive / StatusPolling dicen si llegan
+// las notificaciones del spooler o se depende del sondeo (D5). StatusMissingJobs
+// es el aviso de D21 (cJobs mayor que los trabajos enumerados).
+// StatusUnreachablePrinters cuenta las impresoras que no responden.
 X(StatusJobs, L"%u trabajos", L"%u jobs")
 X(StatusOneJob, L"1 trabajo", L"1 job")
 X(StatusNoJobs, L"Cola vacía", L"Queue empty")
@@ -117,11 +156,15 @@ X(StatusHistory, L"Historial · Hoy: %llu págs. (%llu trabajos) · 7 días: %ll
   L"History · Today: %llu pages (%llu jobs) · 7 days: %llu pages")
 
 // --- Búsqueda / entrada ---
+// Texto de ayuda del cuadro de búsqueda (el único EDIT nativo, D8). El mismo
+// cuadro pasa a "modo servidor" al conectar (ServerPlaceholder). En C++ "\\\\"
+// produce las dos barras invertidas de un nombre UNC.
 X(SearchPlaceholder, L"Buscar documento, usuario o equipo  (Ctrl+F)", L"Search document, user or computer  (Ctrl+F)")
 X(ServerPlaceholder, L"Nombre del servidor, p. ej. \\\\SERVIDOR-LAIMI (vacío = este equipo) y Enter",
   L"Server name, e.g. \\\\PRINT-SERVER (empty = this computer) and Enter")
 
 // --- Lista vacía ---
+// Mensajes que se dibujan en el centro de la tabla cuando no hay filas.
 X(EmptyQueueTitle, L"No hay trabajos en la cola", L"No jobs in the queue")
 X(EmptyQueueHint, L"Los trabajos nuevos aparecerán aquí automáticamente", L"New jobs will appear here automatically")
 X(EmptyFilter, L"Ningún trabajo coincide con el filtro", L"No job matches the filter")
@@ -129,6 +172,12 @@ X(EmptyHistory, L"El historial está vacío", L"History is empty")
 X(ServerError, L"No se pudo conectar con el servidor", L"Could not connect to the server")
 
 // --- Vista previa ---
+// Panel de vista previa (ui/PreviewPane) y sus mensajes de error. Cada motivo
+// de "no hay vista previa" tiene su texto para que el operador sepa qué pasó
+// (D21): sin permiso, trabajo aún recibiéndose, trabajo no pausado (D39: no se
+// leen datos que la impresora está consumiendo), lectura incompleta por otra
+// copia de la app (D48), formato sin intérprete como ESC/Page (D26), o falta
+// Ghostscript (D7).
 X(PreviewNoSelection, L"Seleccione un trabajo para ver la vista previa", L"Select a job to preview it")
 X(PreviewLoading, L"Generando vista previa…", L"Generating preview…")
 X(PreviewPage, L"Página %u de %u", L"Page %u of %u")
@@ -173,6 +222,22 @@ X(PreviewTabPreview, L"Vista previa", L"Preview")
 X(PreviewTabSheet, L"Configuración", L"Settings")
 
 // --- Ficha "Configuración" del trabajo ---
+// Ficha que arma app/JobSheet (F7): cada dato con su valor, su ORIGEN (de
+// dónde salió: DEVMODE, datos del trabajo, cálculo...) y su FIABILIDAD
+// (Fiable / Estimado / No determinable, D24). Prefijos:
+//   Sheet*   - títulos de sección y de cada fila.
+//   Value*   - valores mostrados.
+//   Badge*   - etiqueta de fiabilidad.
+//   Bin*     - bandejas (DMBIN_*; D34: nombres propios de la Epson AM-C6000).
+//   Quality*, Media* - calidad y tipo de papel del DEVMODE.
+//   Source*  - lenguaje donde se encontró una opción (PJL, EJL, PrintTicket,
+//              DSC; D25/D29).
+//   Origin*  - texto de "origen" de cada dato.
+//   Note*    - aclaraciones (conflictos entre DEVMODE y datos...).
+//   Reason*  - por qué un dato es estimado o no determinable.
+//   Summary* - resumen corto de copias/caras.
+// Los nombres técnicos (DEVMODE, JOB_INFO_2, EMRI_DEVMODE, dmFields...) se
+// dejan sin traducir a propósito: la ficha también sirve para diagnóstico.
 X(SheetEmpty, L"Sin datos del trabajo", L"No job data")
 X(SheetLegend, L"Fiable: confirmado · Estimado: supuesto o sin confirmar · No determinable: falta información",
   L"Reliable: confirmed · Estimated: assumed or unconfirmed · Cannot be determined: missing information")
@@ -294,6 +359,8 @@ X(OriginSpoolDevModeRecords, L"Registros EMRI_DEVMODE del spool EMF", L"EMRI_DEV
 X(OriginDevModeTechSpool,
   L"DEVMODE del spool EMF (EMRI_DEVMODE); cada campo se usa solo si dmFields lo declara y cabe en dmSize",
   L"EMF spool DEVMODE (EMRI_DEVMODE); each field is used only if dmFields declares it and it fits within dmSize")
+// Diferencia entre el DEVMODE de JOB_INFO_2 y el que de verdad se aplica
+// (el del spool EMF), ver D23.
 X(SheetJobDevMode, L"DEVMODE de JOB_INFO_2", L"JOB_INFO_2 DEVMODE")
 X(ValueJobDevModeStale, L"No coincide con el efectivo: %ls", L"Does not match the effective one: %ls")
 X(DetailJobDevModeStale,
@@ -363,6 +430,7 @@ X(ReasonDependsOnInputs, L"Se calcula con valores estimados o no determinables."
   L"Calculated from estimated or undetermined values.")
 X(ReasonPagesMismatch, L"El spooler y los datos no coinciden en el número de páginas.",
   L"The spooler and the data disagree on the number of pages.")
+// D46/D53: dorso en blanco que Windows cuenta en TotalPages a doble cara.
 X(ReasonBlankBackCounted,
   L"A doble cara el spooler cuenta el dorso en blanco que agrega el controlador Epson: puede ser una página menos (los datos son demasiado grandes para contarlas).",
   L"In duplex the spooler counts the blank back side the Epson driver adds: it may be one page less (the data is too large to count them).")
@@ -374,6 +442,11 @@ X(SummaryPrintPages, L"%u págs. a imprimir", L"%u pages to print")
 X(SummarySidesUnknown, L"caras: no determinable", L"sides: undetermined")
 
 // --- Acciones y mensajes ---
+// Confirmaciones y resultados de las acciones sobre trabajos e impresoras
+// (app/JobActions). ActionSkippedLocalCopy / RedirectLocalCopy: D50 (no se
+// toca la copia local de Client Side Rendering). ConfirmRedirectRaw: D12
+// (reenviar datos RAW a otro driver). Shortcut*: reasignación de atajos en
+// el panel de ayuda.
 X(ConfirmCancelOne, L"¿Cancelar el trabajo \"%ls\"?", L"Cancel the job \"%ls\"?")
 X(ConfirmCancelMany, L"¿Cancelar %u trabajos seleccionados?", L"Cancel %u selected jobs?")
 X(ConfirmPurge, L"¿Eliminar TODOS los trabajos de \"%ls\"?", L"Delete ALL jobs of \"%ls\"?")
@@ -406,6 +479,7 @@ X(ShortcutPrompt, L"Presione la nueva combinación para \"%ls\" (Esc para cancel
 X(ShortcutConflict, L"La combinación %ls ya estaba asignada a \"%ls\"; se reasignó.", L"%ls was assigned to \"%ls\"; it has been reassigned.")
 
 // --- Notificaciones ---
+// Globos de la bandeja del sistema (ui/TrayIcon), según NotifyMode.
 X(NotifyJobDone, L"Impreso: %ls", L"Printed: %ls")
 X(NotifyJobError, L"Error al imprimir: %ls", L"Print error: %ls")
 X(NotifyPrinterProblem, L"%ls: %ls", L"%ls: %ls")
@@ -413,6 +487,13 @@ X(NotifyNewJob, L"Nuevo trabajo de %ls: %ls", L"New job from %ls: %ls")
 X(NotifyHeldJob, L"Trabajo retenido de %ls: %ls (Ctrl+R para liberarlo)", L"Job held from %ls: %ls (Ctrl+R to release)")
 
 // --- Menú principal ---
+// Opciones del menú principal (botón de menú de la cabecera / F10) y del
+// menú del ícono de bandeja.
+// MenuSetLaimi empieza con espacios para que se vea como subopción de
+// MenuConnectLaimi (D54). LaimiServerSaved* informan dónde se guardó el
+// servidor (junto al .exe para todos, o en config.json solo para el usuario).
+// MenuLanguage está a propósito en el OTRO idioma: es la opción para cambiar,
+// y quien no entiende el idioma actual debe poder encontrarla.
 X(MenuConnect, L"Conectar a servidor…\tCtrl+O", L"Connect to server…\tCtrl+O")
 X(MenuServers, L"Servidores recientes", L"Recent servers")
 X(MenuRefresh, L"Actualizar", L"Refresh")
@@ -451,6 +532,7 @@ X(MenuExit, L"Salir", L"Exit")
 X(TrayShow, L"Mostrar", L"Show")
 
 // --- Menú contextual de trabajos ---
+// Clic derecho sobre una fila de la cola.
 X(CtxPause, L"Pausar / reanudar", L"Pause / resume")
 X(CtxPauseBoth, L"Pausar / reanudar trabajo e impresora", L"Pause / resume job and printer")
 X(CtxResume, L"Reanudar", L"Resume")
@@ -463,6 +545,7 @@ X(CtxPreview, L"Vista previa", L"Preview")
 X(CtxCancelUser, L"Cancelar todos los trabajos de %ls", L"Cancel all jobs from %ls")
 
 // --- Menú: orden y acceso rápido ---
+// Submenús de orden de la cola (D20) y de la barra de acceso rápido (D19).
 X(MenuSortBy, L"Ordenar la cola por", L"Sort the queue by")
 X(MenuSortDescending, L"Orden inverso", L"Reverse order")
 X(MenuQuickAccess, L"Acceso rápido a impresoras", L"Printer quick access")
@@ -473,6 +556,9 @@ X(MenuUnpinPrinter, L"Quitar del acceso rápido", L"Unpin from quick access")
 X(QuickAccessEmpty, L"Ninguna impresora fijada todavía", L"No printers pinned yet")
 
 // --- Comandos (panel de ayuda) ---
+// Nombre de cada input::Command en el panel de atajos (F1); los referencia
+// kCommandTable (input/Commands.cpp). Al agregar un comando hay que agregar
+// aquí su Cmd*.
 X(CmdPause, L"Pausar / reanudar trabajo", L"Pause / resume job")
 X(CmdResume, L"Reanudar trabajo", L"Resume job")
 X(CmdTogglePauseBoth, L"Pausar / reanudar trabajo e impresora", L"Pause / resume job and printer")
@@ -514,6 +600,8 @@ X(CmdPinPrinter, L"Fijar / quitar la impresora del acceso rápido", L"Pin / unpi
 X(CmdToggleAutoHold, L"Activar/desactivar retención de trabajos nuevos", L"Toggle holding of new jobs")
 
 // --- Panel de ayuda ---
+// Panel de atajos (ui/HelpOverlay). HelpFixedKeys lista las teclas que no se
+// pueden reasignar (D19: Ctrl+1…9).
 X(HelpTitle, L"Atajos de teclado", L"Keyboard shortcuts")
 X(HelpFooter, L"↑↓ o clic: elegir · Enter, doble clic o clic en la tecla: reasignar · Supr quitar · R restaurar · Esc cerrar",
   L"↑↓ or click: select · Enter, double click or click the key: reassign · Del clear · R restore · Esc close")
@@ -523,6 +611,10 @@ X(HelpFixedKeys,
   L"Fixed: Esc closes / clears · Ctrl+1…9 quick access printer · right click: job menu · Ctrl+wheel: zoom")
 
 // --- Tooltips de la cabecera ---
+// Descripciones emergentes de los botones de la cabecera (ui/HeaderBar) y
+// textos de los botones de pausa (D37: muestran la acción que harán, no el
+// estado). MenuResetColumns*/MenuResetColumnOrder: clic derecho en los
+// títulos de columna (D36/D38).
 X(TipPrinter, L"Elegir impresora (Ctrl+E)", L"Choose printer (Ctrl+E)")
 X(TipTheme, L"Modo claro/oscuro (Ctrl+D)", L"Light/dark mode (Ctrl+D)")
 X(TipMenu, L"Menú (F10)", L"Menu (F10)")
@@ -545,10 +637,16 @@ X(MenuResetColumnOrder, L"Restablecer el orden de las columnas", L"Reset column 
 X(TipDetails, L"Mostrar u ocultar los detalles del trabajo: vista previa y configuración (Ctrl+B)",
   L"Show or hide the job details: preview and settings (Ctrl+B)")
 // --- Total de páginas de la selección (barra inferior) ---
+// D44. StatusSelectionUnknown se agrega al final cuando hay filas con "—".
 X(StatusSelection, L"Selección: %u trabajo(s) · %llu páginas a imprimir", L"Selection: %u job(s) · %llu pages to print")
 X(StatusSelectionHistory, L"Selección: %u trabajo(s) · %llu páginas", L"Selection: %u job(s) · %llu pages")
 X(StatusSelectionUnknown, L" (%u sin determinar)", L" (%u undetermined)")
 // --- Exportar el historial a Excel ---
+// D43. Export*: diálogo de rango de fechas (ui/ExportDialog) y mensajes.
+// ExportFilter es el filtro del diálogo "Guardar como". Xls*: nombres de
+// hojas (máx. 31 caracteres, límite de Excel), títulos y filas del resumen
+// que arma app/HistoryExport. Estos textos quedan dentro del archivo en el
+// idioma activo al exportar.
 X(CmdExportHistory, L"Exportar el historial a Excel", L"Export the history to Excel")
 X(MenuExportHistory, L"Exportar historial a Excel…", L"Export history to Excel…")
 X(BtnExport, L"Exportar a Excel", L"Export to Excel")
@@ -644,6 +742,8 @@ X(XlsNoPrinted, L"No hay trabajos impresos en el historial: esta tabla cuenta so
 X(XlsDate, L"Fecha", L"Date")
 X(XlsHour, L"Hora", L"Hour")
 // --- Acerca de ---
+// Ventana "Acerca de" (ui/AboutDialog). AboutVersion recibe
+// COLA_VERSION_STRING, que CMakeLists.txt define con la versión del proyecto.
 X(TipAbout, L"Acerca de", L"About")
 X(MenuAbout, L"Acerca de…", L"About…")
 X(AboutTitle, L"Acerca de Cola de Impresión", L"About Print Queue")

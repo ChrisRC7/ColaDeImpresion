@@ -1,3 +1,14 @@
+// Análisis de paquetes XPS / OpenXPS con el XPS Object Model y lectura de
+// PrintTickets (Print Schema). Ver XpsPackage.h.
+//
+// Ejemplo de PrintTicket (lo que interpreta ApplyPrintTicket):
+//   <psf:PrintTicket xmlns:psf="..." xmlns:psk="...">
+//     <psf:Feature name="psk:PageMediaSize">
+//       <psf:Option name="psk:ISOA4">
+//         <psf:ScoredProperty name="psk:MediaSizeWidth">
+//           <psf:Value xsi:type="xsd:integer">210000</psf:Value>  (micrones)
+//     <psf:ParameterInit name="psk:JobCopiesAllDocuments">
+//       <psf:Value xsi:type="xsd:integer">2</psf:Value>
 #include "preview/XpsPackage.h"
 
 #include <windows.h>
@@ -25,6 +36,10 @@ std::string Local(const std::string& qualified) {
     return colon == std::string::npos ? qualified : qualified.substr(colon + 1);
 }
 
+// Valor de un atributo entre comillas dobles dentro del texto de una
+// etiqueta (sin '<' ni '>'): Attribute("Option name=\"psk:ISOA4\"", "name")
+// -> "psk:ISOA4". "" si no está. No entiende comillas simples (el Print
+// Schema que generan los drivers usa dobles).
 std::string Attribute(const std::string& tag, const char* attr) {
     std::string key = std::string(attr) + "=\"";
     size_t at = tag.find(key);
@@ -34,6 +49,7 @@ std::string Attribute(const std::string& tag, const char* attr) {
     return end == std::string::npos ? "" : tag.substr(at, end - at);
 }
 
+// Elemento abierto en la pila del recorrido del PrintTicket.
 struct Node {
     std::string kind;  // Feature, Option, ScoredProperty, ParameterInit, Property, Value...
     std::string name;  // valor del atributo name, sin prefijo
@@ -46,6 +62,9 @@ const Node* Nearest(const std::vector<Node>& stack, const char* kind) {
     return nullptr;
 }
 
+// Nombre de opción de PageMediaSize del Print Schema (sin prefijo) ->
+// código DMPAPER. 0 si no está en la tabla (se muestra solo el nombre, y
+// las medidas pueden salir de MediaSizeWidth/Height).
 short PaperCodeFromOption(const std::string& option) {
     struct Entry {
         const char* option;
@@ -62,6 +81,15 @@ short PaperCodeFromOption(const std::string& option) {
     return 0;
 }
 
+// Se llama por cada <Option name="..."> con el nombre de su <Feature>.
+// Traduce las opciones del Print Schema a valores DEVMODE:
+//   PageMediaSize        -> papel (nombre y medidas)
+//   PageOrientation      -> orientación (Reverse* se trata igual que la normal)
+//   *Duplex*             -> una cara / borde largo / borde corto
+//   PageOutputColor      -> color / escala de grises
+//   *Collate*            -> intercalado
+// 'any' pasa a true si la característica es una de estas (aunque la opción
+// concreta no se reconozca).
 void OnOption(const std::string& feature, const std::string& option, core::ContentFacts& facts, bool& any) {
     if (feature == "PageMediaSize") {
         facts.paperName.Set(util::FromUtf8(option));
@@ -90,6 +118,13 @@ void OnOption(const std::string& feature, const std::string& option, core::Conte
     }
 }
 
+// Se llama por cada <Value>texto</Value>; el significado depende de los
+// elementos que lo contienen (pila):
+//   ParameterInit JobCopiesAllDocuments     -> copias del trabajo
+//   ParameterInit DocumentCopiesAllPages    -> multiplica las copias
+//   Feature PageMediaSize / ScoredProperty MediaSizeWidth|Height -> medidas
+//   ScoredProperty PagesPerSheet en *NUp*   -> páginas por cara (N-up)
+// Los valores no numéricos dan 0 con strtol y se ignoran.
 void OnValue(const std::vector<Node>& stack, const std::string& text, core::ContentFacts& facts, bool& any) {
     const Node* param = Nearest(stack, "ParameterInit");
     const Node* scored = Nearest(stack, "ScoredProperty");
@@ -104,6 +139,7 @@ void OnValue(const std::vector<Node>& stack, const std::string& text, core::Cont
         any = true;
     } else if (scored && feature && feature->name == "PageMediaSize" && value > 0) {
         // Micrones -> décimas de milímetro.
+        // (100 micrones = 0,1 mm; se limita al máximo de un short, como en DEVMODE.)
         short tenths = static_cast<short>(std::min<long>(value / 100, 32767));
         if (scored->name == "MediaSizeWidth") facts.paperWidth.Set(tenths);
         if (scored->name == "MediaSizeHeight") facts.paperLength.Set(tenths);
@@ -115,6 +151,7 @@ void OnValue(const std::vector<Node>& stack, const std::string& text, core::Cont
     }
 }
 
+// Lee un IStream completo a una cadena (en bloques de 8 KB, hasta ~4 MB).
 std::string ReadAll(IStream* stream) {
     std::string out;
     char buffer[8192];
@@ -126,6 +163,8 @@ std::string ReadAll(IStream* stream) {
     return out;
 }
 
+// XML del PrintTicket, o "" si el nivel no tiene ticket (es opcional en
+// cada nivel del paquete).
 std::string TicketXml(IXpsOMPrintTicketResource* ticket) {
     if (!ticket) return "";
     ComPtr<IStream> stream;
@@ -137,13 +176,16 @@ std::string TicketXml(IXpsOMPrintTicketResource* ticket) {
 
 bool ApplyPrintTicket(const std::string& xml, core::ContentFacts& facts) {
     bool any = false;
-    std::vector<Node> stack;
+    std::vector<Node> stack;  // elementos abiertos, del más externo al más interno
     size_t pos = 0;
+    // Cada vuelta toma una etiqueta "<...>" completa; 'pos' queda justo
+    // después de ella (donde empieza el texto, si lo hay).
     while ((pos = xml.find('<', pos)) != std::string::npos) {
         size_t end = xml.find('>', pos);
         if (end == std::string::npos) break;
         std::string tag = xml.substr(pos + 1, end - pos - 1);
         pos = end + 1;
+        // Declaración XML (<?xml ...?>) y comentarios (<!-- -->): se saltan.
         if (tag.empty() || tag[0] == '?' || tag[0] == '!') continue;
         if (tag[0] == '/') {
             std::string kind = Local(tag.substr(1));
@@ -155,12 +197,14 @@ bool ApplyPrintTicket(const std::string& xml, core::ContentFacts& facts) {
             }
             continue;
         }
+        // Etiqueta de apertura: tipo (nombre local del elemento) y atributo name.
         const bool selfClosing = tag.back() == '/';
         size_t nameEnd = tag.find_first_of(" \t\r\n/");
         Node node{Local(tag.substr(0, nameEnd)), Local(Attribute(tag, "name"))};
         if (node.kind == "Option") {
             if (const Node* feature = Nearest(stack, "Feature")) OnOption(feature->name, node.name, facts, any);
         }
+        // El texto de <Value> va desde aquí hasta la siguiente etiqueta.
         if (node.kind == "Value" && !selfClosing) {
             size_t textEnd = xml.find('<', pos);
             if (textEnd == std::string::npos) break;
@@ -180,11 +224,14 @@ bool AnalyzeXpsPackage(const std::uint8_t* data, size_t size, core::ContentFacts
         if (error) *error = util::Format(L"%ls: 0x%08lX", step, static_cast<unsigned long>(hr));
         return false;
     };
+    // SHCreateMemStream recibe el tamaño como UINT: más de 4 GB no se admite.
     if (!data || size == 0 || size > 0xFFFFFFFFull) return fail(E_INVALIDARG, L"datos");
     ComPtr<IStream> stream;
     *stream.Put() = SHCreateMemStream(data, static_cast<UINT>(size));
     if (!stream) return fail(E_OUTOFMEMORY, L"SHCreateMemStream");
 
+    // IXpsOMObjectFactory1 (Windows 8+) abre también OpenXPS (el formato de
+    // los drivers v4); la fábrica original solo entiende MS XPS.
     ComPtr<IXpsOMObjectFactory1> factory;
     HRESULT hr = CoCreateInstance(__uuidof(XpsOMObjectFactory), nullptr, CLSCTX_INPROC_SERVER,
                                   __uuidof(IXpsOMObjectFactory1), factory.PutVoid());
@@ -195,6 +242,8 @@ bool AnalyzeXpsPackage(const std::uint8_t* data, size_t size, core::ContentFacts
 
     ComPtr<IXpsOMDocumentSequence> sequence;
     if (FAILED(hr = package->GetDocumentSequence(sequence.Put())) || !sequence) return fail(hr, L"GetDocumentSequence");
+    // Orden trabajo -> documento -> página: cada nivel pisa lo que declara
+    // el anterior, así el más específico prevalece.
     ComPtr<IXpsOMPrintTicketResource> jobTicket;
     sequence->GetPrintTicketResource(jobTicket.Put());
     ApplyPrintTicket(TicketXml(jobTicket.Get()), facts);
@@ -225,6 +274,7 @@ bool AnalyzeXpsPackage(const std::uint8_t* data, size_t size, core::ContentFacts
                 ApplyPrintTicket(TicketXml(pageTicket.Get()), facts);
             }
         }
+        // Cada referencia de página es una FixedPage (no se cargan sus partes).
         pages += count;
     }
     facts.pageSource = core::ContentFacts::PageSource::XpsFixedPages;

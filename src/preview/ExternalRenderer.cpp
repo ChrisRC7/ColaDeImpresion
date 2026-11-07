@@ -1,3 +1,9 @@
+// Búsqueda de los intérpretes Ghostscript/GhostPCL/GhostXPS y ejecución de
+// uno de ellos sobre los datos de un trabajo. Ver ExternalRenderer.h.
+//
+// Flujo de RenderExternal: datos -> archivo temporal privado (D27) ->
+// proceso oculto que escribe un PNG por página -> se cargan los PNG como
+// páginas bitmap -> se borran todos los archivos intermedios.
 #include "preview/ExternalRenderer.h"
 
 #include <windows.h>
@@ -16,11 +22,14 @@ namespace cola::preview {
 
 namespace {
 
+// true si la ruta existe y es un archivo (no una carpeta).
 bool FileExists(const std::wstring& path) {
     DWORD attr = GetFileAttributesW(path.c_str());
     return attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+// Subcarpetas directas de 'dir' (rutas completas), sin "." ni "..".
+// Se usa para "C:\Program Files\gs\gs10.05.0" y similares.
 std::vector<std::wstring> ListSubdirs(const std::wstring& dir) {
     std::vector<std::wstring> result;
     WIN32_FIND_DATAW fd{};
@@ -38,9 +47,18 @@ std::vector<std::wstring> ListSubdirs(const std::wstring& dir) {
     return result;
 }
 
+// Primer ejecutable encontrado de 'names' (en orden de preferencia: 64 bits
+// primero). Orden de búsqueda:
+//   1. carpeta "renderers" junto al .exe (la que trae el paquete);
+//   2. "%ProgramFiles%\gs\<versión>\bin", de la versión más nueva a la más
+//      vieja, y "%ProgramFiles%\gs";
+//   3. el PATH del sistema (SearchPathW).
+// "" si no aparece en ningún lado.
 std::wstring FindExecutable(const std::vector<std::wstring>& names) {
     std::vector<std::wstring> roots;
     roots.push_back(config::ExecutableDir() + L"\\renderers");
+    // ProgramW6432 apunta a "Program Files" de 64 bits aunque el proceso sea
+    // de 32 bits; ProgramFiles es la alternativa.
     wchar_t programFiles[MAX_PATH] = {};
     if (GetEnvironmentVariableW(L"ProgramW6432", programFiles, MAX_PATH) ||
         GetEnvironmentVariableW(L"ProgramFiles", programFiles, MAX_PATH)) {
@@ -58,6 +76,10 @@ std::wstring FindExecutable(const std::vector<std::wstring>& names) {
     return L"";
 }
 
+// Escribe el búfer completo en un archivo nuevo (o lo reemplaza), sin
+// compartirlo y con FILE_ATTRIBUTE_TEMPORARY (el sistema intenta mantenerlo
+// en caché sin bajarlo a disco). WriteFile acepta un DWORD por llamada:
+// se escribe en bloques de 16 MB. false si algo falla (GetLastError da el motivo).
 bool WriteAll(const std::wstring& path, const std::uint8_t* data, size_t size) {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
@@ -77,6 +99,10 @@ bool WriteAll(const std::wstring& path, const std::uint8_t* data, size_t size) {
 }
 
 // Ejecuta un proceso oculto y espera. Devuelve el código de salida o -1.
+// Sin ventana de consola (CREATE_NO_WINDOW) y con prioridad por debajo de lo
+// normal para no frenar la UI ni el resto del equipo. Si se pasa de
+// timeoutMs se termina el proceso y error recibe "timeout" (el código
+// devuelto es entonces -1). No hereda handles.
 int RunHidden(const std::wstring& commandLine, unsigned timeoutMs, std::wstring* error) {
     STARTUPINFOW si{};
     si.cb = sizeof(si);
@@ -102,6 +128,8 @@ int RunHidden(const std::wstring& commandLine, unsigned timeoutMs, std::wstring*
     return static_cast<int>(code);
 }
 
+// Extensión del archivo de entrada. Ghostscript decide algunos detalles por
+// la extensión; ".prn" para PCL (GhostPCL detecta el lenguaje por contenido).
 const wchar_t* ExtensionFor(DataFormat format) {
     switch (format) {
         case DataFormat::Pdf: return L".pdf";
@@ -113,6 +141,8 @@ const wchar_t* ExtensionFor(DataFormat format) {
 
 }  // namespace
 
+// Cada intérprete se busca por separado; se aceptan los nombres de 64 bits,
+// de 32 bits y genéricos (compilaciones propias).
 RendererPaths DetectRenderers(const RendererPaths& configured) {
     RendererPaths p = configured;
     if (p.ghostscript.empty() || !FileExists(p.ghostscript))
@@ -154,6 +184,8 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
         result.error = util::Win32ErrorMessage(ERROR_ACCESS_DENIED);
         return result;
     }
+    // Entrada: <base>.ps/.pdf/.xps/.prn. Salida: <base>_p001.png, _p002.png...
+    // (%03d lo sustituye el propio Ghostscript por el número de página).
     const std::wstring input = base + ExtensionFor(format);
     const std::wstring outputPattern = base + L"_p%03d.png";
     if (!WriteAll(input, data + skip, size - skip)) {
@@ -161,6 +193,15 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
         return result;
     }
 
+    // Opciones (comunes a Ghostscript, GhostPCL y GhostXPS):
+    //   -dSAFER          : el documento no puede leer/escribir archivos ajenos
+    //                      (los datos vienen de terceros);
+    //   -dBATCH -dNOPAUSE: sin interacción, salir al terminar;
+    //   -dQUIET          : sin mensajes en la consola;
+    //   -sDEVICE=png16m  : PNG a color de 24 bits, una imagen por página;
+    //   -r<dpi>          : resolución;
+    //   -dTextAlphaBits=4 -dGraphicsAlphaBits=4: suavizado de texto y gráficos;
+    //   -dFirstPage/-dLastPage: solo las páginas pedidas (vista por partes).
     std::wstring cmd = util::Format(
         L"\"%ls\" -dSAFER -dBATCH -dNOPAUSE -dQUIET -sDEVICE=png16m -r%d -dTextAlphaBits=4 -dGraphicsAlphaBits=4 "
         L"-dFirstPage=%d -dLastPage=%d -sOutputFile=\"%ls\" \"%ls\"",
@@ -169,6 +210,10 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
     int code = RunHidden(cmd, timeoutMs, &runError);
 
     // Recoge las páginas generadas (el patrón empieza en 1 aunque firstPage > 1).
+    // Se cargan en orden hasta el primer número que falte (el documento tenía
+    // menos páginas que las pedidas, o el intérprete se detuvo). Cada PNG se
+    // carga limitado a 20000 px por lado y se borra enseguida (D27). Se
+    // recogen aunque el código de salida sea de error: lo ya generado sirve.
     for (int i = 1; i <= lastPage - firstPage + 1; ++i) {
         std::wstring png = util::Format(L"%ls_p%03d.png", base.c_str(), i);
         if (!FileExists(png)) break;
@@ -179,6 +224,7 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
     // Limpia archivos sobrantes (si lastPage excedía el documento no hay más).
     DeleteFileW(input.c_str());
 
+    // Solo es error si no salió ninguna página.
     if (result.pages.empty()) {
         result.error = runError.empty() ? util::Format(L"exit code %d", code) : runError;
         util::LogError(L"Render externo falló (%ls): %ls", exe.c_str(), result.error.c_str());

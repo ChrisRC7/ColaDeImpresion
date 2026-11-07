@@ -1,3 +1,7 @@
+// Cálculo de páginas, copias, caras y hojas con su fiabilidad (ver el
+// encabezado PageAccounting.h y docs/DATOS_DE_IMPRESION.md para las reglas y
+// las pruebas con Word que las respaldan). Todo es lógica pura: recibe el
+// JobInfo y los ContentFacts ya analizados y no llama al spooler.
 #include "core/PageAccounting.h"
 
 #include <winspool.h>
@@ -10,6 +14,7 @@ namespace cola::core {
 
 namespace {
 
+// Orden numérico de la fiabilidad para compararlas (mayor = más fiable).
 int Rank(Reliability r) {
     switch (r) {
         case Reliability::Reliable: return 2;
@@ -18,6 +23,7 @@ int Rank(Reliability r) {
     }
 }
 
+// Construye una Quantity en una línea (azúcar para el resto del archivo).
 Quantity Make(std::uint32_t value, Reliability reliability, Basis basis, Reason reason = Reason::None) {
     Quantity q;
     q.value = value;
@@ -27,13 +33,22 @@ Quantity Make(std::uint32_t value, Reliability reliability, Basis basis, Reason 
     return q;
 }
 
+// Valor no determinable, con el motivo.
 Quantity Unknown(Reason reason) { return Make(0, Reliability::Unknown, Basis::None, reason); }
 
+// División entera redondeando hacia arriba (p. ej. 5 páginas a 2 por cara = 3
+// caras). Con b == 0 devuelve a para no dividir por cero.
 std::uint32_t CeilDiv(std::uint32_t a, std::uint32_t b) { return b == 0 ? a : (a + b - 1) / b; }
 
 // Copias según el DEVMODE y los datos, antes de considerar repeticiones de la aplicación.
+//  kind:      familia de los datos (decide qué fuente manda).
+//  dm:        DEVMODE efectivo (el del spool EMF o el de JOB_INFO_2).
+//  fromSpool: dm salió del spool EMF (solo cambia la Basis informada).
+//  facts:     datos analizados o nullptr si no se leyeron.
+//  conflict:  salida; true si DEVMODE y datos documentados no coinciden.
 Quantity ResolveCopies(DataKind kind, const PrintSettings& dm, bool fromSpool, const ContentFacts* facts,
                        bool* conflict) {
+    // Entradas normalizadas: qué dice cada fuente y si es confiable.
     const bool dmValid = dm.copies.valid;
     const std::uint32_t dmCopies = dmValid ? static_cast<std::uint32_t>(dm.copies.value) : 0;
     const bool hasContent = facts && facts->copies.valid && facts->copies.value > 0;
@@ -41,6 +56,7 @@ Quantity ResolveCopies(DataKind kind, const PrintSettings& dm, bool fromSpool, c
     const std::uint32_t contentCopies = hasContent ? facts->copies.value : 0;
     *conflict = dmValid && documented && dmCopies != contentCopies;
 
+    // Ninguna fuente: no se puede decir nada (ni siquiera suponer 1).
     if (!dm.present && !hasContent) return Unknown(Reason::NoDevMode);
 
     switch (kind) {
@@ -49,6 +65,7 @@ Quantity ResolveCopies(DataKind kind, const PrintSettings& dm, bool fromSpool, c
             // los datos solo se tiene el de JOB_INFO_2, que puede estar desactualizado (Word).
             if (dmValid && !facts) return Make(dmCopies, Reliability::Estimated, Basis::DevMode, Reason::DataNotRead);
             if (dmValid) return Make(dmCopies, Reliability::Reliable, fromSpool ? Basis::SpoolDevMode : Basis::DevMode);
+            // DEVMODE sin DM_COPIES: lo normal es 1 copia, pero no está confirmado.
             return Make(1, Reliability::Estimated, Basis::AssumedDefault, Reason::FieldNotDeclared);
         case DataKind::Xps:
             // El PrintTicket es lo que aplica el camino XPS: manda aunque el DEVMODE diga otra cosa.
@@ -64,6 +81,9 @@ Quantity ResolveCopies(DataKind kind, const PrintSettings& dm, bool fromSpool, c
             if (documented)
                 return Make(contentCopies, Reliability::Reliable,
                             dmValid && !*conflict ? Basis::DevModeAndContent : Basis::Content);
+            // Sin datos documentados: el DEVMODE (posiblemente el predeterminado
+            // de la cola) queda como estimado; si además hay un indicio EJL, se
+            // informa ese motivo.
             if (dmValid) {
                 Reason reason = hasContent ? Reason::UndocumentedHint : Reason::RawUnverified;
                 return Make(dmCopies, Reliability::Estimated, Basis::DevMode, reason);
@@ -71,11 +91,15 @@ Quantity ResolveCopies(DataKind kind, const PrintSettings& dm, bool fromSpool, c
             if (hasContent) return Make(contentCopies, Reliability::Estimated, Basis::Content, Reason::UndocumentedHint);
             return Unknown(Reason::RawUnverified);
         default:
+            // Formato desconocido: no se sabe quién aplicaría las copias.
             if (dmValid) return Make(dmCopies, Reliability::Estimated, Basis::DevMode, Reason::KindUnknown);
             return Unknown(Reason::KindUnknown);
     }
 }
 
+// Doble cara según el DEVMODE efectivo y los datos. Devuelve el valor dmDuplex
+// (1 una cara, 2 borde largo, 3 borde corto) con la fiabilidad que da
+// AssessSetting. conflict (salida): DEVMODE y datos documentados no coinciden.
 Quantity ResolveDuplex(DataKind kind, const PrintSettings& dm, const ContentFacts* facts, bool* conflict) {
     const bool dmValid = dm.duplex.valid;
     const bool hasContent = facts && facts->duplex.valid;
@@ -99,9 +123,11 @@ Quantity ResolveDuplex(DataKind kind, const PrintSettings& dm, const ContentFact
 void ApplyDriverSheets(PageAccounting& acc, const ContentFacts* facts) {
     if (!facts || !facts->sheetsCounter.valid || facts->sheetsCounter.value == 0) return;
     const std::uint32_t counter = facts->sheetsCounter.value;
+    // Se guarda el cálculo propio para poder explicar una diferencia en la ficha.
     acc.calculatedSheets = acc.sheets.Known() ? acc.sheets.value : 0;
     acc.sheetsMismatch = acc.sheets.Known() && acc.sheets.value != counter;
     if (!facts->settingsDocumented) return;  // solo indicio: se deja el cálculo
+    // Controlador verificado (D29): su contador reemplaza al cálculo.
     acc.sheets = Make(counter, Reliability::Reliable, Basis::DriverSheets);
     const bool simplex = acc.duplex.value == DMDUP_SIMPLEX && acc.duplex.reliability == Reliability::Reliable;
     if (simplex) {
@@ -119,6 +145,9 @@ void ApplyDriverSheets(PageAccounting& acc, const ContentFacts* facts) {
 Reliability Worst(Reliability a, Reliability b) { return Rank(a) <= Rank(b) ? a : b; }
 
 const PrintSettings& EffectiveDevMode(const JobInfo& job, const ContentFacts* facts, bool* fromSpool) {
+    // Solo en EMF y solo si el análisis encontró un EMRI_DEVMODE (D23). En XPS
+    // o RAW lo que manda está en los datos (PrintTicket, PJL...) y se compara
+    // aparte; el DEVMODE de referencia sigue siendo el de JOB_INFO_2.
     const bool spool = facts && facts->analyzed && facts->kind == DataKind::Emf && facts->spoolDevMode.present;
     if (fromSpool) *fromSpool = spool;
     return spool ? facts->spoolDevMode : job.settings;
@@ -127,6 +156,7 @@ const PrintSettings& EffectiveDevMode(const JobInfo& job, const ContentFacts* fa
 DataKind KindFromJob(const JobInfo& job) {
     const std::wstring dt = util::ToLower(job.datatype);
     const std::wstring pp = util::ToLower(job.printProcessor);
+    // rfind(x, 0) == 0 equivale a "empieza por x" ("NT EMF 1.008", "RAW [FF appended]"...).
     if (dt.rfind(L"nt emf", 0) == 0) return DataKind::Emf;
     if (dt.find(L"xps") != std::wstring::npos || pp == L"ms_xps_proc") return DataKind::Xps;
     if (dt == L"raw" || dt.rfind(L"raw", 0) == 0 || dt == L"text") return DataKind::Pdl;
@@ -136,6 +166,8 @@ DataKind KindFromJob(const JobInfo& job) {
 SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, bool contentDocumented, bool agree,
                                 bool dataRead) {
     SettingAssessment a;
+    // Reglas en orden de prioridad; la primera que aplica decide.
+    // Nadie declara la opción: no determinable (quien llama puede suponer un valor).
     if (!inDevMode && !inContent) {
         a.reason = Reason::FieldNotDeclared;
         return a;
@@ -146,11 +178,13 @@ SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, b
         a.reliability = Reliability::Reliable;
         return a;
     }
+    // Solo los datos, con sintaxis documentada: también fiable.
     if (inContent && contentDocumented) {
         a.basis = Basis::Content;
         a.reliability = Reliability::Reliable;
         return a;
     }
+    // Solo un indicio no documentado (EJL sin verificar): estimado.
     if (inContent && !inDevMode) {
         a.basis = Basis::Content;
         a.reliability = Reliability::Estimated;
@@ -168,14 +202,19 @@ SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, b
     a.basis = Basis::DevMode;
     switch (kind) {
         case DataKind::Emf:
+            // El procesador de impresión aplica el DEVMODE al reproducir el EMF:
+            // fiable si se leyeron los datos (es el del spool, D23).
             a.reliability = dataRead ? Reliability::Reliable : Reliability::Estimated;
             if (!dataRead) a.reason = Reason::DataNotRead;
             break;
         case DataKind::Xps:
+            // En XPS manda el PrintTicket, que no se pudo leer.
             a.reliability = Reliability::Estimated;
             a.reason = Reason::XpsTicketUnread;
             break;
         case DataKind::Pdl:
+            // RAW: el controlador del cliente ya aplicó las opciones; el
+            // DEVMODE del servidor puede ser el predeterminado de la cola (D29).
             a.reliability = Reliability::Estimated;
             a.reason = inContent ? Reason::UndocumentedHint : Reason::RawUnverified;
             break;
@@ -189,8 +228,12 @@ SettingAssessment AssessSetting(DataKind kind, bool inDevMode, bool inContent, b
 
 std::uint32_t RepeatPeriod(const std::vector<std::uint64_t>& hashes) {
     const size_t n = hashes.size();
+    // Se prueban los períodos de menor a mayor; solo los que dividen n y dejan
+    // al menos dos repeticiones (period <= n / 2). O(n²) en el peor caso, pero
+    // n son páginas de un trabajo (pocas).
     for (size_t period = 1; period <= n / 2; ++period) {
         if (n % period != 0) continue;
+        // Cada huella debe ser igual a la de un período antes.
         bool repeats = true;
         for (size_t i = period; i < n && repeats; ++i) repeats = hashes[i] == hashes[i - period];
         if (repeats) return static_cast<std::uint32_t>(period);
@@ -200,15 +243,22 @@ std::uint32_t RepeatPeriod(const std::vector<std::uint64_t>& hashes) {
 
 PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* factsIn) {
     PageAccounting acc;
+    // Un análisis no hecho vale lo mismo que no tener datos.
     const ContentFacts* facts = factsIn && factsIn->analyzed ? factsIn : nullptr;
+    // La familia detectada por contenido manda; si no, se deduce del trabajo.
     acc.kind = facts && facts->kind != DataKind::Unknown ? facts->kind : KindFromJob(job);
     acc.spoolerTotalPages = job.totalPages;
     acc.pagesPrinted = job.pagesPrinted;
+    // Mientras se recibe, TotalPages todavía crece: nada basado en él es fiable.
     const bool spooling = (job.rawStatus & JOB_STATUS_SPOOLING) != 0;
     const PrintSettings& dm = EffectiveDevMode(job, facts, &acc.devModeFromSpool);
+    // Aviso para la ficha: JOB_INFO_2.pDevMode no refleja lo que se aplica (D23).
     acc.jobDevModeStale = acc.devModeFromSpool && job.settings.present && !SameVisibleSettings(job.settings, dm);
 
     // 1. Páginas en los datos (tal como las envió la aplicación).
+    // Se confía en el conteo de los datos solo si se recorrieron completos
+    // (o, en ESC/Page grande, si se contaron todos por bloques, D53) y la
+    // fuente es una de las conocidas. Si no, se cae a TotalPages del spooler.
     const bool contentCounted = facts && (facts->complete || facts->pagesFromAllData) && facts->pages > 0 &&
                                 (facts->pageSource == ContentFacts::PageSource::EmfRecords ||
                                  facts->pageSource == ContentFacts::PageSource::XpsFixedPages ||
@@ -216,43 +266,59 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
                                  facts->pageSource == ContentFacts::PageSource::EscPageFormFeeds);
     if (contentCounted) {
         acc.dataPages = Make(facts->pages, Reliability::Reliable, Basis::ContentPages);
+        // Diferencia con TotalPages (p. ej. el dorso en blanco de ESC/Page, D46):
+        // se marca para explicarla, pero mandan los datos.
         acc.pagesMismatch = job.totalPages != 0 && job.totalPages != facts->pages && !spooling;
     } else if (job.totalPages > 1 && job.totalPages % 2 == 0 && !spooling && facts && facts->spoolerCountsBlankBack) {
         // Puede ser una página menos (impar + dorso en blanco): no se puede saber sin contarlas.
         acc.dataPages = Make(job.totalPages, Reliability::Estimated, Basis::SpoolerTotalPages,
                              Reason::BlankBackCounted);
     } else if (job.totalPages > 0 && !spooling) {
+        // Recibido completo: TotalPages es lo que la aplicación generó.
         acc.dataPages = Make(job.totalPages, Reliability::Reliable, Basis::SpoolerTotalPages);
     } else if (job.totalPages > 0) {
+        // Todavía se recibe: el número puede seguir creciendo.
         acc.dataPages = Make(job.totalPages, Reliability::Estimated, Basis::SpoolerTotalPages, Reason::StillSpooling);
     } else {
         acc.dataPages = Unknown(spooling ? Reason::StillSpooling : Reason::PagesUnknown);
     }
 
     // 2. Páginas lógicas (una copia) y repeticiones hechas por la aplicación.
+    // Si la aplicación hizo las copias repitiendo páginas (Word con "intercalar"
+    // en algunos controladores), los datos traen n = período × repeticiones.
     acc.appCopies = Make(1, Reliability::Reliable, Basis::None);
     const std::uint32_t n = acc.dataPages.value;
+    // Repetición válida: período detectado que divide n y aparece >= 2 veces.
     const bool repeat = acc.dataPages.Known() && facts && facts->repeatPeriod > 0 && n % facts->repeatPeriod == 0 &&
                         n / facts->repeatPeriod >= 2;
     if (!acc.dataPages.Known()) {
         acc.logicalPages = Unknown(acc.dataPages.reason);
         acc.appCopies = Unknown(acc.dataPages.reason);
     } else if (repeat) {
+        // Estimado: dos copias idénticas también podrían ser un documento que
+        // realmente repite su contenido.
         acc.logicalPages = Make(facts->repeatPeriod, Reliability::Estimated, Basis::ContentRepeat, Reason::RepeatDetected);
         acc.appCopies = Make(n / facts->repeatPeriod, Reliability::Estimated, Basis::ContentRepeat, Reason::RepeatDetected);
     } else if (n == 1) {
         // Una sola página no puede contener copias repetidas.
         acc.logicalPages = Make(1, acc.dataPages.reliability, acc.dataPages.basis, acc.dataPages.reason);
     } else if (facts && facts->repeatChecked && contentCounted) {
+        // Se compararon las páginas y no se repiten: las n son de una copia.
         acc.logicalPages = Make(n, acc.dataPages.reliability, acc.dataPages.basis, acc.dataPages.reason);
     } else {
+        // No se pudo comprobar (RAW, datos cortados o sin leer): puede haber
+        // copias hechas por la aplicación dentro de las n páginas.
         acc.logicalPages = Make(n, Reliability::Estimated, acc.dataPages.basis, Reason::PossibleAppCopies);
         acc.appCopies = Make(1, Reliability::Estimated, Basis::AssumedDefault, Reason::PossibleAppCopies);
     }
 
     // 3. Copias solicitadas.
     acc.copies = ResolveCopies(acc.kind, dm, acc.devModeFromSpool, facts, &acc.copiesConflict);
+    // Copias que aplica el controlador/impresora: las del DEVMODE/datos, sin
+    // las repeticiones de la aplicación (que ya están dentro de dataPages).
     acc.deviceCopies = acc.copies;
+    // Columna Páginas (D31): páginas en los datos × copias del controlador. Su
+    // fiabilidad es la peor de las dos y el motivo, el de la que falla.
     if (acc.dataPages.Known() && acc.deviceCopies.Known())
         acc.printPages = Make(acc.dataPages.value * acc.deviceCopies.value,
                               Worst(acc.dataPages.reliability, acc.deviceCopies.reliability), Basis::Calculated,
@@ -260,6 +326,8 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
                                                                                   : acc.deviceCopies.reason);
     else
         acc.printPages = Unknown(!acc.dataPages.Known() ? acc.dataPages.reason : acc.deviceCopies.reason);
+    // Copias totales solicitadas = las del controlador × las repeticiones de
+    // la aplicación (se calcula después de printPages para no contarlas dos veces).
     if (acc.copies.Known() && repeat) {
         acc.copies = Make(acc.copies.value * acc.appCopies.value, Reliability::Estimated, Basis::ContentRepeat,
                           Reason::RepeatDetected);
@@ -279,6 +347,7 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
     acc.duplex = ResolveDuplex(acc.kind, dm, facts, &acc.duplexConflict);
 
     // 6. Caras físicas previstas.
+    // caras = ceil(páginas lógicas / N-up) por copia × copias totales.
     if (!acc.logicalPages.Known() || !acc.copies.Known()) {
         acc.sides = Unknown(!acc.logicalPages.Known() ? acc.logicalPages.reason : acc.copies.reason);
         acc.sheets = acc.sides;
@@ -297,6 +366,8 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
     } else {
         sidesRel = Worst(sidesRel, Reliability::Estimated);  // se supone 1 página por cara
     }
+    // Motivo: si lo único dudoso es el N-up desconocido se dice eso (es la
+    // causa concreta); si no, que depende de entradas no fiables.
     Reason sidesReason = Reason::None;
     if (sidesRel != Reliability::Reliable)
         sidesReason = (logical > 1 && !acc.pagesPerSide.Known() &&
@@ -306,13 +377,18 @@ PageAccounting ComputePageAccounting(const JobInfo& job, const ContentFacts* fac
     acc.sides = Make(perCopy * acc.copies.value, sidesRel, sidesBasis, sidesReason);
 
     // 7. Hojas físicas previstas (cada copia empieza en una hoja nueva).
+    // A doble cara (borde largo o corto) cada hoja lleva dos caras; una copia
+    // con caras impares deja el dorso de su última hoja en blanco.
     const bool twoSided = acc.duplex.value == DMDUP_VERTICAL || acc.duplex.value == DMDUP_HORIZONTAL;
     const std::uint32_t sheetsPerCopy = twoSided ? CeilDiv(perCopy, 2) : perCopy;
+    // Fiabilidad: la peor entre caras y doble cara; el motivo, el de la entrada
+    // que falla (doble cara si las caras eran fiables).
     Reliability sheetsRel = Worst(sidesRel, acc.duplex.reliability);
     acc.sheets = Make(sheetsPerCopy * acc.copies.value, sheetsRel, Basis::Calculated,
                       sheetsRel == Reliability::Reliable ? Reason::None
                                                          : (sidesRel == Reliability::Reliable ? acc.duplex.reason
                                                                                               : sidesReason));
+    // 8. Si el controlador declaró las hojas (EJL), confirman o reemplazan el cálculo.
     ApplyDriverSheets(acc, facts);
     return acc;
 }

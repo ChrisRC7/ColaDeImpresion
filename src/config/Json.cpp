@@ -1,3 +1,6 @@
+// Implementación del JSON mínimo (ver Json.h): parser recursivo descendente,
+// serializador y lectura/escritura de archivos.
+
 #include "config/Json.h"
 
 #include <windows.h>
@@ -11,14 +14,23 @@ namespace cola::config {
 
 namespace {
 
+// Valores vacíos compartidos que devuelven los accesores de solo lectura
+// cuando el tipo no coincide o la clave no existe (se devuelve una referencia,
+// así que tienen que vivir todo el programa).
 const JsonValue kNull;
 const JsonValue::Array kEmptyArray;
 const JsonValue::Object kEmptyObject;
 
+// Parser recursivo descendente sobre el texto UTF-8. Cada Parse* empieza en
+// el primer carácter de su valor y deja pos_ justo después de él. Devuelven
+// false ante cualquier error de sintaxis (sin recuperación).
 class Parser {
 public:
+    // Guarda una referencia: el texto debe vivir mientras dure el parseo.
     explicit Parser(const std::string& text) : s_(text) {}
 
+    // Parsea un único valor que ocupe todo el texto (salvo espacios).
+    // `out` solo se asigna si todo es válido.
     bool Run(JsonValue& out, std::wstring* error) {
         SkipWs();
         if (!ParseValue(out, 0)) {
@@ -34,11 +46,14 @@ public:
     }
 
 private:
+    // Salta los cuatro espacios en blanco que admite JSON.
     void SkipWs() {
         while (pos_ < s_.size() && (s_[pos_] == ' ' || s_[pos_] == '\t' || s_[pos_] == '\n' || s_[pos_] == '\r'))
             ++pos_;
     }
 
+    // Si en pos_ empieza `literal` (true/false/null) lo consume y da true.
+    // compare() tolera que el texto restante sea más corto.
     bool Match(const char* literal) {
         size_t len = std::char_traits<char>::length(literal);
         if (s_.compare(pos_, len, literal) != 0) return false;
@@ -46,6 +61,9 @@ private:
         return true;
     }
 
+    // Decide el tipo de valor por su primer carácter. `depth` limita el
+    // anidamiento a 64 niveles para que un archivo dañado o malicioso
+    // ("[[[[...") no desborde la pila con la recursión.
     bool ParseValue(JsonValue& out, int depth) {
         if (depth > 64 || pos_ >= s_.size()) return false;
         char c = s_[pos_];
@@ -60,9 +78,14 @@ private:
         if (Match("true")) { out = JsonValue(true); return true; }
         if (Match("false")) { out = JsonValue(false); return true; }
         if (Match("null")) { out = JsonValue(); return true; }
+        // Cualquier otra cosa tiene que ser un número.
         return ParseNumber(out);
     }
 
+    // Número. Es más permisivo que el estándar (acepta "+1", "01" o ".5"):
+    // toma la secuencia más larga de caracteres numéricos y la valida con
+    // strtod, que debe consumirla entera. Lo importante es aceptar todo JSON
+    // válido y rechazar basura, no validar al pie de la letra.
     bool ParseNumber(JsonValue& out) {
         size_t start = pos_;
         if (pos_ < s_.size() && (s_[pos_] == '-' || s_[pos_] == '+')) ++pos_;
@@ -72,12 +95,16 @@ private:
         if (start == pos_) return false;
         std::string num = s_.substr(start, pos_ - start);
         char* end = nullptr;
+        // strtod usa la configuración regional "C" del proceso (punto
+        // decimal), que la app no cambia.
         double v = strtod(num.c_str(), &end);
         if (!end || *end != '\0') return false;
         out = JsonValue(v);
         return true;
     }
 
+    // Agrega un punto de código Unicode (de un escape \uXXXX) codificado en
+    // UTF-8: 1 a 4 bytes según su valor.
     static void AppendUtf8(std::string& out, unsigned cp) {
         if (cp < 0x80) {
             out += static_cast<char>(cp);
@@ -96,6 +123,7 @@ private:
         }
     }
 
+    // Lee exactamente 4 dígitos hexadecimales (el XXXX de \uXXXX).
     bool ParseHex4(unsigned& value) {
         if (pos_ + 4 > s_.size()) return false;
         value = 0;
@@ -110,6 +138,9 @@ private:
         return true;
     }
 
+    // Cadena entre comillas. Se acumula en UTF-8 (los bytes del archivo se
+    // copian tal cual y los escapes se decodifican) y al cerrar se convierte
+    // una sola vez a UTF-16.
     bool ParseString(std::wstring& out) {
         if (s_[pos_] != '"') return false;
         ++pos_;
@@ -120,10 +151,13 @@ private:
                 out = util::FromUtf8(utf8);
                 return true;
             }
+            // Carácter normal (incluidos los bytes de secuencias multibyte,
+            // que nunca valen '"' ni barra invertida).
             if (c != '\\') {
                 utf8 += c;
                 continue;
             }
+            // Secuencia de escape: barra invertida + un carácter.
             if (pos_ >= s_.size()) return false;
             char e = s_[pos_++];
             switch (e) {
@@ -138,6 +172,11 @@ private:
                 case 'u': {
                     unsigned cp = 0;
                     if (!ParseHex4(cp)) return false;
+                    // Un sustituto alto (D800-DBFF) seguido de otro \uXXXX
+                    // forma un par UTF-16: se combinan en un solo punto de
+                    // código > 0xFFFF (emojis, etc.). No se valida que el
+                    // segundo sea un sustituto bajo; un sustituto suelto se
+                    // codifica tal cual y FromUtf8 lo cambia por U+FFFD.
                     if (cp >= 0xD800 && cp <= 0xDBFF && pos_ + 6 <= s_.size() && s_[pos_] == '\\' &&
                         s_[pos_ + 1] == 'u') {
                         pos_ += 2;
@@ -148,12 +187,15 @@ private:
                     AppendUtf8(utf8, cp);
                     break;
                 }
+                // Escape desconocido: JSON inválido.
                 default: return false;
             }
         }
+        // Se llegó al final del texto sin la comilla de cierre.
         return false;
     }
 
+    // Arreglo: '[' (valor (',' valor)*)? ']'. No admite coma final.
     bool ParseArray(JsonValue& out, int depth) {
         ++pos_;  // '['
         JsonValue::Array arr;
@@ -178,6 +220,8 @@ private:
         return true;
     }
 
+    // Objeto: '{' (cadena ':' valor (',' ...)*)? '}'. Las claves deben ser
+    // cadenas; una clave repetida se queda con el último valor.
     bool ParseObject(JsonValue& out, int depth) {
         ++pos_;  // '{'
         JsonValue::Object obj;
@@ -209,10 +253,15 @@ private:
         return true;
     }
 
+    // Texto completo y posición actual (en bytes) dentro de él.
     const std::string& s_;
     size_t pos_ = 0;
 };
 
+// Escribe una cadena JSON entre comillas. Se escapan las comillas, la barra
+// invertida y los caracteres de control (con su forma corta o \u00XX); todo
+// lo demás, incluidos acentos y ñ, va como UTF-8 literal, así config.json e
+// historial.json se leen bien a simple vista.
 void EscapeString(std::string& out, const std::wstring& value) {
     out += '"';
     for (char c : util::ToUtf8(value)) {
@@ -237,6 +286,7 @@ void EscapeString(std::string& out, const std::wstring& value) {
     out += '"';
 }
 
+// Salto de línea + indentación del nivel `depth` (nada en modo compacto).
 void NewLine(std::string& out, int indent, int depth) {
     if (indent <= 0) return;
     out += '\n';
@@ -248,6 +298,10 @@ void NewLine(std::string& out, int indent, int depth) {
 const JsonValue::Array& JsonValue::AsArray() const { return IsArray() ? *array_ : kEmptyArray; }
 const JsonValue::Object& JsonValue::AsObject() const { return IsObject() ? *object_ : kEmptyObject; }
 
+// Copia al escribir: si otro JsonValue comparte el mismo arreglo
+// (use_count > 1), se hace una copia propia antes de devolverlo para que la
+// modificación no se vea en la otra copia. Si no es arreglo, se reemplaza el
+// valor entero por un arreglo vacío (se pierde lo anterior).
 JsonValue::Array& JsonValue::MutableArray() {
     if (!IsArray()) {
         *this = JsonValue(Array{});
@@ -257,6 +311,7 @@ JsonValue::Array& JsonValue::MutableArray() {
     return *array_;
 }
 
+// Igual que MutableArray, para objetos.
 JsonValue::Object& JsonValue::MutableObject() {
     if (!IsObject()) {
         *this = JsonValue(Object{});
@@ -272,6 +327,8 @@ const JsonValue& JsonValue::operator[](const std::wstring& key) const {
     return it == object_->end() ? kNull : it->second;
 }
 
+// Versión modificable: pasa por MutableObject (copia al escribir) y el
+// operator[] de std::map, que crea la clave con Null si no existe.
 JsonValue& JsonValue::operator[](const std::wstring& key) { return MutableObject()[key]; }
 
 bool JsonValue::Has(const std::wstring& key) const { return IsObject() && object_->count(key) > 0; }
@@ -288,6 +345,11 @@ void JsonValue::SerializeTo(std::string& out, int indent, int depth) const {
         case Type::Null: out += "null"; break;
         case Type::Bool: out += bool_ ? "true" : "false"; break;
         case Type::Number: {
+            // Enteros (lo más común: ids, tamaños, horas Unix) sin decimales
+            // ni exponente; el resto con 17 cifras significativas, que
+            // alcanzan para recuperar el double exacto al volver a leerlo.
+            // NaN/infinito no existen en JSON; con %.17g saldrían como
+            // "nan"/"inf" (no se espera que aparezcan).
             char buf[64];
             if (std::isfinite(number_) && number_ == std::floor(number_) && std::fabs(number_) < 1e15)
                 snprintf(buf, sizeof(buf), "%.0f", number_);
@@ -298,6 +360,8 @@ void JsonValue::SerializeTo(std::string& out, int indent, int depth) const {
         }
         case Type::String: EscapeString(out, string_); break;
         case Type::Array: {
+            // Cada elemento en su propia línea, un nivel más adentro; el
+            // cierre vuelve al nivel actual. Un arreglo vacío queda "[]".
             out += '[';
             bool first = true;
             for (const auto& item : *array_) {
@@ -311,6 +375,8 @@ void JsonValue::SerializeTo(std::string& out, int indent, int depth) const {
             break;
         }
         case Type::Object: {
+            // Igual que el arreglo; las claves salen en orden alfabético
+            // (orden de std::map).
             out += '{';
             bool first = true;
             for (const auto& [key, value] : *object_) {
@@ -330,6 +396,7 @@ void JsonValue::SerializeTo(std::string& out, int indent, int depth) const {
 
 bool JsonValue::Parse(const std::string& text, JsonValue& out, std::wstring* error) {
     // Ignora BOM UTF-8 si existe.
+    // (Se vuelve a llamar con el texto sin esos 3 bytes.)
     if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF &&
         static_cast<unsigned char>(text[1]) == 0xBB && static_cast<unsigned char>(text[2]) == 0xBF) {
         return Parse(text.substr(3), out, error);
@@ -339,41 +406,55 @@ bool JsonValue::Parse(const std::string& text, JsonValue& out, std::wstring* err
 }
 
 bool LoadJsonFile(const std::wstring& path, JsonValue& out, std::wstring* error) {
+    // Se comparte solo la lectura: si otro proceso lo está escribiendo en ese
+    // momento la apertura falla (y History::Load reintenta, D52) en vez de
+    // leer un archivo a medias.
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                               FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         if (error) *error = util::Win32ErrorMessage(GetLastError());
         return false;
     }
+    // Se lee de una vez todo el archivo (config e historial miden poco).
     LARGE_INTEGER size{};
     GetFileSizeEx(file, &size);
     std::string text(static_cast<size_t>(size.QuadPart), '\0');
     DWORD read = 0;
+    // Un archivo vacío no se lee (ReadFile con 0 bytes); luego falla el parseo.
     BOOL ok = text.empty() || ReadFile(file, text.data(), static_cast<DWORD>(text.size()), &read, nullptr);
     CloseHandle(file);
     if (!ok) {
         if (error) *error = util::Win32ErrorMessage(GetLastError());
         return false;
     }
+    // Por si se leyó menos de lo que decía el tamaño.
     text.resize(read);
     // Bloc de notas y PowerShell 5.1 (-Encoding UTF8) guardan con BOM: se ignora.
+    // (D52: antes un archivo con BOM se leía como vacío y se sobrescribía.)
     if (text.rfind("\xEF\xBB\xBF", 0) == 0) text.erase(0, 3);
     return JsonValue::Parse(text, out, error);
 }
 
 bool SaveJsonFile(const std::wstring& path, const JsonValue& value) {
     std::string text = value.Serialize(2);
+    // Escritura atómica: primero a "<path>.tmp" (sin compartir), luego se
+    // reemplaza el destino con un solo MoveFileEx.
     std::wstring temp = path + L".tmp";
     HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
     DWORD written = 0;
     BOOL ok = WriteFile(file, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+    // Fuerza los datos a disco antes del cambio de nombre: si se va la luz
+    // justo después, no queda un archivo con nombre correcto pero vacío.
     FlushFileBuffers(file);
     CloseHandle(file);
     if (!ok || written != text.size()) {
+        // Escritura fallida: se borra el temporal y el original no se toca.
         DeleteFileW(temp.c_str());
         return false;
     }
+    // REPLACE_EXISTING: sobrescribe el original. WRITE_THROUGH: no vuelve
+    // hasta que el cambio esté en disco.
     return MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 }
 

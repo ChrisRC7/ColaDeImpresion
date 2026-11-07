@@ -1,3 +1,6 @@
+# Git detecta solo qué archivos son texto y normaliza sus finales de línea
+# (LF en el repositorio, los del sistema al hacer checkout).
 * text=auto
+# Imágenes: binarias, nunca se tocan sus bytes ni se muestran como diff.
 *.ico binary
 *.png binary

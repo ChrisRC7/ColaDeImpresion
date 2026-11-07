@@ -34,10 +34,13 @@ std::wstring LdapEscape(const std::wstring& value);
 std::wstring CarnetFilter(const std::vector<std::wstring>& accounts);
 
 // Conexión de solo lectura al directorio del dominio.
+// No es thread-safe: CarnetService la usa desde un único hilo de fondo. La
+// conexión se abre en la primera consulta y se reutiliza mientras funcione.
 class DirectoryReader {
 public:
-    DirectoryReader() = default;
-    ~DirectoryReader();
+    DirectoryReader() = default;  // no conecta todavía (Connect es perezoso)
+    ~DirectoryReader();           // cierra la conexión si quedó abierta
+    // No copiable: la conexión LDAP* tiene un único dueño.
     DirectoryReader(const DirectoryReader&) = delete;
     DirectoryReader& operator=(const DirectoryReader&) = delete;
 
@@ -50,7 +53,12 @@ public:
                      std::wstring& error);
 
 private:
+    // Abre la conexión (si no está abierta): ldap_init al controlador del
+    // dominio, bind Negotiate firmado y lectura de defaultNamingContext del
+    // RootDSE. false con el motivo en `error` si algo falla.
     bool Connect(std::wstring& error);
+    // Cierra la conexión (ldap_unbind) y olvida la raíz; la próxima consulta
+    // vuelve a conectar.
     void Disconnect();
 
     void* ld_ = nullptr;          // LDAP* (wldap32)

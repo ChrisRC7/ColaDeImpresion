@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Manifiesto de la aplicación: res/app.rc lo incrusta en el .exe como
+     recurso RT_MANIFEST (por eso CMakeLists.txt desactiva el manifiesto
+     predeterminado del enlazador). Le dice a Windows qué controles comunes
+     usar, con qué permisos arrancar, en qué versiones de Windows se probó y
+     cómo manejar el DPI. -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
+  <!-- Identidad del ensamblado. La versión de aquí no es la que ve el usuario
+       (esa sale del bloque VERSIONINFO de app.rc); solo identifica el
+       manifiesto, por eso no se actualiza con cada versión. -->
   <assemblyIdentity type="win32" name="ChrisCorp.ColaDeImpresion" version="0.2.0.0" processorArchitecture="*"/>
   <description>Cola de Impresion - gestor de colas de impresion (ChrisCorp)</description>
 
@@ -12,6 +20,8 @@
   </dependency>
 
   <!-- Se ejecuta con los permisos del usuario; "Reiniciar como administrador" eleva a pedido. -->
+  <!-- uiAccess="false": no necesita interactuar con ventanas de mayor
+       integridad (solo lo usan las herramientas de accesibilidad firmadas). -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>
@@ -20,6 +30,9 @@
     </security>
   </trustInfo>
 
+  <!-- Sistemas operativos declarados como soportados. Sin estas entradas,
+       Windows le miente a la app sobre su versión y le aplica modos de
+       compatibilidad; además, un .exe sin ellas parece más "anónimo". -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
       <!-- Windows 10 / 11 y Windows Server 2016/2019/2022 -->
@@ -35,8 +48,16 @@
 
   <asmv3:application>
     <asmv3:windowsSettings>
+      <!-- DPI por monitor: la app escala su interfaz ella misma (Style::Px) y
+           atiende WM_DPICHANGED al pasar a otra pantalla, en vez de que
+           Windows la estire y se vea borrosa. dpiAware (true/pm) es para
+           Windows 8.1 y 10 antiguos; dpiAwareness PerMonitorV2 (Windows 10
+           1703+) además escala la barra de título y los diálogos del sistema. -->
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+      <!-- Página de códigos UTF-8 para las API "A" (ANSI). La app usa las "W"
+           (UTF-16), pero así cualquier texto que pase por una API ANSI o por
+           la biblioteca de C (p. ej. rutas en mensajes) no pierde las tildes. -->
       <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
     </asmv3:windowsSettings>
   </asmv3:application>

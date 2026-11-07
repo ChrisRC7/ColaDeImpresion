@@ -7,6 +7,9 @@
 
 namespace cola::ui {
 
+// Muestra el diálogo centrado sobre owner (que queda deshabilitado mientras
+// tanto) y vuelve cuando el usuario lo cierra. Se abre desde el menú
+// principal ("Acerca de...").
 void ShowAboutDialog(HWND owner);
 
 }  // namespace cola::ui
