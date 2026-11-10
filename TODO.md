@@ -215,6 +215,11 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] (LAIMI) Probar todos los atajos de teclado (principales ya verificados en la PC de desarrollo; falta la lista completa con teclado español)
 - [x] Probar cambio de tema en tiempo real sin reiniciar la app (verificado en PC de desarrollo)
 
+- [x] Revisión de código de la 0.5.17: fallos, corrección propuesta y cómo comprobarla en [docs/FALLOS_DETECTADOS.md](docs/FALLOS_DETECTADOS.md)
+- [ ] Corregir los fallos F1–F7 de `docs/FALLOS_DETECTADOS.md` (memoria liberada en el menú contextual, servidor del LAIMI sobrescrito, "Cancelado" falso en el historial, reenvío parcial que borra el original, nombre del documento abierto como ruta, eventos falsos al fallar la consulta directa, reconexión que vuelve a retener)
+- [ ] Corregir los menores M1–M6 de `docs/FALLOS_DETECTADOS.md`
+- [ ] Mejoras X1–X6 de `docs/FALLOS_DETECTADOS.md` (historial compartido entre copias, historial sin descartes silenciosos, confirmar el borrado, inicio con Windows tras actualizar, selección que no salta sola, no rearmar la tabla sin cambios); varias requieren decisión del usuario antes de implementarlas
+
 Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ---
