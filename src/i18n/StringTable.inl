@@ -466,7 +466,10 @@ X(PrintersPaused, L"Impresoras en pausa: %u", L"Printers paused: %u")
 X(PrintersResumed, L"Impresoras reanudadas: %u", L"Printers resumed: %u")
 X(NoPrinters, L"No hay impresoras en este servidor.", L"There are no printers on this server.")
 X(RedirectDone, L"Trabajo reenviado a %ls (%u páginas).", L"Job redirected to %ls (%u pages).")
-X(RedirectNoData, L"No se pudieron leer los datos del trabajo para reenviarlo.", L"The job data could not be read for redirection.")
+X(RedirectIncomplete,
+  L"No se reenvió: el documento no se pudo convertir completo (%u páginas listas, %ls). El original sigue en su cola.",
+  L"Not redirected: the document could not be fully converted (%u pages ready, %ls). The original is still in its queue.")
+X(RedirectNoData,L"No se pudieron leer los datos del trabajo para reenviarlo.", L"The job data could not be read for redirection.")
 X(RedirectUnsupported, L"No se puede reenviar este formato (%ls) a una impresora con otro driver sin Ghostscript/GhostPCL.",
   L"This format (%ls) cannot be redirected to a printer with a different driver without Ghostscript/GhostPCL.")
 X(RedirectChoose, L"Reenviar a…", L"Redirect to…")

@@ -182,12 +182,30 @@ Settings Settings::FromJson(const JsonValue& json) {
 Settings Settings::Load(const std::wstring& path) {
     JsonValue json;
     std::wstring error;
-    if (!LoadJsonFile(path, json, &error)) {
-        // Que no exista es normal (primer uso): solo se registra si existe
-        // y no se pudo leer o está dañado. No se hace copia aparte como en el
-        // historial: perder preferencias es poco grave.
-        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
-            util::LogError(L"No se pudo leer %ls: %ls", path.c_str(), error.c_str());
+    bool loaded = LoadJsonFile(path, json, &error);
+    // M2: un bloqueo momentáneo (antivirus, otra copia de la app guardándolo)
+    // no es un archivo dañado. Antes se cargaban los valores por defecto y el
+    // primer guardado los escribía encima: se perdían atajos, columnas e
+    // impresoras fijadas. Igual que History::Load (D52): se reintenta dos
+    // veces (solo si el archivo existe; si no, es el primer uso).
+    for (int attempt = 0; !loaded && attempt < 2 && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+         ++attempt) {
+        Sleep(200);
+        json = JsonValue();
+        loaded = LoadJsonFile(path, json, &error);
+    }
+    if (!loaded) {
+        // Que no exista es normal (primer uso). Si existe y sigue ilegible o
+        // está dañado, se guarda una copia antes de que la app escriba encima
+        // la configuración por defecto.
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            const std::wstring backup = DamagedCopyPath(path);
+            if (CopyFileW(path.c_str(), backup.c_str(), FALSE))
+                util::LogError(L"No se pudo leer %ls (%ls); copia en %ls", path.c_str(), error.c_str(), backup.c_str());
+            else
+                util::LogError(L"No se pudo leer %ls (%ls) ni copiarlo (%lu)", path.c_str(), error.c_str(),
+                               GetLastError());
+        }
         return Settings{};
     }
     return FromJson(json);

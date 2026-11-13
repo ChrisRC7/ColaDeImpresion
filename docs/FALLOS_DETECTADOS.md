@@ -6,10 +6,14 @@ Resultado de una revisión de lectura del código de la versión 0.5.17
 [mejoras propuestas](#mejoras-propuestas) (X1–X6), con cómo implementarlas y
 cómo saber si funcionaron.
 
-- Ninguno está corregido todavía: este documento es el plan de trabajo.
+- **Estado (2026-11-13):** los fallos F1–F7 y M1–M6 están **corregidos en la
+  0.5.18** (ver la columna "Estado" del resumen y D57 en
+  [CONTEXTO.md](CONTEXTO.md)). Se verificaron con pruebas unitarias y
+  compilación sin warnings; **las pruebas manuales de cada sección siguen
+  pendientes** (no se abrió la app). Las mejoras X1–X6 no están implementadas.
+- Los números de línea de las secciones son los de la 0.5.17.
 - La revisión fue por lectura: no se compiló ni se ejecutó la app. Los fallos
-  están razonados sobre el código, no reproducidos. El primer paso de cada
-  corrección es reproducirlo (o escribir la prueba que falla).
+  están razonados sobre el código, no reproducidos.
 - No se leyeron completos los controles de dibujo de `ui/` (lista, panel de
   vista previa, ayuda, diálogos), `JobSheet`, `XpsPackage` ni la primera mitad
   de `PdlSettings`.
@@ -18,21 +22,21 @@ cómo saber si funcionaron.
 
 ## Resumen
 
-| # | Fallo | Gravedad | Archivo principal |
-|---|---|---|---|
-| F1 | Memoria liberada en "Cancelar todos los de \<usuario\>" | Alta | `app/MainWindow.cpp` |
-| F2 | El servidor del LAIMI se sobrescribe sin querer | Alta | `app/MainWindow.cpp` |
-| F3 | Historial dice "Cancelado" en trabajos que se imprimieron | Media | `app/MainWindow.cpp`, `core/JobTracker` |
-| F4 | Un reenvío parcial borra el trabajo original | Alta | `app/JobActions.cpp` |
-| F5 | El nombre del documento se abre como ruta en la PC del operador | Alta (seguridad) | `preview/PreviewBuilder.cpp` |
-| F6 | Un fallo de la consulta directa genera eventos falsos y re-pausa | Media | `core/QueueMonitor.cpp` |
-| F7 | Reconectar al mismo servidor vuelve a retener todo | Media | `app/MainWindow.cpp` |
-| M1 | Se pierde la selección en el historial | Baja | `app/RowBuilder.cpp` |
-| M2 | `config.json` ilegible un instante = preferencias perdidas | Baja | `config/Settings.cpp` |
-| M3 | Tras cancelar un apagado, la X cierra la app | Baja | `app/MainWindow.cpp` |
-| M4 | Un envío RAW fallido deja un trabajo a medias en el destino | Baja | `preview/Reprint.cpp` |
-| M5 | Vista previa colgada en "Cargando…" tras una excepción | Baja | `preview/PreviewService.cpp` |
-| M6 | La retención no reintenta una pausa que falló | Media | `core/QueueMonitor.cpp` |
+| # | Fallo | Gravedad | Archivo principal | Estado |
+|---|---|---|---|---|
+| F1 | Memoria liberada en "Cancelar todos los de \<usuario\>" | Alta | `app/MainWindow.cpp` | Corregido 0.5.18 (revisión estática; falta la prueba manual) |
+| F2 | El servidor del LAIMI se sobrescribe sin querer | Alta | `app/MainWindow.cpp` | Corregido 0.5.18 con la opción simple (la marca se apaga en `Connect` y `Find`); falta la prueba manual |
+| F3 | Historial dice "Cancelado" en trabajos que se imprimieron | Media | `app/MainWindow.cpp`, `core/JobTracker` | Corregido 0.5.18 (prueba `FailedCancelDoesNotMarkHistoryAsCancelled`) |
+| F4 | Un reenvío parcial borra el trabajo original | Alta | `app/JobActions.cpp` | Corregido 0.5.18 (prueba `RedirectCompleteDecision`); falta probar con Ghostscript |
+| F5 | El nombre del documento se abre como ruta en la PC del operador | Alta (seguridad) | `preview/PreviewBuilder.cpp` | Corregido 0.5.18 (prueba `OriginalFileOnlyFromThisMachine`) |
+| F6 | Un fallo de la consulta directa genera eventos falsos y re-pausa | Media | `core/QueueMonitor.cpp` | Corregido 0.5.18 (pruebas `JobListFallbackDecision` y `DegradedJobListKeepsHistoryAndHolds`); falta la prueba en el LAIMI |
+| F7 | Reconectar al mismo servidor vuelve a retener todo | Media | `app/MainWindow.cpp` | Corregido 0.5.18; falta la prueba manual |
+| M1 | Se pierde la selección en el historial | Baja | `app/RowBuilder.cpp` | Corregido 0.5.18 (prueba `HistoryKeysAreStableWhenAdding`; ordinal entre los de la misma hora, no el índice desde el final) |
+| M2 | `config.json` ilegible un instante = preferencias perdidas | Baja | `config/Settings.cpp` | Corregido 0.5.18 (prueba `SettingsDamagedFileIsBackedUp`) |
+| M3 | Tras cancelar un apagado, la X cierra la app | Baja | `app/MainWindow.cpp` | Corregido 0.5.18; falta la prueba manual |
+| M4 | Un envío RAW fallido deja un trabajo a medias en el destino | Baja | `preview/Reprint.cpp` | Corregido 0.5.18; falta la prueba manual |
+| M5 | Vista previa colgada en "Cargando…" tras una excepción | Baja | `preview/PreviewService.cpp` | Corregido 0.5.18; falta la prueba manual |
+| M6 | La retención no reintenta una pausa que falló | Media | `core/QueueMonitor.cpp` | Corregido 0.5.18 (prueba `AutoHoldRetriesFailedPause`) |
 
 Orden sugerido: F1, F2 y F7 (cambios pequeños y seguros), luego F5, F3, F4 y
 F6 (requieren pruebas nuevas), y al final los menores.

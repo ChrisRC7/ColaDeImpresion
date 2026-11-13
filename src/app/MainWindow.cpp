@@ -498,6 +498,12 @@ void MainWindow::ConnectTo(const std::wstring& serverIn) {
     // También cuenta como cambio si todavía no hubo ninguna instantánea
     // (primera conexión al iniciar).
     const bool changed = server != settings_.activeServer || !snapshot_;
+    // El monitor ya vigila este servidor (F7): reiniciarlo haría que viera
+    // todas las impresoras "por primera vez" y, con "pausar todo al iniciar",
+    // volviera a retener los trabajos que el operador ya liberó. Se comprueba
+    // antes de tocar settings_: basta un refresco (la reconexión tras un error
+    // la hace el propio monitor en cada sondeo).
+    const bool sameMonitor = !changed && monitor_->IsRunning() && monitor_->server() == server;
     settings_.activeServer = server;
     // Lista de servidores recientes (el más reciente primero).
     auto& list = settings_.servers;
@@ -532,7 +538,12 @@ void MainWindow::ConnectTo(const std::wstring& serverIn) {
     // conectar (D18); Start reinicia el hilo del monitor con el servidor nuevo.
     monitor_->SetAutoHold(settings_.autoHoldNewJobs);
     monitor_->SetHoldExistingOnStart(settings_.pauseAllOnStart);
-    monitor_->Start(server, settings_.pollIntervalMs);
+    if (sameMonitor) {
+        monitor_->SetPollInterval(settings_.pollIntervalMs);
+        monitor_->RequestRefresh();
+    } else {
+        monitor_->Start(server, settings_.pollIntervalMs);
+    }
     SaveSettings();
     RebuildRows();
     UpdateHeader();
@@ -900,15 +911,17 @@ void MainWindow::RebuildRows() {
     std::vector<ui::ListRow> rows;
     if (historyView_) {
         // Historial: columnas propias, sin indicador de orden; filtrado por
-        // impresora elegida y texto de búsqueda. El índice i va en la clave.
+        // impresora elegida y texto de búsqueda. La clave de cada fila lleva
+        // un ordinal estable (HistoryOrdinals, M1), no el índice.
         list_.SetColumns(HistoryColumns());
         list_.SetSortIndicator(-1, false);
         const auto& entries = history_.Entries();
+        const auto ordinals = HistoryOrdinals(entries);
         for (size_t i = 0; i < entries.size(); ++i) {
             const auto& e = entries[i];
             if (settings_.activePrinter != kAllPrinters && e.printer != settings_.activePrinter) continue;
             if (!HistoryMatchesFilter(e, filter_)) continue;
-            rows.push_back(MakeHistoryRow(e, i));
+            rows.push_back(MakeHistoryRow(e, ordinals[i]));
         }
         list_.SetEmptyText(filter_.empty() ? Tr(S::EmptyHistory) : Tr(S::EmptyFilter), L"", ui::glyph::History);
     } else {
@@ -953,13 +966,16 @@ void MainWindow::UpdateSelectionTotal() {
     const auto keys = list_.SelectedKeys();
     PagesTotal total;
     if (historyView_) {
-        // Historial: las claves son "h<hora>_<índice>"; se recorren los
+        // Historial: las claves son "h<hora>_<ordinal>"; se recorren los
         // registros hasta encontrar todos los seleccionados.
         const std::set<std::wstring> wanted(keys.begin(), keys.end());
         const auto& all = history_.Entries();
         std::vector<const config::HistoryEntry*> entries;
-        for (size_t i = 0; i < all.size() && entries.size() < wanted.size(); ++i)
-            if (wanted.count(HistoryKey(all[i], i))) entries.push_back(&all[i]);
+        if (!wanted.empty()) {
+            const auto ordinals = HistoryOrdinals(all);
+            for (size_t i = 0; i < all.size() && entries.size() < wanted.size(); ++i)
+                if (wanted.count(HistoryKey(all[i], ordinals[i]))) entries.push_back(&all[i]);
+        }
         total = SumHistoryPages(entries);
     } else {
         std::vector<const core::JobInfo*> jobs;
@@ -1255,8 +1271,9 @@ void MainWindow::UpdatePreview() {
         currentPreviewKey_.clear();
         std::wstring key = list_.FocusedKey();
         const auto& entries = history_.Entries();
-        for (size_t i = 0; i < entries.size(); ++i) {
-            if (HistoryKey(entries[i], i) != key) continue;
+        const auto ordinals = key.empty() ? std::vector<size_t>() : HistoryOrdinals(entries);
+        for (size_t i = 0; i < ordinals.size(); ++i) {
+            if (HistoryKey(entries[i], ordinals[i]) != key) continue;
             const auto& e = entries[i];
             std::wstring text = e.document + L"\n\n" + e.user + L" · " + e.machine + L"\n" + PrinterDisplay(e.printer) +
                                 L"\n" + util::FormatTimeIso(util::FromUnixSeconds(e.timeUnix)) + L"\n" +
@@ -1339,6 +1356,8 @@ void MainWindow::Execute(Command command) {
         case Command::ToggleTheme: ToggleTheme(); break;
         case Command::Find:
             // Si el cuadro estaba en modo "servidor", vuelve a ser búsqueda.
+            // Y deja de ser la edición del servidor del LAIMI (F2).
+            editingLaimi_ = false;
             if (header_.InServerMode()) header_.EndServerInput();
             header_.FocusSearch();
             break;
@@ -1368,7 +1387,13 @@ void MainWindow::Execute(Command command) {
         }
         // Conectar: el cuadro de búsqueda pasa a modo servidor con el actual;
         // Enter conecta (WM_COMMAND/HeaderBar -> ConnectTo).
-        case Command::Connect: header_.BeginServerInput(settings_.activeServer); break;
+        // editingLaimi_ se apaga (F2): si quedó encendida por un "Cambiar
+        // servidor del LAIMI…" que se abandonó con un clic fuera del cuadro,
+        // este Enter guardaba el servidor escrito en servidor-laimi.txt.
+        case Command::Connect:
+            editingLaimi_ = false;
+            header_.BeginServerInput(settings_.activeServer);
+            break;
         case Command::History: ToggleHistory(); break;
         case Command::ExportHistory: ExportHistory(); break;
         // Páginas y zoom de la vista previa.
@@ -1658,8 +1683,28 @@ void MainWindow::OnActionResult(const ActionResult& result) {
             RedirectRequest again = result.redirect;
             again.allowRaw = true;
             actions_->Redirect(std::move(again));
+        } else {
+            // El operador no quiso enviar RAW: el original sigue en su cola y
+            // no se canceló, así que se quita la marca (F3).
+            tracker_.ForgetCancelledByUser(result.redirect.job.Key());
         }
         return;
+    }
+    // F3: los trabajos se marcan "cancelado por el operador" antes de ejecutar
+    // la acción (la marca tiene que existir cuando el trabajo desaparezca de
+    // la cola). Si la acción no llegó a quitarlos, la marca se retira: si no,
+    // un trabajo que después se imprime quedaba "Cancelado" en el historial.
+    if (result.action == JobAction::Cancel) {
+        for (const auto& key : result.failedKeys) tracker_.ForgetCancelledByUser(key);
+    } else if (result.action == JobAction::Redirect && (result.succeeded == 0 || !result.failedKeys.empty())) {
+        // Reenvío fallido u omitido, o reenviado pero sin poder cancelar el
+        // original (queda en pausa): el original no se canceló.
+        tracker_.ForgetCancelledByUser(result.redirect.job.Key());
+    } else if (result.action == JobAction::PurgePrinter && snapshot_) {
+        // Cola que no se pudo vaciar: sus trabajos siguen ahí.
+        for (const auto& printer : result.failedPrinters)
+            for (const auto& job : snapshot_->jobs)
+                if (job.printer == printer) tracker_.ForgetCancelledByUser(job.Key());
     }
     // Las acciones sobre impresoras informan solo en la barra de estado: un
     // diálogo modal bloquearía la ventana y es habitual que falten permisos.
@@ -1982,7 +2027,12 @@ void MainWindow::ShowJobContextMenu(POINT screen) {
     if (historyView_) return;
     auto jobs = SelectedJobs();
     if (jobs.empty()) return;
-    const core::JobInfo* focused = FocusedJob();
+    // Se copia el usuario del trabajo con el foco ANTES de abrir el menú (F1):
+    // TrackPopupMenu tiene su propio bucle de mensajes y, mientras el menú
+    // está abierto, llegan WM_APP_SNAPSHOT que reemplazan snapshot_ y liberan
+    // la instantánea a la que apunta FocusedJob(). El puntero no se guarda.
+    std::wstring focusedUser;
+    if (const core::JobInfo* focused = FocusedJob()) focusedUser = focused->user;
     HMENU menu = CreatePopupMenu();
     // Igual que en el menú principal: texto, tabulación y el primer atajo del comando.
     auto keyed = [this](S text, Command command) {
@@ -2007,10 +2057,10 @@ void MainWindow::ShowJobContextMenu(POINT screen) {
     AppendMenuW(menu, MF_STRING, ID_CTX_REDIRECT, keyed(S::CtxRedirect, Command::Redirect).c_str());
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_CTX_PREVIEW, keyed(S::CtxPreview, Command::QuickLook).c_str());
-    if (focused && !focused->user.empty()) {
+    if (!focusedUser.empty()) {
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, ID_CTX_CANCEL_USER,
-                    util::Format(Tr(S::CtxCancelUser), focused->user.c_str()).c_str());
+                    util::Format(Tr(S::CtxCancelUser), focusedUser.c_str()).c_str());
     }
     // TPM_RIGHTBUTTON: los ítems también se eligen con el botón derecho.
     UINT id = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, screen.x, screen.y, 0, hwnd_, nullptr);
@@ -2028,16 +2078,14 @@ void MainWindow::ShowJobContextMenu(POINT screen) {
         case ID_CTX_REDIRECT: StartRedirect(screen); break;
         case ID_CTX_PREVIEW: Execute(Command::QuickLook); break;
         // Cancela todos los trabajos visibles (impresora elegida, sin filtro)
-        // del mismo usuario que el trabajo con el foco. Ojo: `focused` apunta
-        // a la instantánea de antes de abrir el menú; TrackPopupMenu tiene su
-        // propio bucle de mensajes y podría procesar un WM_APP_SNAPSHOT que
-        // la reemplace mientras el menú está abierto.
+        // del mismo usuario que el trabajo que tenía el foco al abrir el menú
+        // (focusedUser, copiado antes: F1). Los trabajos se buscan en la
+        // instantánea ACTUAL, que puede ser más nueva que la de entonces.
         case ID_CTX_CANCEL_USER:
-            if (focused && snapshot_) {
-                std::wstring user = focused->user;
+            if (!focusedUser.empty() && snapshot_) {
                 std::vector<core::JobInfo> userJobs;
                 for (const auto* job : VisibleJobs(*snapshot_, settings_.activePrinter, L""))
-                    if (util::EqualsInsensitive(job->user, user)) userJobs.push_back(*job);
+                    if (util::EqualsInsensitive(job->user, focusedUser)) userJobs.push_back(*job);
                 CancelSelection(userJobs);
             }
             break;
@@ -2574,13 +2622,23 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             DestroyWindow(hwnd_);
             return 0;
         // Windows se apaga o cierra sesión: guardar ya (puede que no llegue
-        // WM_CLOSE) y aceptar el cierre.
+        // WM_CLOSE) y aceptar el cierre. NO se marca reallyQuit_ aquí (M3):
+        // Windows solo pregunta, y si otra aplicación cancela el cierre la
+        // marca quedaba puesta y la X cerraba la app en vez de ocultarla.
         case WM_QUERYENDSESSION:
-            reallyQuit_ = true;
             SaveWindowPlacement();
             SaveSettings();
             history_.Save();
             return TRUE;
+        // Respuesta definitiva: wParam TRUE = la sesión termina de verdad
+        // (ahora sí es una salida real); FALSE = el cierre se canceló y la
+        // app sigue como estaba.
+        case WM_ENDSESSION:
+            if (wParam) {
+                reallyQuit_ = true;
+                if (history_.IsDirty()) history_.Save();
+            }
+            return 0;
         // Quita el ícono, detiene el monitor (deja de retener trabajos) y
         // termina el bucle de mensajes con código 0. Los demás hilos se
         // detienen en el destructor.

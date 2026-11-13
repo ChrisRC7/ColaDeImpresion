@@ -146,9 +146,15 @@ config::HistoryEntry MakeHistoryEntry(const core::JobInfo& job, config::JobOutco
 // Celdas en el orden de HistoryColumns().
 // index: posición del registro en el historial (forma parte de la clave).
 ui::ListRow MakeHistoryRow(const config::HistoryEntry& entry, size_t index);
-// Clave única de la fila de un registro ("h<horaUnix>_<índice>"): sirve para
-// conservar la selección de la lista entre refrescos del historial.
-std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index);
+// Clave única de la fila de un registro ("h<horaUnix>_<ordinal>"): sirve para
+// conservar la selección de la lista entre refrescos del historial. El
+// ordinal sale de HistoryOrdinals (es el segundo parámetro de MakeHistoryRow).
+std::wstring HistoryKey(const config::HistoryEntry& entry, size_t ordinal);
+// Ordinal de cada registro (mismo orden que `entries`, el más nuevo primero):
+// cuántos registros MÁS VIEJOS tienen su misma hora de finalización. Es
+// estable al agregar registros nuevos al principio, así la selección del
+// historial no se pierde cuando termina otro trabajo (M1).
+std::vector<size_t> HistoryOrdinals(const std::vector<config::HistoryEntry>& entries);
 
 // Estado al que debe llevarse un conjunto de trabajos al alternar la pausa:
 // true = pausar (hay alguno corriendo), false = reanudar (todos están en pausa).

@@ -7,7 +7,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # RC: compila res/app.rc (ícono, manifiesto y datos de versión del .exe).
-project(ColaDeImpresion VERSION 0.5.17 LANGUAGES CXX RC)
+project(ColaDeImpresion VERSION 0.5.18 LANGUAGES CXX RC)
 
 # C++20 estricto, sin extensiones del compilador (gnu++20).
 set(CMAKE_CXX_STANDARD 20)

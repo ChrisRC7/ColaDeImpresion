@@ -68,6 +68,13 @@ struct ActionResult {
     unsigned skipped = 0;  // copias locales de CSR que no se tocaron (core::IsLocalCsrCopy)
     DWORD firstError = ERROR_SUCCESS;  // primer código Win32 de error (para el mensaje)
     std::wstring message;  // mensaje listo para mostrar (vacío si no hace falta)
+    // Run: claves (JobInfo::Key) de los trabajos en los que la acción NO se
+    // aplicó (falló o se omitió por ser copia local de CSR). MainWindow las
+    // usa para quitar la marca "cancelado por el operador" (F3).
+    std::vector<std::wstring> failedKeys;
+    // RunOnPrinters: impresoras en las que la acción falló (mismo motivo, al
+    // vaciar una cola).
+    std::vector<std::wstring> failedPrinters;
 
     // Reenvío: necesita confirmación para enviar RAW a otro driver.
     bool needsRawConfirmation = false;
@@ -118,6 +125,15 @@ private:
     // necesitan el reenvío (WIC para imágenes, XPS) y el Shell.
     util::WorkQueue worker_{true};
 };
+
+// Decide si un reenvío rasterizado por lotes puede darse por completo (F4);
+// solo entonces se cancela el original. Función pura (se prueba en tests/).
+//  pagesDone:     páginas convertidas hasta ahora.
+//  pagesExpected: páginas que declaran los datos del trabajo; 0 = no se sabe
+//                 (o todavía no se llegó al final: no se compara).
+//  hadError:      el intérprete falló o se le agotó el tiempo en algún lote.
+// false si hubo error, o si se esperaban más páginas de las que salieron.
+bool RedirectComplete(std::uint32_t pagesDone, std::uint32_t pagesExpected, bool hadError);
 
 // Texto de error amigable para un código Win32 de una acción.
 // ERROR_ACCESS_DENIED tiene un texto propio (falta de permisos, D15); el

@@ -172,6 +172,8 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
     const std::wstring exe = RendererFor(format, paths);
     if (exe.empty()) {
         result.error = L"no-renderer";
+        result.failed = true;
+        result.exitCode = -1;
         return result;
     }
 
@@ -182,6 +184,8 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
     const std::wstring base = NewTempPath(L"");
     if (base.empty()) {
         result.error = util::Win32ErrorMessage(ERROR_ACCESS_DENIED);
+        result.failed = true;
+        result.exitCode = -1;
         return result;
     }
     // Entrada: <base>.ps/.pdf/.xps/.prn. Salida: <base>_p001.png, _p002.png...
@@ -190,6 +194,9 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
     const std::wstring outputPattern = base + L"_p%03d.png";
     if (!WriteAll(input, data + skip, size - skip)) {
         result.error = util::Win32ErrorMessage(GetLastError());
+        result.failed = true;
+        result.exitCode = -1;
+        DeleteFileW(input.c_str());  // puede haber quedado a medias
         return result;
     }
 
@@ -208,6 +215,13 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
         exe.c_str(), dpi, firstPage, lastPage, outputPattern.c_str(), input.c_str());
     std::wstring runError;
     int code = RunHidden(cmd, timeoutMs, &runError);
+    // No terminó bien: no arrancó o se agotó el tiempo (runError) o salió con
+    // error. Las páginas que haya dejado se recogen igual (sirven para la
+    // vista previa), pero quien necesite el documento completo debe mirar
+    // 'failed' (F4: un lote corto por un fallo se tomaba por fin del documento).
+    result.exitCode = code;
+    result.timedOut = runError == L"timeout";
+    result.failed = !runError.empty() || code != 0;
 
     // Recoge las páginas generadas (el patrón empieza en 1 aunque firstPage > 1).
     // Se cargan en orden hasta el primer número que falte (el documento tenía
@@ -224,10 +238,13 @@ ExternalRenderResult RenderExternal(DataFormat format, const std::uint8_t* data,
     // Limpia archivos sobrantes (si lastPage excedía el documento no hay más).
     DeleteFileW(input.c_str());
 
-    // Solo es error si no salió ninguna página.
-    if (result.pages.empty()) {
+    // 'error' se llena si no salió ninguna página o si el intérprete falló
+    // (aunque haya páginas parciales). Sin páginas y sin fallo es simplemente
+    // un rango más allá del final del documento: se informa "exit code 0".
+    if (result.pages.empty() || result.failed) {
         result.error = runError.empty() ? util::Format(L"exit code %d", code) : runError;
-        util::LogError(L"Render externo falló (%ls): %ls", exe.c_str(), result.error.c_str());
+        util::LogError(L"Render externo falló (%ls, páginas %d-%d): %ls; %zu página(s) generadas", exe.c_str(),
+                       firstPage, lastPage, result.error.c_str(), result.pages.size());
     }
     return result;
 }

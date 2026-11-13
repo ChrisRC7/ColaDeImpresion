@@ -46,6 +46,14 @@ std::wstring RendererFor(DataFormat format, const RendererPaths& paths);
 struct ExternalRenderResult {
     std::vector<PagePtr> pages;  // páginas rasterizadas (vacío si falló)
     std::wstring error;          // "no-renderer", "timeout", "exit code N" o mensaje Win32
+    // El intérprete no terminó bien (no se pudo ejecutar, se agotó el tiempo o
+    // devolvió un código distinto de 0), AUNQUE haya dejado algunas páginas:
+    // 'pages' puede estar incompleto. La vista previa aprovecha lo que haya;
+    // el reenvío no puede (imprimiría el documento a medias, F4). En ese caso
+    // 'error' también trae el motivo.
+    bool failed = false;
+    bool timedOut = false;  // se terminó a la fuerza por pasarse de timeoutMs
+    int exitCode = 0;       // código de salida del intérprete (-1 si no se obtuvo)
 };
 
 // Renderiza 'data' (datos del trabajo) a páginas bitmap.

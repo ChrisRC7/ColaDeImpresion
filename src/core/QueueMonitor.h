@@ -71,6 +71,9 @@ public:
 
     // Servidor vigilado (normalizado). Leer solo desde el hilo que llama a Start.
     const std::wstring& server() const { return server_; }
+    // true si el hilo del monitor está en marcha (entre Start y Stop). Igual
+    // que server(), solo desde el hilo que llama a Start/Stop.
+    bool IsRunning() const { return thread_.joinable(); }
 
 private:
     struct Watched;  // impresora vigilada (handle + notificación + últimos datos)
@@ -83,7 +86,8 @@ private:
     // Actualiza estado y trabajos de una impresora y aplica la retención.
     void RefreshPrinter(Watched& w);
     // Pausa los trabajos que AutoHoldTracker decide retener y anota heldByApp.
-    void ApplyAutoHold(Watched& w);
+    // partialList: la lista de w puede estar incompleta (F6); ver AutoHoldTracker::Process.
+    void ApplyAutoHold(Watched& w, bool partialList = false);
     // Arma una QueueSnapshot con todas las impresoras y la entrega al callback.
     void Publish(const std::vector<std::unique_ptr<Watched>>& watched, const std::wstring& error, bool notifying);
 

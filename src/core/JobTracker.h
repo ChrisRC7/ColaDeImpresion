@@ -48,6 +48,10 @@ public:
     // La app marca los trabajos que ella misma canceló para clasificarlos bien.
     // (jobKey = JobInfo::Key; la marca se consume cuando el trabajo sale.)
     void MarkCancelledByUser(const std::wstring& jobKey) { cancelledByUs_.insert(jobKey); }
+    // Se retira la marca cuando la cancelación no se hizo (acceso denegado,
+    // no se pudo vaciar la cola, reenvío fallido o rechazado): si el trabajo
+    // se imprime después, el historial debe decir Impreso y no Cancelado.
+    void ForgetCancelledByUser(const std::wstring& jobKey) { cancelledByUs_.erase(jobKey); }
     // ...y los que liberó (reanudar, reiniciar, imprimir y volver a pausar):
     // un trabajo corto se imprime y sale de la cola antes del siguiente
     // refresco, así que lo último que se vio de él es "en pausa" con la

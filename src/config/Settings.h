@@ -125,8 +125,14 @@ struct Settings {
     static Settings FromJson(const JsonValue& json);
 
     // Carga desde disco; si no existe o es inválido, devuelve los valores por defecto.
-    // (Si existe pero no se puede leer, lo registra en app.log.)
+    // Si existe pero no se puede leer se reintenta 2 veces con 200 ms (un
+    // bloqueo momentáneo no es un archivo dañado) y, si sigue ilegible, se
+    // copia a DamagedCopyPath antes de devolver los valores por defecto: el
+    // primer guardado escribirá encima (M2). Lo registra en app.log.
     static Settings Load(const std::wstring& path);
+    // Dónde se copia un config.json ilegible: "<ruta>.danado" (cada copia
+    // nueva reemplaza la anterior), igual que el historial.
+    static std::wstring DamagedCopyPath(const std::wstring& path) { return path + L".danado"; }
     // Guarda de forma atómica (SaveJsonFile). false si falla (también al log).
     bool Save(const std::wstring& path) const;
 };

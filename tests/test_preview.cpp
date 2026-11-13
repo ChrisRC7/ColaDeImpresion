@@ -24,6 +24,7 @@
 #include "TestFramework.h"
 #include "core/Spooler.h"
 #include "preview/EmfSpool.h"
+#include "preview/PreviewBuilder.h"
 #include "preview/PreviewTypes.h"
 #include "preview/SpoolFile.h"
 #include "preview/ZipReader.h"
@@ -365,4 +366,29 @@ TEST(FitPageKeepsAspect) {
     CHECK(h == 1000);
     CHECK(w > 770 && w < 775);
     CHECK_EQ(r.left, (1000 - w) / 2);
+}
+
+// F5: el nombre del documento lo pone quien imprime. Solo se abre como
+// archivo (respaldo de la vista previa) si es una ruta de unidad local y el
+// trabajo salió de este mismo equipo; nunca una ruta UNC, que haría que la PC
+// del operador se conectara y autenticara contra el equipo indicado.
+TEST(OriginalFileOnlyFromThisMachine) {
+    const std::wstring here = L"LAIMI-OP1";
+    // Ruta UNC: nunca, ni siquiera si el trabajo es de este equipo.
+    CHECK(!CanUseOriginalFile(L"\\\\equipo\\recurso\\x.pdf", L"\\\\LAIMI-OP1", here));
+    CHECK(!CanUseOriginalFile(L"\\\\127.0.0.1\\prueba\\a.png", L"\\\\LAIMI-OP1", here));
+    CHECK(!CanUseOriginalFile(L"\\\\?\\C:\\foto.png", L"\\\\LAIMI-OP1", here));
+    // Ruta local de otro equipo: aquí sería otro archivo.
+    CHECK(!CanUseOriginalFile(L"C:\\Users\\ana\\foto.png", L"\\\\PC-LAB-07", here));
+    // Ruta local de este equipo: sí (con o sin barras, sin distinguir mayúsculas).
+    CHECK(CanUseOriginalFile(L"C:\\Users\\ana\\foto.png", L"\\\\LAIMI-OP1", here));
+    CHECK(CanUseOriginalFile(L"d:\\foto.png", L"\\\\laimi-op1", L"\\\\LAIMI-OP1"));
+    CHECK(CanUseOriginalFile(L"C:\\foto.png", L"LAIMI-OP1", here));
+    // Nombre normal, ruta relativa o sin letra de unidad: no es una ruta que abrir.
+    CHECK(!CanUseOriginalFile(L"Tarea 3.docx", L"\\\\LAIMI-OP1", here));
+    CHECK(!CanUseOriginalFile(L"1:\\x.png", L"\\\\LAIMI-OP1", here));
+    CHECK(!CanUseOriginalFile(L"C:foto.png", L"\\\\LAIMI-OP1", here));
+    // Sin saber el equipo de origen o el propio: no.
+    CHECK(!CanUseOriginalFile(L"C:\\foto.png", L"", here));
+    CHECK(!CanUseOriginalFile(L"C:\\foto.png", L"\\\\LAIMI-OP1", L""));
 }

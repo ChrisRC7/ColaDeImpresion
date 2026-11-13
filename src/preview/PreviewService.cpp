@@ -2,7 +2,11 @@
 // Ver PreviewService.h.
 #include "preview/PreviewService.h"
 
+#include <exception>
+
+#include "i18n/Strings.h"
 #include "util/Log.h"
+#include "util/Strings.h"
 
 namespace cola::preview {
 
@@ -54,7 +58,24 @@ void PreviewService::Request(const PreviewRequest& request, bool urgent) {
             std::lock_guard lock(mutex_);
             if (!pending_.count(key)) return;  // se descartó mientras esperaba
         }
-        DocumentPtr doc = BuildPreview(request);
+        // Si BuildPreview lanza (p. ej. std::bad_alloc con una imagen enorme),
+        // WorkQueue atraparía la excepción pero la clave quedaría en pending_
+        // para siempre y el panel en "Cargando…" (M5): se guarda un documento
+        // con el mensaje de error y se avisa igual.
+        DocumentPtr doc;
+        try {
+            doc = BuildPreview(request);
+        } catch (const std::exception& e) {
+            util::LogError(L"La vista previa de %ls falló con una excepción: %hs", key.c_str(), e.what());
+        } catch (...) {
+            util::LogError(L"La vista previa de %ls falló con una excepción desconocida", key.c_str());
+        }
+        if (!doc) {
+            auto failed = std::make_shared<PreviewDocument>();
+            failed->totalPages = request.job.totalPages;
+            failed->message = util::Format(i18n::Tr(i18n::S::PreviewRenderFailed), L"error interno");
+            doc = std::move(failed);
+        }
         Store(key, doc);
         if (onReady_) onReady_(key);
     });

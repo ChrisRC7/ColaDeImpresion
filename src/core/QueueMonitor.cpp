@@ -46,6 +46,10 @@ struct QueueMonitor::Watched {
     bool directResolved = false;  // ya se obtuvo directName (no se vuelve a pedir)
     ULONGLONG directRetryAt = 0;  // si no se pudo abrir, cuándo reintentar (GetTickCount64)
     size_t lastCacheDiff = 0;     // para no repetir el mismo aviso en el log
+    // F6: si la consulta directa falla después de haber funcionado, no se
+    // degrada sin más a la caché (ver ChooseJobListFallback).
+    bool haveServerList = false;  // alguna vez se obtuvo la lista del servidor
+    int directFailures = 0;       // intentos fallidos seguidos de la consulta directa
     // Nombres de bandejas y papeles del controlador (se leen una vez).
     bool formsLoaded = false;  // ya se intentó (aunque haya fallado: no se repite)
     std::vector<std::pair<short, std::wstring>> bins;  // copia que se pone en cada info
@@ -170,11 +174,17 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     // Lista de la caché del cliente (por el nombre de la conexión). Se usa
     // tal cual en impresoras locales y como respaldo si falla la directa.
     std::vector<JobInfo> cached = spooler::EnumerateJobs(w.handle.get(), w.info.name, w.info.problems, &err);
+    // Lista del refresco anterior: se vuelve a usar si la consulta directa
+    // falla esta vez (F6).
+    std::vector<JobInfo> previous = std::move(w.jobs);
     w.jobs = cached;
+    bool gotServerList = false;        // este refresco trae la lista del servidor
+    bool directAttemptFailed = false;  // se intentó la consulta directa y falló
 
     // Impresora de un servidor: el handle de la conexión responde desde la caché
     // del cliente, que a veces no recibe los trabajos enviados desde otras PCs
     // hasta el siguiente evento. La lista que manda es la del servidor.
+    // (Pasos 3-4 de arriba; si esa lista no se consigue, ver F6 más abajo.)
     if (err == ERROR_SUCCESS && !w.directResolved && GetTickCount64() >= w.directRetryAt) {
         w.directName = spooler::CacheBypassName(w.info.name);
         // Sin nombre puede ser una cola de este equipo (no hace falta) o un DNS
@@ -191,9 +201,11 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
         // Se abre (o reabre tras un fallo, respetando la espera) la cola por
         // el nombre DNS completo.
         if (!w.direct && GetTickCount64() >= w.directRetryAt && !w.direct.Open(w.directName, false)) {
-            util::LogError(L"OpenPrinter(%ls) falló: %lu; se usa la caché del cliente", w.directName.c_str(),
-                           GetLastError());
-            w.directRetryAt = GetTickCount64() + 60000;
+            util::LogError(L"OpenPrinter(%ls) falló: %lu", w.directName.c_str(), GetLastError());
+            // Si ya se tenía la lista del servidor se reintenta pronto (como
+            // tras un EnumJobs fallido); si nunca se tuvo, en un minuto.
+            w.directRetryAt = GetTickCount64() + (w.haveServerList ? 5000 : 60000);
+            directAttemptFailed = true;
         }
         if (w.direct) {
             // Estado y cantidad de trabajos también del servidor (el nombre se conserva).
@@ -210,6 +222,11 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
             if (directErr == ERROR_SUCCESS) {
                 // Manda la del servidor; de la caché solo las copias locales de CSR.
                 w.jobs = ReconcileJobLists(std::move(serverJobs), cached);
+                gotServerList = true;
+                if (w.directFailures > 0)
+                    util::LogInfo(L"%ls: la consulta directa volvió a responder", w.info.name.c_str());
+                w.haveServerList = true;
+                w.directFailures = 0;
                 // Diferencia entre caché y servidor: solo diagnóstico en app.log,
                 // y solo cuando cambia (si no, se repetiría en cada refresco).
                 const size_t diff = w.jobs.size() > cached.size() ? w.jobs.size() - cached.size()
@@ -219,19 +236,50 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
                                   w.info.name.c_str(), cached.size(), w.jobs.size());
                 w.lastCacheDiff = diff;
             } else {
-                // Falló la consulta directa: esta vez se queda la lista de la
-                // caché y se reabre el handle directo en 5 s.
-                util::LogError(L"EnumJobs(%ls) falló: %lu; se usa la caché del cliente", w.directName.c_str(),
-                               directErr);
+                // Falló la consulta directa: se reabre el handle directo en
+                // 5 s. Qué lista se usa mientras tanto se decide abajo.
+                util::LogError(L"EnumJobs(%ls) falló: %lu", w.directName.c_str(), directErr);
                 w.direct.Close();
                 w.directRetryAt = GetTickCount64() + 5000;
+                directAttemptFailed = true;
             }
+        }
+    }
+    // F6: impresora de servidor sin lista del servidor en este refresco (la
+    // consulta directa falló, o su handle está cerrado esperando el reintento).
+    // La caché puede no tener todos los trabajos (D28); tomarla sin más hacía
+    // que JobTracker registrara como terminados trabajos que seguían en cola y
+    // que, al volver la consulta, la retención los pausara otra vez aunque el
+    // operador ya los hubiera liberado.
+    bool keepPrevious = false;  // se muestra la lista anterior; sin retención
+    bool partialList = false;   // caché posiblemente incompleta
+    if (err == ERROR_SUCCESS && !w.directName.empty() && !gotServerList) {
+        if (directAttemptFailed) ++w.directFailures;
+        switch (ChooseJobListFallback(w.haveServerList, w.directFailures)) {
+            case JobListFallback::KeepPrevious:
+                w.jobs = std::move(previous);
+                keepPrevious = true;
+                break;
+            case JobListFallback::CacheDegraded:
+                // Fallos repetidos: se muestra la caché, pero avisando que la
+                // impresora no responde. JobTracker y PrintReleaseTracker
+                // esperan en ese estado (D52) en vez de dar trabajos por terminados.
+                if (directAttemptFailed && w.directFailures == kDirectFailuresToDegrade)
+                    util::LogError(L"%ls: la consulta directa falló %d veces seguidas; se usa la caché del cliente",
+                                   w.info.name.c_str(), w.directFailures);
+                w.info.problems |= ProblemNotAvailable;
+                partialList = true;
+                break;
+            case JobListFallback::Cache: break;  // nunca hubo lista del servidor: como siempre
         }
     }
     // El spooler dice tener más trabajos (cJobs) que los enumerados: puede ser
     // una carrera (llegó uno entre GetPrinter y EnumJobs), así que se vuelve a
-    // enumerar una vez y se queda la lista más larga.
-    if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
+    // enumerar una vez y se queda la lista más larga. (No con la lista
+    // anterior: ahí la cuenta y la lista son de momentos distintos.)
+    if (keepPrevious) {
+        // Se conservan missing/missingStreak del refresco anterior.
+    } else if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
         DWORD retryErr = ERROR_SUCCESS;
         HANDLE source = w.direct ? w.direct.get() : w.handle.get();
         auto retry = spooler::EnumerateJobs(source, w.info.name, w.info.problems, &retryErr);
@@ -240,7 +288,9 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     }
     // Siguen faltando: se cuenta y, si se repite kMissingStreakToReport veces
     // seguidas, se registra en el log (una vez por racha) y Publish lo avisa.
-    if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
+    if (keepPrevious) {
+        // Igual: sin cambios mientras se muestra la lista anterior.
+    } else if (err == ERROR_SUCCESS && w.info.jobCount > w.jobs.size()) {
         w.missing = w.info.jobCount - static_cast<std::uint32_t>(w.jobs.size());
         if (++w.missingStreak == kMissingStreakToReport)
             util::LogError(L"%ls: el spooler reporta %u trabajos y solo se enumeraron %zu", w.info.name.c_str(),
@@ -250,8 +300,10 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
         w.missingStreak = 0;
     }
     // La retención solo con una lista válida (una vacía por error haría creer
-    // que todos los trabajos salieron).
-    if (err == ERROR_SUCCESS) ApplyAutoHold(w);
+    // que todos los trabajos salieron). Tampoco con la lista anterior (F6):
+    // no hay nada nuevo que evaluar y ya está anotada. Con la caché
+    // "degradada" sí, pero sin olvidar los trabajos que no aparecen.
+    if (err == ERROR_SUCCESS && !keepPrevious) ApplyAutoHold(w, partialList);
     // Error al enumerar por la conexión: la impresora se marca no disponible y
     // se cierra todo para empezar limpio en el próximo refresco (sin
     // notificación, esta impresora queda por sondeo hasta la próxima recarga).
@@ -266,9 +318,10 @@ void QueueMonitor::RefreshPrinter(Watched& w) {
     }
 }
 
-void QueueMonitor::ApplyAutoHold(Watched& w) {
+void QueueMonitor::ApplyAutoHold(Watched& w, bool partialList) {
     // Decide qué pausar (trabajos nuevos, sin la copia local de CSR: D39).
-    const std::vector<std::uint32_t> toHold = hold_.Process(w.info.name, w.jobs, autoHold_, holdExisting_);
+    const std::vector<std::uint32_t> toHold =
+        hold_.Process(w.info.name, w.jobs, autoHold_, holdExisting_, partialList);
     for (std::uint32_t id : toHold) {
         // El handle con administración se abre solo la primera vez que hace
         // falta (la mayoría de los refrescos no retienen nada). Si no se logra,
@@ -291,11 +344,22 @@ void QueueMonitor::ApplyAutoHold(Watched& w) {
                               job->user.c_str());
             }
         } else {
-            // Fallo (normalmente ERROR_ACCESS_DENIED): se cuenta para la barra
-            // de estado. No se reintenta: el tracker ya lo dio por evaluado.
-            ++holdFailures_;
-            holdError_ = GetLastError();
-            util::LogError(L"No se pudo retener %ls#%u: %lu", w.info.name.c_str(), id, holdError_);
+            // Fallo. Con ERROR_ACCESS_DENIED (lo habitual) no se reintenta:
+            // no va a cambiar. Cualquier otro error puede ser pasajero (RPC
+            // ocupado, red): se reintenta en los refrescos siguientes, hasta
+            // AutoHoldTracker::kMaxHoldAttempts intentos (M6); antes el trabajo
+            // quedaba sin retener y se imprimía. Solo el fallo definitivo se
+            // cuenta para la barra de estado.
+            const DWORD holdErr = GetLastError();
+            const bool retry = holdErr != ERROR_ACCESS_DENIED && hold_.RetryLater(w.info.name, id);
+            if (retry) {
+                w.dirty = true;  // que el próximo despertar del hilo la refresque
+                util::LogError(L"No se pudo retener %ls#%u: %lu; se reintentará", w.info.name.c_str(), id, holdErr);
+            } else {
+                ++holdFailures_;
+                holdError_ = holdErr;
+                util::LogError(L"No se pudo retener %ls#%u: %lu", w.info.name.c_str(), id, holdErr);
+            }
         }
     }
     // Marca heldByApp en los trabajos que siguen en pausa por la retención.

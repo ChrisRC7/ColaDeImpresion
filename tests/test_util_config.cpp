@@ -14,6 +14,8 @@
 // LaimiServerFromText (escribe y borra servidor-laimi.txt junto a
 // cola_tests.exe).
 
+#include <windows.h>
+
 #include "TestFramework.h"
 #include "config/History.h"
 #include "config/Json.h"
@@ -239,6 +241,41 @@ TEST(SettingsDefaultsOnGarbage) {
     // Tema desconocido -> seguir al sistema; idioma no soportado -> español.
     CHECK(s.theme == config::ThemeMode::System);
     CHECK_EQ(s.language, std::wstring(L"es"));
+}
+
+// M2: un config.json que existe pero no se puede interpretar se copia a
+// "<ruta>.danado" antes de devolver los valores por defecto (la app guarda
+// encima al iniciar y se perdían las preferencias sin dejar rastro). Un
+// archivo que no existe (primer uso) no deja copia. Toca disco: escribe y
+// borra dos archivos junto a cola_tests.exe. Tarda ~0,4 s por los reintentos.
+TEST(SettingsDamagedFileIsBackedUp) {
+    const std::wstring path = config::ExecutableDir() + L"\\config-prueba-m2.json";
+    const std::wstring backup = config::Settings::DamagedCopyPath(path);
+    DeleteFileW(path.c_str());
+    DeleteFileW(backup.c_str());
+
+    // Primer uso: valores por defecto y ninguna copia.
+    config::Settings s = config::Settings::Load(path);
+    CHECK_EQ(s.pollIntervalMs, config::Settings{}.pollIntervalMs);
+    CHECK(GetFileAttributesW(backup.c_str()) == INVALID_FILE_ATTRIBUTES);
+
+    // Archivo dañado: valores por defecto y la copia con el mismo contenido.
+    const char damaged[] = "{ \"pollIntervalMs\": 1234, \"theme\": ";
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    CHECK(file != INVALID_HANDLE_VALUE);
+    if (file != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        WriteFile(file, damaged, sizeof(damaged) - 1, &written, nullptr);
+        CloseHandle(file);
+    }
+    s = config::Settings::Load(path);
+    CHECK_EQ(s.pollIntervalMs, config::Settings{}.pollIntervalMs);
+    WIN32_FILE_ATTRIBUTE_DATA info{};
+    CHECK(GetFileAttributesExW(backup.c_str(), GetFileExInfoStandard, &info));
+    CHECK_EQ(info.nFileSizeLow, static_cast<DWORD>(sizeof(damaged) - 1));
+
+    DeleteFileW(path.c_str());
+    DeleteFileW(backup.c_str());
 }
 
 // historial.json guarda como máximo N registros (2000 en la app; aquí 3) y

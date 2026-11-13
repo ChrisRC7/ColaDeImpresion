@@ -202,6 +202,31 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - CORRECCIONES DE LA REVISIÓN DE CÓDIGO (0.5.18): no cambia nada a la
+     vista; son fallos corregidos. Lo que conviene comprobar:
+     * Clic derecho sobre un trabajo, deje el menú abierto más de 5 segundos
+       y elija "Cancelar todos los de <usuario>": deben cancelarse solo los
+       trabajos de ese usuario.
+     * Menú > "Cambiar servidor del LAIMI...", haga clic en la lista, pulse
+       Ctrl+O, escriba otro servidor y Enter: solo debe conectarse; el
+       servidor del botón del LAIMI (servidor-laimi.txt) NO debe cambiar.
+     * Con un trabajo ya liberado y en cola (impresora en pausa), elija en el
+       menú el servidor al que ya está conectado: el trabajo debe seguir "En
+       cola", no volver a "Retenido".
+     * Intente cancelar un trabajo sin tener permiso (aviso de acceso
+       denegado) y luego deje que se imprima: el historial debe decir
+       "Impreso", no "Cancelado".
+     * Reenvíe a otra impresora (otro controlador) documentos PDF/PostScript
+       de 5, 6, 7 y 12 páginas: deben llegar completos y el original
+       desaparecer. Si la conversión falla a mitad, debe avisar "No se
+       reenvió...", el original sigue en su cola y en el destino no queda nada.
+     * En el historial (Ctrl+H) seleccione una fila y espere a que termine
+       otro trabajo: la selección debe seguir en la misma fila.
+     * Si la red se corta unos segundos, los trabajos ya liberados no deben
+       volver a "Retenido" ni aparecer registros nuevos en el historial; en
+       app.log se ve "EnumJobs(...) falló" sin "Retenido: ..." después.
+     * Cerrar sesión de Windows y cancelar el cierre: después, la X de la app
+       debe seguir ocultándola en la bandeja (no cerrarla).
    - COLUMNA CARNET (0.5.17): a la derecha de "Usuario" aparece el carnet del
      estudiante, leído del Active Directory (atributo employeeID de su
      cuenta; solo se lee, nunca se cambia nada). Al abrir puede verse "—" un

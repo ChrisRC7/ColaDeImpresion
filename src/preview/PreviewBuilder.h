@@ -1,7 +1,8 @@
 #pragma once
 // Construye la vista previa de un trabajo probando fuentes en orden:
 //   1. Archivo de spool del servidor (EMF nativo; XPS/PDF/PS/PCL vía renderizador externo)
-//   2. Archivo original, si el nombre del documento es una ruta accesible
+//   2. Archivo original, si el nombre del documento es una ruta de unidad
+//      local y el trabajo se envió desde este equipo (CanUseOriginalFile)
 //   3. Miniatura del Shell de Windows
 // Operación bloqueante: se ejecuta en el hilo de PreviewService.
 //
@@ -52,6 +53,16 @@ struct PreviewRequest {
 // (lecturas de red, reintentos, intérpretes externos de hasta 60 s): solo
 // en el hilo de PreviewService, con COM inicializado (WIC y Shell).
 DocumentPtr BuildPreview(const PreviewRequest& request);
+
+// true si se puede usar como respaldo de la vista previa el archivo cuyo
+// nombre trae el trabajo (F5). El nombre del documento lo elige quien imprime,
+// así que solo vale si es una ruta de unidad local ("X:\...", nunca UNC) y el
+// trabajo se envió desde este mismo equipo. Función pura: no toca el disco.
+//  document:    JobInfo::document.
+//  jobMachine:  equipo de origen (JOB_INFO_2.pMachineName, con o sin "\\").
+//  thisMachine: nombre de este equipo (con o sin "\\"); "" = desconocido -> false.
+bool CanUseOriginalFile(const std::wstring& document, const std::wstring& jobMachine,
+                        const std::wstring& thisMachine);
 
 // Lo que se puede averiguar de los datos de un trabajo sin renderizarlos:
 // formato, páginas, repeticiones, DEVMODE del spool EMF y opciones declaradas

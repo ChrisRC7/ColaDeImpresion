@@ -6,6 +6,7 @@
 #include "app/RowBuilder.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 #include "app/JobSheet.h"
 #include "core/JobStatus.h"
@@ -450,9 +451,22 @@ ui::ListRow MakeJobRow(const core::JobInfo& job, bool showPrinter, const core::C
 }
 
 // La hora sola no basta (dos trabajos pueden terminar en el mismo segundo):
-// se le agrega el índice del registro.
-std::wstring HistoryKey(const config::HistoryEntry& entry, size_t index) {
-    return util::Format(L"h%lld_%zu", static_cast<long long>(entry.timeUnix), index);
+// se le agrega un ordinal que los distingue (ver HistoryOrdinals).
+std::wstring HistoryKey(const config::HistoryEntry& entry, size_t ordinal) {
+    return util::Format(L"h%lld_%zu", static_cast<long long>(entry.timeUnix), ordinal);
+}
+
+// M1: antes el ordinal era el índice del registro en la lista, y como
+// History::Add inserta al principio, cada trabajo terminado cambiaba todas las
+// claves y la lista perdía la selección y el foco. Contando desde el final
+// (los más viejos), entre los de la misma hora, un registro nuevo al principio
+// no cambia el ordinal de ninguno de los anteriores (tampoco el recorte de los
+// más viejos al llegar al límite, salvo empate en el mismo segundo).
+std::vector<size_t> HistoryOrdinals(const std::vector<config::HistoryEntry>& entries) {
+    std::vector<size_t> ordinals(entries.size(), 0);
+    std::unordered_map<std::int64_t, size_t> seen;  // hora -> registros más viejos con esa hora
+    for (size_t i = entries.size(); i-- > 0;) ordinals[i] = seen[entries[i].timeUnix]++;
+    return ordinals;
 }
 
 config::HistoryEntry MakeHistoryEntry(const core::JobInfo& job, config::JobOutcome outcome, std::int64_t timeUnix,

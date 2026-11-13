@@ -34,8 +34,13 @@ struct ReprintResult {
 // documento en la cola destino. Cada página se escala a la hoja física
 // conservando su proporción, y la orientación se ajusta por página. Si
 // falla una página se cancela el documento entero (AbortDoc).
+// aborted (opcional): se consulta después de cada llamada a nextPages; si
+// devuelve true (el proveedor no pudo generar el documento completo, F4) se
+// cancela el documento entero y el resultado es un error ERROR_CANCELLED: en
+// la cola destino no queda un trabajo a medias.
 ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& docName,
-                            const std::function<std::vector<PagePtr>()>& nextPages);
+                            const std::function<std::vector<PagePtr>()>& nextPages,
+                            const std::function<bool()>& aborted = nullptr);
 
 // Envía bytes al spooler de la impresora destino con el datatype indicado.
 // (StartDocPrinter + WritePrinter en bloques de 1 MB + EndDocPrinter). Con

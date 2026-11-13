@@ -53,11 +53,18 @@ std::wstring ShortDiagnostics(const std::wstring& diagnostics) {
     return out;
 }
 
-// true si el nombre del documento parece una ruta absoluta ("C:\..." o
-// "\\servidor\..."). Algunas aplicaciones (visores de imágenes, Bloc de
-// notas) usan la ruta del archivo como nombre del trabajo.
-bool LooksLikePath(const std::wstring& text) {
-    return (text.size() > 3 && text[1] == L':' && text[2] == L'\\') || text.rfind(L"\\\\", 0) == 0;
+// Nombre de equipo sin las barras iniciales ("\\PC" -> "PC").
+std::wstring BareMachineName(const std::wstring& machine) {
+    const size_t start = machine.find_first_not_of(L'\\');
+    return start == std::wstring::npos ? std::wstring() : machine.substr(start);
+}
+
+// Nombre NetBIOS de este equipo (el mismo formato de JOB_INFO_2.pMachineName
+// sin las barras). "" si no se pudo obtener: entonces no se usa el respaldo.
+std::wstring ThisMachineName() {
+    wchar_t name[MAX_COMPUTERNAME_LENGTH + 1] = {};
+    DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
+    return GetComputerNameW(name, &size) ? std::wstring(name, size) : std::wstring();
 }
 
 // Clasificación gruesa que usa core::PageAccounting para decidir de dónde
@@ -73,6 +80,21 @@ core::DataKind KindOf(DataFormat format) {
 }
 
 }  // namespace
+
+bool CanUseOriginalFile(const std::wstring& document, const std::wstring& jobMachine,
+                        const std::wstring& thisMachine) {
+    // Solo "X:\algo": letra de unidad, dos puntos y barra. Una ruta UNC
+    // ("\\equipo\recurso\...") nunca: abrirla conecta esta PC por SMB al
+    // equipo que eligió quien imprime.
+    const bool drivePath = document.size() > 3 && document[1] == L':' && document[2] == L'\\' &&
+                           ((document[0] >= L'A' && document[0] <= L'Z') || (document[0] >= L'a' && document[0] <= L'z'));
+    if (!drivePath) return false;
+    // El trabajo tiene que haberse enviado desde este mismo equipo: en otra
+    // PC esa ruta es otro archivo (o ninguno).
+    const std::wstring origin = BareMachineName(jobMachine);
+    const std::wstring local = BareMachineName(thisMachine);
+    return !origin.empty() && !local.empty() && util::EqualsInsensitive(origin, local);
+}
 
 void AnalyzeSpoolData(const SpoolData& spool, core::ContentFacts& facts) {
     facts.analyzed = true;
@@ -290,8 +312,12 @@ DocumentPtr BuildPreview(const PreviewRequest& request) {
                             ShortDiagnostics(spool.diagnostics);
     }
 
-    // Respaldo: el archivo original (solo si el documento es una ruta accesible desde aquí).
-    if (doc->pages.empty() && LooksLikePath(request.job.document) &&
+    // Respaldo: el archivo original. El nombre del documento lo pone quien
+    // imprime, así que solo se toca el sistema de archivos si es una ruta de
+    // unidad local Y el trabajo salió de este equipo (F5): antes una ruta UNC
+    // hacía que esta PC se conectara y autenticara contra el equipo indicado,
+    // y una ruta "C:\..." de otra PC mostraba un archivo del operador.
+    if (doc->pages.empty() && CanUseOriginalFile(request.job.document, request.job.machine, ThisMachineName()) &&
         GetFileAttributesW(request.job.document.c_str()) != INVALID_FILE_ATTRIBUTES) {
         FromOriginalFile(request.job.document, opt, *doc);
         if (!doc->pages.empty()) doc->message.clear();

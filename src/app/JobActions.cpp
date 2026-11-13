@@ -11,6 +11,7 @@
 #include "i18n/Strings.h"
 #include "preview/EmfSpool.h"
 #include "preview/ImageLoader.h"
+#include "preview/PreviewBuilder.h"
 #include "preview/Reprint.h"
 #include "preview/SpoolFile.h"
 #include "util/Log.h"
@@ -27,6 +28,12 @@ std::wstring ActionErrorText(DWORD error) {
     return util::Format(Tr(S::ActionFailed), util::Win32ErrorMessage(error).c_str());
 }
 
+bool RedirectComplete(std::uint32_t pagesDone, std::uint32_t pagesExpected, bool hadError) {
+    if (hadError) return false;
+    // pagesExpected == 0: no se sabe cuántas debían salir; solo cuenta el error.
+    return pagesExpected == 0 || pagesDone >= pagesExpected;
+}
+
 JobActionRunner::JobActionRunner(DoneCallback done) : done_(std::move(done)) {}
 
 // Hilo UI: encola. Hilo de acciones: recorre los trabajos y aplica la acción
@@ -41,6 +48,7 @@ void JobActionRunner::Run(JobAction action, std::vector<core::JobInfo> jobs) {
             // La copia local de CSR no se toca: cortarla deja hojas en blanco (D50).
             if (core::IsLocalCsrCopy(job.rawStatus)) {
                 ++result.skipped;
+                result.failedKeys.push_back(job.Key());
                 util::LogInfo(L"Acción %d sobre %ls#%u omitida: es la copia local que esta PC envía al servidor",
                               static_cast<int>(action), job.printer.c_str(), job.id);
                 continue;
@@ -67,6 +75,7 @@ void JobActionRunner::Run(JobAction action, std::vector<core::JobInfo> jobs) {
                 ++result.succeeded;
             } else {
                 ++result.failed;
+                result.failedKeys.push_back(job.Key());
                 if (result.firstError == ERROR_SUCCESS) result.firstError = op.error;
                 util::LogError(L"Acción %d sobre %ls#%u falló: %lu", static_cast<int>(action), job.printer.c_str(),
                                job.id, op.error);
@@ -102,6 +111,7 @@ void JobActionRunner::RunOnPrinters(JobAction action, std::vector<std::wstring> 
                 ++result.succeeded;
             } else {
                 ++result.failed;
+                result.failedPrinters.push_back(printer);
                 if (result.firstError == ERROR_SUCCESS) result.firstError = op.error;
                 util::LogError(L"Acción %d sobre la impresora %ls falló: %lu", static_cast<int>(action), printer.c_str(),
                                op.error);
@@ -217,6 +227,11 @@ void JobActionRunner::Redirect(RedirectRequest request) {
         }
 
         preview::ReprintResult printed;
+        // Solo la rama de rasterizado por lotes los usa (F4): el intérprete
+        // no pudo convertir el documento completo.
+        bool renderFailed = false;
+        std::wstring renderError;
+        std::uint32_t renderedTotal = 0;
         // Nombre del trabajo nuevo en el destino (el del original si lo tiene).
         const std::wstring docName = job.document.empty() ? L"Documento" : job.document;
         if (spool.format == preview::DataFormat::EmfSpool) {
@@ -258,28 +273,72 @@ void JobActionRunner::Redirect(RedirectRequest request) {
             // Un lote con menos páginas que kBatch indica que se llegó al
             // final; la siguiente llamada devuelve vacío y termina la
             // impresión. 300000 ms es el tiempo máximo de cada ejecución externa.
+            //
+            // F4: un lote corto también puede ser un fallo o un tiempo agotado
+            // del intérprete a mitad del documento. Antes eso se tomaba por el
+            // final, el reenvío se daba por bueno y se cancelaba el original
+            // (el estudiante perdía el resto). Ahora, si un lote falla o el
+            // documento termina con menos páginas de las que declaran sus
+            // datos, se aborta el trabajo del destino y el original se restaura.
             constexpr int kBatch = 6;
+            // Páginas que declaran los datos (0 = no se sabe): solo conteos
+            // hechos sobre el contenido completo (DSC de PostScript, FixedPage
+            // de XPS); TotalPages del spooler no sirve aquí (GUIA_IA §6).
+            std::uint32_t expectedPages = 0;
+            {
+                core::ContentFacts facts;
+                preview::AnalyzeSpoolData(spool, facts);
+                const bool counted = facts.pageSource == core::ContentFacts::PageSource::PostScriptDsc ||
+                                     facts.pageSource == core::ContentFacts::PageSource::XpsFixedPages;
+                if (facts.complete && counted) expectedPages = facts.pages;
+            }
             int next = 1;
             bool finished = false;
-            printed = preview::PrintPagesGdi(request.targetPrinter, docName, [&]() {
-                std::vector<preview::PagePtr> pages;
-                if (finished) return pages;
-                auto rendered = preview::RenderExternal(spool.format, spool.bytes.data(), spool.bytes.size(),
-                                                        request.renderers, 300, next, next + kBatch - 1, 300000);
-                if (static_cast<int>(rendered.pages.size()) < kBatch) finished = true;
-                next += kBatch;
-                return rendered.pages;
-            });
+            std::uint32_t renderedPages = 0;
+            printed = preview::PrintPagesGdi(
+                request.targetPrinter, docName,
+                [&]() {
+                    std::vector<preview::PagePtr> pages;
+                    if (finished || renderFailed) return pages;
+                    auto rendered = preview::RenderExternal(spool.format, spool.bytes.data(), spool.bytes.size(),
+                                                            request.renderers, 300, next, next + kBatch - 1, 300000);
+                    renderedPages += static_cast<std::uint32_t>(rendered.pages.size());
+                    if (static_cast<int>(rendered.pages.size()) < kBatch ||
+                        (expectedPages != 0 && renderedPages >= expectedPages))
+                        finished = true;
+                    next += kBatch;
+                    // Lote fallido, o fin del documento con páginas de menos:
+                    // no se entrega nada más y PrintPagesGdi aborta.
+                    if (!RedirectComplete(renderedPages, finished ? expectedPages : 0, rendered.failed)) {
+                        renderFailed = true;
+                        renderError = rendered.failed ? rendered.error : util::Format(L"%u < %u", renderedPages, expectedPages);
+                        util::LogError(L"Reenvío de %ls#%u abortado: %u página(s) convertidas de %u esperadas (%ls)",
+                                       job.printer.c_str(), job.id, renderedPages, expectedPages, renderError.c_str());
+                        pages.clear();
+                        return pages;
+                    }
+                    return rendered.pages;
+                },
+                [&]() { return renderFailed; });
+            renderedTotal = renderedPages;
         }
 
-        if (!printed.ok) {
+        if (renderFailed) {
+            // El documento no se pudo convertir completo: nada quedó en el
+            // destino (AbortDoc) y el original vuelve a su estado anterior.
+            restore();
+            fail(printed.error ? printed.error : ERROR_CANCELLED,
+                 util::Format(Tr(S::RedirectIncomplete), renderedTotal, renderError.c_str()));
+        } else if (!printed.ok) {
             restore();  // deja el original como estaba
             fail(printed.error, ActionErrorText(printed.error));
         } else {
             // 3. Eliminar el original: ya está en la otra impresora.
             //    (Si la cancelación falla, el original queda en pausa: no se
-            //    imprime dos veces y el operador puede borrarlo a mano.)
-            spooler::CancelJob(job.printer, job.id);
+            //    imprime dos veces y el operador puede borrarlo a mano. Se
+            //    avisa en failedKeys para que el historial no lo dé por
+            //    cancelado si después se libera, F3.)
+            if (!spooler::CancelJob(job.printer, job.id).ok) result.failedKeys.push_back(job.Key());
             result.succeeded = 1;
             // PrinterInfo temporal solo para obtener el nombre visible del
             // destino (sin el prefijo \\SERVIDOR\).

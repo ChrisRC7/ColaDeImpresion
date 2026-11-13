@@ -8,7 +8,8 @@
 //    (al iniciar o al conectar) sus trabajos existentes se retienen solo si se
 //    pide "holdExisting" (opción "al iniciar, pausar todo"); si no, solo se registran.
 //  - Cada trabajo se evalúa una sola vez: si un operador lo reanuda, no se
-//    vuelve a pausar.
+//    vuelve a pausar. Única excepción: si la pausa falló por un error
+//    pasajero, se reintenta en los refrescos siguientes (RetryLater, M6).
 //  - Se retienen aunque ya hayan empezado a imprimirse (se ganó la carrera por
 //    poco); no se tocan los que están pausados, cancelándose o impresos.
 //  - Nunca se retiene un trabajo que esta PC todavía procesa (Client Side
@@ -52,8 +53,21 @@ public:
     // Efectos: actualiza seen_ con los ids actuales y limpia de held_ los
     // trabajos liberados por un operador o que ya salieron de la cola.
     // Devuelve los ids que el llamador debe pausar (y luego MarkHeld si pudo).
+    //  partialList:   la lista puede no traer todos los trabajos (caché del
+    //                 cliente con la consulta directa caída, F6): los que no
+    //                 aparecen NO se olvidan, así al volver la lista completa
+    //                 no se toman por nuevos ni se vuelven a pausar.
     std::vector<std::uint32_t> Process(const std::wstring& printer, const std::vector<JobInfo>& jobs, bool enabled,
-                                       bool holdExisting = false);
+                                       bool holdExisting = false, bool partialList = false);
+
+    // La pausa de un trabajo devuelto por Process falló por un error pasajero
+    // (M6). Devuelve true si se va a reintentar: el trabajo deja de contarse
+    // como evaluado y Process lo devolverá otra vez en el próximo refresco
+    // (si la retención sigue activa y todavía conviene pausarlo). false si ya
+    // se agotaron los kMaxHoldAttempts intentos: no se vuelve a probar.
+    bool RetryLater(const std::wstring& printer, std::uint32_t id);
+    // Intentos de pausa por trabajo (el primero más los reintentos).
+    static constexpr int kMaxHoldAttempts = 3;
 
     // Anota que la app pausó el trabajo (clave JobInfo::Key) con éxito.
     void MarkHeld(const std::wstring& jobKey) { held_.insert(jobKey); }
@@ -72,6 +86,8 @@ public:
 private:
     std::map<std::wstring, std::set<std::uint32_t>> seen_;  // impresora -> ids ya evaluados
     std::set<std::wstring> held_;                           // claves de trabajos que pausó la app
+    // impresora -> (id -> pausas fallidas); se limpia cuando el trabajo sale (M6).
+    std::map<std::wstring, std::map<std::uint32_t, int>> failedAttempts_;
 };
 
 // true si conviene pausar este trabajo: no es la copia local de CSR (D39) y no

@@ -21,9 +21,12 @@
 #include <winspool.h>
 
 #include <algorithm>
+#include <map>
 
 #include "TestFramework.h"
+#include "app/JobActions.h"
 #include "app/RowBuilder.h"
+#include "config/History.h"
 #include "config/Settings.h"
 #include "core/AutoHold.h"
 #include "core/JobStatus.h"
@@ -939,4 +942,175 @@ TEST(SettingsSortAndFavoritesRoundTrip) {
     CHECK(!restored.showPrinterBar);
     CHECK_EQ(restored.favoritePrinters.size(), size_t(2));
     CHECK_EQ(restored.favoritePrinters[1], std::wstring(L"\\\\S\\P2"));
+}
+
+// ---------------------------------------------------------------------------
+// Correcciones de docs/FALLOS_DETECTADOS.md (0.5.18)
+// ---------------------------------------------------------------------------
+
+// F3: el trabajo se marca "cancelado por el operador" antes de saber si la
+// cancelación funcionó. Si falló (acceso denegado, RAW rechazado...) la marca
+// se retira con ForgetCancelledByUser; si no, al imprimirse después quedaba
+// "Cancelado" en el historial y el Excel contaba páginas de menos.
+TEST(FailedCancelDoesNotMarkHistoryAsCancelled) {
+    // El 1 es el primero de una cola operativa: al salir, se imprimió.
+    const auto job = MakeJob(1, core::JobState::Queued, 1);
+    {
+        core::JobTracker tracker;
+        tracker.Update(MakeSnapshot({job}));
+        tracker.MarkCancelledByUser(job.Key());
+        tracker.ForgetCancelledByUser(job.Key());  // la cancelación falló
+        auto events = tracker.Update(MakeSnapshot({}));
+        CHECK_EQ(events.size(), size_t(1));
+        if (!events.empty()) CHECK(events[0].outcome == config::JobOutcome::Printed);
+    }
+    {
+        // Sin olvidar la marca sigue siendo Cancelado (la cancelación sí funcionó).
+        core::JobTracker tracker;
+        tracker.Update(MakeSnapshot({job}));
+        tracker.MarkCancelledByUser(job.Key());
+        auto events = tracker.Update(MakeSnapshot({}));
+        CHECK_EQ(events.size(), size_t(1));
+        if (!events.empty()) CHECK(events[0].outcome == config::JobOutcome::Cancelled);
+    }
+}
+
+// F4: el reenvío rasterizado solo se da por completo (y se cancela el
+// original) si ningún lote falló y no salieron menos páginas de las que
+// declaran los datos.
+TEST(RedirectCompleteDecision) {
+    CHECK(app::RedirectComplete(12, 12, false));   // completo
+    CHECK(app::RedirectComplete(13, 12, false));   // de más no es un fallo
+    CHECK(app::RedirectComplete(4, 0, false));     // lote corto sin error y páginas desconocidas: fin normal
+    CHECK(!app::RedirectComplete(6, 0, true));     // lote corto por un error del intérprete
+    CHECK(!app::RedirectComplete(12, 12, true));   // con error nunca, aunque coincida la cuenta
+    CHECK(!app::RedirectComplete(6, 12, false));   // menos páginas de las esperadas
+    CHECK(!app::RedirectComplete(0, 3, false));
+}
+
+// F6: qué lista usar cuando no se obtuvo la del servidor.
+TEST(JobListFallbackDecision) {
+    using core::JobListFallback;
+    // Nunca hubo lista del servidor: la caché, como siempre.
+    CHECK(core::ChooseJobListFallback(false, 0) == JobListFallback::Cache);
+    CHECK(core::ChooseJobListFallback(false, 10) == JobListFallback::Cache);
+    // Ya había una: se conserva la anterior (también mientras el handle
+    // directo espera para reabrirse, con 0 fallos nuevos).
+    CHECK(core::ChooseJobListFallback(true, 0) == JobListFallback::KeepPrevious);
+    CHECK(core::ChooseJobListFallback(true, 1) == JobListFallback::KeepPrevious);
+    CHECK(core::ChooseJobListFallback(true, core::kDirectFailuresToDegrade - 1) == JobListFallback::KeepPrevious);
+    // Fallos repetidos: caché con la impresora marcada como no disponible.
+    CHECK(core::ChooseJobListFallback(true, core::kDirectFailuresToDegrade) == JobListFallback::CacheDegraded);
+    CHECK(core::ChooseJobListFallback(true, 99) == JobListFallback::CacheDegraded);
+}
+
+// F6: "instantánea completa -> degradada (la caché no trae todos los trabajos)
+// -> completa" no debe generar eventos de historial ni volver a retener los
+// trabajos que el operador ya había liberado.
+TEST(DegradedJobListKeepsHistoryAndHolds) {
+    const std::wstring printer = L"\\\\S\\P1";
+    core::AutoHoldTracker hold;
+    core::JobTracker tracker;
+    // El 1 lo liberó el operador (en cola); el 2 sigue retenido.
+    const std::vector<core::JobInfo> full = {MakeJob(1, core::JobState::Queued, 1), MakeJob(2, core::JobState::Paused)};
+    hold.Process(printer, full, true);
+    hold.MarkHeld(full[1].Key());
+    tracker.Update(MakeSnapshot(full, core::ProblemPaused));
+
+    // Consulta directa caída varias veces: la caché solo muestra el 2 y llega
+    // el 3 (nuevo). Lista parcial + impresora "no disponible".
+    const std::vector<core::JobInfo> partial = {MakeJob(2, core::JobState::Paused), MakeJob(3, core::JobState::Queued, 3)};
+    auto ids = hold.Process(printer, partial, true, false, true);
+    CHECK_EQ(ids.size(), size_t(1));  // el nuevo sí se retiene
+    if (!ids.empty()) CHECK_EQ(ids[0], 3u);
+    CHECK(hold.IsHeld(full[1].Key()));
+    auto events = tracker.Update(MakeSnapshot(partial, core::ProblemPaused | core::ProblemNotAvailable));
+    int finished = 0;
+    for (const auto& e : events)
+        if (e.kind == core::JobEvent::Kind::Finished) ++finished;
+    CHECK_EQ(finished, 0);  // el 1 no "terminó": su impresora no responde
+
+    // Vuelve la lista completa: el 1 sigue en cola y NO se vuelve a pausar.
+    const std::vector<core::JobInfo> back = {MakeJob(1, core::JobState::Queued, 1), MakeJob(2, core::JobState::Paused),
+                                             MakeJob(3, core::JobState::Paused, 3)};
+    CHECK(hold.Process(printer, back, true).empty());
+    events = tracker.Update(MakeSnapshot(back, core::ProblemPaused));
+    CHECK(events.empty());  // ni "terminado" ni "nuevo"
+
+    // Contraste (el fallo original): sin el modo parcial el 1 se olvida y al
+    // volver se toma por nuevo y se pausa otra vez.
+    core::AutoHoldTracker old;
+    old.Process(printer, full, true);
+    old.Process(printer, partial, true);
+    CHECK_EQ(old.Process(printer, back, true).size(), size_t(1));
+}
+
+// M6: una pausa que falló por un error pasajero se reintenta en los
+// refrescos siguientes, con un máximo de kMaxHoldAttempts intentos.
+TEST(AutoHoldRetriesFailedPause) {
+    const std::wstring printer = L"\\\\S\\P1";
+    core::AutoHoldTracker hold;
+    hold.Process(printer, {}, true);  // primera vez: cola vacía
+    const std::vector<core::JobInfo> jobs = {MakeJob(5, core::JobState::Queued)};
+    CHECK_EQ(hold.Process(printer, jobs, true).size(), size_t(1));
+    // Sin RetryLater no se vuelve a evaluar (regla de siempre).
+    CHECK(hold.Process(printer, jobs, true).empty());
+
+    core::AutoHoldTracker retry;
+    retry.Process(printer, {}, true);
+    int attempts = 0;
+    for (int refresh = 0; refresh < 10; ++refresh) {
+        auto ids = retry.Process(printer, jobs, true);
+        if (ids.empty()) break;
+        ++attempts;                    // SetJob falla...
+        retry.RetryLater(printer, 5);  // ...y se pide el reintento
+    }
+    CHECK_EQ(attempts, core::AutoHoldTracker::kMaxHoldAttempts);
+    // El último RetryLater devolvió false: ya no se reintenta.
+    CHECK(!retry.RetryLater(printer, 5));
+
+    // Si la pausa funciona al segundo intento, queda retenido y no se repite.
+    core::AutoHoldTracker ok;
+    ok.Process(printer, {}, true);
+    CHECK_EQ(ok.Process(printer, jobs, true).size(), size_t(1));
+    CHECK(ok.RetryLater(printer, 5));
+    CHECK_EQ(ok.Process(printer, jobs, true).size(), size_t(1));
+    ok.MarkHeld(jobs[0].Key());
+    CHECK(ok.Process(printer, {MakeJob(5, core::JobState::Paused)}, true).empty());
+    // Un trabajo que el operador ya liberó no se toca por el reintento de otro.
+    CHECK(ok.Process(printer, {MakeJob(5, core::JobState::Printing)}, true).empty());
+}
+
+// M1: la clave de una fila del historial no cambia cuando termina otro
+// trabajo (History::Add inserta al principio). Antes llevaba el índice y la
+// lista perdía la selección con cada registro nuevo.
+TEST(HistoryKeysAreStableWhenAdding) {
+    config::History history(L"", 100);
+    auto add = [&](std::int64_t t, const wchar_t* doc) {
+        config::HistoryEntry e;
+        e.timeUnix = t;
+        e.document = doc;
+        history.Add(e);
+    };
+    add(1000, L"a");
+    add(1000, L"b");  // mismo segundo que "a"
+    add(1005, L"c");
+    // Claves por documento.
+    auto keys = [&] {
+        std::map<std::wstring, std::wstring> out;
+        const auto& entries = history.Entries();
+        const auto ordinals = app::HistoryOrdinals(entries);
+        for (size_t i = 0; i < entries.size(); ++i) out[entries[i].document] = app::HistoryKey(entries[i], ordinals[i]);
+        return out;
+    };
+    const auto before = keys();
+    // Únicas, también con dos trabajos en el mismo segundo.
+    CHECK(before.at(L"a") != before.at(L"b"));
+    CHECK(before.at(L"a") != before.at(L"c"));
+    add(1005, L"d");  // mismo segundo que "c"
+    add(1010, L"e");
+    const auto after = keys();
+    CHECK_EQ(after.size(), size_t(5));
+    for (const auto& [doc, key] : before) CHECK_EQ(after.at(doc), key);
+    CHECK(after.at(L"d") != after.at(L"c"));
 }

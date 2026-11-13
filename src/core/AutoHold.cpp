@@ -17,7 +17,7 @@ bool ShouldHold(const JobInfo& job) {
 }
 
 std::vector<std::uint32_t> AutoHoldTracker::Process(const std::wstring& printer, const std::vector<JobInfo>& jobs,
-                                                    bool enabled, bool holdExisting) {
+                                                    bool enabled, bool holdExisting, bool partialList) {
     std::vector<std::uint32_t> toHold;
     auto found = seen_.find(printer);
     // Primera vez que se ve esta impresora en la sesión (al iniciar, al
@@ -42,7 +42,19 @@ std::vector<std::uint32_t> AutoHoldTracker::Process(const std::wstring& printer,
         if (enabled && ShouldHold(job)) toHold.push_back(job.id);
     }
 
+    // Lista parcial (F6): los trabajos que no aparecen pueden seguir en la
+    // cola del servidor. No se olvida ninguno: se suman los vistos ahora a los
+    // ya evaluados y las marcas de retenido quedan como estaban.
+    if (partialList && !firstTime) {
+        found->second.insert(current.begin(), current.end());
+        return toHold;
+    }
+
     // Olvida los trabajos que ya salieron de la cola.
+    if (auto attempts = failedAttempts_.find(printer); attempts != failedAttempts_.end()) {
+        std::erase_if(attempts->second, [&](const auto& entry) { return !current.count(entry.first); });
+        if (attempts->second.empty()) failedAttempts_.erase(attempts);
+    }
     if (!firstTime) {
         for (std::uint32_t id : found->second) {
             if (!current.count(id)) {
@@ -56,9 +68,17 @@ std::vector<std::uint32_t> AutoHoldTracker::Process(const std::wstring& printer,
         }
     }
     // Los ids actuales pasan a ser los "ya evaluados" (incluidos los que se
-    // devuelven para pausar: aunque la pausa falle, no se reintenta).
+    // devuelven para pausar; si la pausa falla por un error pasajero, el
+    // llamador pide el reintento con RetryLater).
     seen_[printer] = std::move(current);
     return toHold;
+}
+
+bool AutoHoldTracker::RetryLater(const std::wstring& printer, std::uint32_t id) {
+    if (++failedAttempts_[printer][id] >= kMaxHoldAttempts) return false;
+    // Sin el id en los "ya evaluados", el próximo Process lo ve como nuevo.
+    if (auto found = seen_.find(printer); found != seen_.end()) found->second.erase(id);
+    return true;
 }
 
 void AutoHoldTracker::Annotate(std::vector<JobInfo>& jobs) const {
@@ -69,6 +89,7 @@ void AutoHoldTracker::Annotate(std::vector<JobInfo>& jobs) const {
 void AutoHoldTracker::Reset() {
     seen_.clear();
     held_.clear();
+    failedAttempts_.clear();
 }
 
 }  // namespace cola::core

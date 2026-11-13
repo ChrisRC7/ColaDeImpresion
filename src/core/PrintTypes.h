@@ -201,4 +201,31 @@ inline constexpr std::uint32_t kJobStatusRenderingLocally = 0x00004000;
 // cached = lista de la caché del cliente. Los trabajos se identifican por id.
 std::vector<JobInfo> ReconcileJobLists(std::vector<JobInfo> server, const std::vector<JobInfo>& cached);
 
+// Qué lista de trabajos usar en un refresco en que NO se obtuvo la del
+// servidor (la consulta directa falló o su handle espera para reabrirse), F6.
+enum class JobListFallback {
+    // Nunca hubo lista del servidor para esta impresora: la caché del cliente,
+    // como siempre (colas locales o DNS que todavía no responde).
+    Cache,
+    // Ya se tenía una lista buena del servidor: se conserva la del refresco
+    // anterior y NO se ejecuta la retención en este refresco. La caché puede
+    // no tener todos los trabajos (D28) y usarla hacía que el historial los
+    // diera por terminados y que la retención los volviera a pausar al volver.
+    KeepPrevious,
+    // La consulta directa lleva varios fallos seguidos: se muestra la caché,
+    // pero con la impresora marcada ProblemNotAvailable (JobTracker y
+    // PrintReleaseTracker saben esperar en ese estado, D52) y la retención en
+    // modo "lista parcial" (no olvida los trabajos que no ve).
+    CacheDegraded,
+};
+
+// Fallos seguidos de la consulta directa a partir de los cuales se deja de
+// mostrar la lista anterior (unos 15 s con el reintento cada 5 s).
+inline constexpr int kDirectFailuresToDegrade = 3;
+
+// Decisión pura de JobListFallback.
+//  hadServerList:       alguna vez se obtuvo la lista del servidor para esta impresora.
+//  consecutiveFailures: intentos fallidos seguidos de la consulta directa.
+JobListFallback ChooseJobListFallback(bool hadServerList, int consecutiveFailures);
+
 }  // namespace cola::core

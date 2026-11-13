@@ -42,6 +42,12 @@ std::vector<JobInfo> ReconcileJobLists(std::vector<JobInfo> server, const std::v
     return server;
 }
 
+JobListFallback ChooseJobListFallback(bool hadServerList, int consecutiveFailures) {
+    if (!hadServerList) return JobListFallback::Cache;
+    return consecutiveFailures >= kDirectFailuresToDegrade ? JobListFallback::CacheDegraded
+                                                           : JobListFallback::KeepPrevious;
+}
+
 const PrinterInfo* QueueSnapshot::FindPrinter(const std::wstring& name) const {
     for (const auto& p : printers)
         if (p.name == name) return &p;

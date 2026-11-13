@@ -32,7 +32,8 @@ std::vector<BYTE> DefaultDevMode(const std::wstring& printer) {
 }  // namespace
 
 ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& docName,
-                            const std::function<std::vector<PagePtr>()>& nextPages) {
+                            const std::function<std::vector<PagePtr>()>& nextPages,
+                            const std::function<bool()>& aborted) {
     ReprintResult result;
     // DEVMODE propio (modificable) para poder cambiar la orientación con
     // ResetDC entre páginas.
@@ -56,10 +57,16 @@ ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& doc
     }
 
     bool failed = false;
+    bool cancelled = false;  // el proveedor avisó que el documento no está completo
+    DWORD pageError = ERROR_SUCCESS;
     // Pide lotes hasta que el proveedor devuelva uno vacío; cada lote se
     // suelta al terminar (memoria acotada aunque el documento sea largo).
     for (;;) {
         std::vector<PagePtr> batch = nextPages();
+        if (aborted && aborted()) {
+            cancelled = true;
+            break;
+        }
         if (batch.empty()) break;
         for (const auto& page : batch) {
             SIZE size = page->SizeHimetric();
@@ -74,6 +81,7 @@ ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& doc
                 }
             }
             if (StartPage(dc) <= 0) {
+                pageError = GetLastError();
                 failed = true;
                 break;
             }
@@ -94,6 +102,7 @@ ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& doc
             RECT paper{-offX, -offY, physW - offX, physH - offY};
             page->Render(dc, FitPage(size, paper));
             if (EndPage(dc) <= 0) {
+                pageError = GetLastError();
                 failed = true;
                 break;
             }
@@ -102,10 +111,14 @@ ReprintResult PrintPagesGdi(const std::wstring& printer, const std::wstring& doc
         if (failed) break;
     }
 
-    // Sin páginas o con un fallo: se cancela para no dejar en la cola un
-    // trabajo vacío o a medias.
-    if (failed || result.pages == 0) {
-        result.error = failed ? GetLastError() : ERROR_NO_DATA;
+    // Sin páginas, con un fallo o con el documento incompleto: se cancela
+    // para no dejar en la cola un trabajo vacío o a medias.
+    if (failed || cancelled || result.pages == 0) {
+        // Nunca ERROR_SUCCESS: quien llama distingue el éxito por 'ok', pero
+        // el código se usa para el mensaje.
+        if (cancelled) result.error = ERROR_CANCELLED;
+        else if (failed) result.error = pageError != ERROR_SUCCESS ? pageError : ERROR_GEN_FAILURE;
+        else result.error = ERROR_NO_DATA;
         AbortDoc(dc);
     } else {
         EndDoc(dc);
@@ -145,9 +158,17 @@ ReprintResult SendRawData(const std::wstring& printer, const std::wstring& docNa
         }
         offset += written;
     }
-    // Se cierra el documento aunque haya fallado: lo escrito queda como un
-    // trabajo (incompleto) en la cola destino y el error se informa.
-    EndDocPrinter(h.get());
+    // Envío completo: se cierra el documento. Si falló a mitad (M4) se
+    // descarta con AbortPrinter: EndDocPrinter dejaría lo ya escrito como un
+    // trabajo incompleto que la impresora intentaría imprimir.
+    if (ok) {
+        if (!EndDocPrinter(h.get())) {
+            ok = false;
+            result.error = GetLastError();
+        }
+    } else {
+        AbortPrinter(h.get());
+    }
     result.ok = ok;
     return result;
 }

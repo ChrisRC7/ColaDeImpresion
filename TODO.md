@@ -207,7 +207,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 
 ## 7. Pruebas
 
-- [x] Pruebas unitarias automáticas (`cola_tests`, 99 pruebas)
+- [x] Pruebas unitarias automáticas (`cola_tests`, 107 pruebas)
 - [x] Herramientas para generar e inspeccionar trabajos de prueba (`tools/testjob.cpp`, `tools/jobinspect.cpp`)
 - [ ] (LAIMI) Probar con múltiples impresoras simultáneas
 - [ ] (LAIMI) Probar con trabajos grandes (muchas páginas / archivos pesados)
@@ -216,8 +216,11 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Probar cambio de tema en tiempo real sin reiniciar la app (verificado en PC de desarrollo)
 
 - [x] Revisión de código de la 0.5.17: fallos, corrección propuesta y cómo comprobarla en [docs/FALLOS_DETECTADOS.md](docs/FALLOS_DETECTADOS.md)
-- [ ] Corregir los fallos F1–F7 de `docs/FALLOS_DETECTADOS.md` (memoria liberada en el menú contextual, servidor del LAIMI sobrescrito, "Cancelado" falso en el historial, reenvío parcial que borra el original, nombre del documento abierto como ruta, eventos falsos al fallar la consulta directa, reconexión que vuelve a retener)
-- [ ] Corregir los menores M1–M6 de `docs/FALLOS_DETECTADOS.md`
+- [x] Corregir los fallos F1–F7 de `docs/FALLOS_DETECTADOS.md` (memoria liberada en el menú contextual, servidor del LAIMI sobrescrito, "Cancelado" falso en el historial, reenvío parcial que borra el original, nombre del documento abierto como ruta, eventos falsos al fallar la consulta directa, reconexión que vuelve a retener) (0.5.18, D57)
+- [x] Corregir los menores M1–M6 de `docs/FALLOS_DETECTADOS.md` (0.5.18, D57)
+- [ ] Pruebas manuales de las correcciones de la 0.5.18 (las de `docs/FALLOS_DETECTADOS.md`, resumidas en el LEEME del paquete): solo se verificaron con pruebas unitarias y compilación; no se abrió la app
+- [ ] (LAIMI) Reenvío rasterizado tras F4: PDF/PostScript de 5, 6, 7 y 12 páginas a una impresora con otro controlador deben llegar completos (si Ghostscript devolviera error al pedir páginas más allá del final, un documento de exactamente 6 o 12 páginas se rechazaría: revisar `app.log`, "Reenvío de ... abortado")
+- [ ] (LAIMI) F6: cortar la red unos segundos con un trabajo liberado en cola y confirmar que no vuelve a "Retenido" ni aparece en el historial
 - [ ] Mejoras X1–X6 de `docs/FALLOS_DETECTADOS.md` (historial compartido entre copias, historial sin descartes silenciosos, confirmar el borrado, inicio con Windows tras actualizar, selección que no salta sola, no rearmar la tabla sin cambios); varias requieren decisión del usuario antes de implementarlas
 
 Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
