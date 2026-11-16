@@ -223,7 +223,9 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] (LAIMI) F6: cortar la red unos segundos con un trabajo liberado en cola y confirmar que no vuelve a "Retenido" ni aparece en el historial
 - [x] Actualización automática desde los releases de GitHub: módulo `update/`, menú, opción `autoUpdate`, pruebas y `publicar\` en `build.ps1 -Package` (0.5.19, D58)
 - [x] Compilar la 0.5.19 (Debug y Release, sin warnings), 116 pruebas y `build.ps1 -Package` (WinLibs GCC 16.2.0 r3)
-- [ ] Publicar el primer release con manifiesto (`gh release create v0.5.19 ...`, comando que imprime `build.ps1`) y comprobar desde una copia 0.5.19 con versión menor (o una 0.5.20 de prueba) que descarga, instala y reinicia (el repositorio es público: comprobado el 2026-11-16)
+- [x] Publicar el primer release con manifiesto (`v0.5.19`) y comprobar con una copia compilada como 0.5.18 que descarga, instala y, al volver a abrirla, arranca la 0.5.19 y limpia el `.cola-old`
+- [ ] Probar en la app la opción *Reiniciar para usar la versión X* (necesita un release más nuevo que la versión abierta)
+- [ ] Reemplazar a mano una última vez las copias anteriores a la 0.5.19 (no tienen el actualizador; p. ej. `C:\ToolBox\ColaDeImpresion 0.5.17`)
 - [ ] (LAIMI) Probar la actualización automática en una PC del laboratorio (proxy del TEC, carpeta de la copia portable con permiso de escritura)
 - [ ] Mejoras X1–X6 de `docs/FALLOS_DETECTADOS.md` (historial compartido entre copias, historial sin descartes silenciosos, confirmar el borrado, inicio con Windows tras actualizar, selección que no salta sola, no rearmar la tabla sin cambios); varias requieren decisión del usuario antes de implementarlas
 
