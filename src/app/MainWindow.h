@@ -29,6 +29,7 @@
 #include "ui/StatusBar.h"
 #include "ui/TrayIcon.h"
 #include "ui/Window.h"
+#include "update/UpdateService.h"
 
 namespace cola::app {
 
@@ -240,6 +241,14 @@ private:
     void Quit();
     // Relanza la app como administrador ("runas", pide UAC) y cierra esta instancia.
     void RestartAsAdmin();
+    // Actualización automática (D58): resultado de una comprobación
+    // (WM_APP_UPDATE, hilo de la UI): barra de estado, notificación y la
+    // opción "Reiniciar para usar la versión X" del menú.
+    void OnUpdateStatus(const update::UpdateStatus& status);
+    // Abre el .exe instalado (la versión nueva) con --elevated-restart, que
+    // espera a que esta instancia cierre, y cierra esta. Conserva el servidor
+    // y, si la ventana estaba oculta, vuelve a la bandeja.
+    void RestartForUpdate();
     // Notificación de la bandeja (globo/toast); error = ícono de error.
     void Notify(const std::wstring& title, const std::wstring& text, bool error);
     // Pide al directorio el carnet de los usuarios del historial que no lo tienen.
@@ -262,6 +271,8 @@ private:
     std::unique_ptr<core::CarnetService> carnets_;
     // Ejecuta las acciones sobre trabajos/impresoras en segundo plano.
     std::unique_ptr<JobActionRunner> actions_;
+    // Busca, descarga e instala versiones nuevas en segundo plano (D58).
+    std::unique_ptr<update::UpdateService> updates_;
     // Compara instantáneas sucesivas y deduce eventos (impreso, cancelado...).
     core::JobTracker tracker_;
     core::PrintReleaseTracker release_;  // trabajos de "imprimir y volver a pausar"
@@ -301,6 +312,12 @@ private:
     std::vector<std::wstring> menuPrinters_;  // impresoras listadas en el último menú
     std::wstring chipPrinter_;                // impresora del menú contextual de la barra
     std::vector<std::wstring> menuServers_;  // servidores listados en el último menú principal
+    // Actualización automática (D58).
+    bool updatePending_ = false;     // hay una versión nueva instalada: falta reiniciar
+    update::Version updateVersion_;  // esa versión (vale si updatePending_)
+    // Última versión de la que se avisó en la bandeja, para no repetir el
+    // aviso en cada comprobación periódica.
+    std::wstring updateNotified_;
     // Copia del trabajo que se está reenviando (el menú de destinos es modal
     // y la instantánea puede cambiar mientras está abierto).
     core::JobInfo redirectJob_;

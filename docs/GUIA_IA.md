@@ -67,6 +67,7 @@ app/      ← orquestación: MainWindow, Application, acciones, RowBuilder
   ├── ui/       ← controles Win32 propios (solo dibujan y avisan por callbacks)
   ├── input/    ← comandos y atajos
   ├── preview/  ← spool, formatos, renderizado, caché, reimpresión
+  ├── update/   ← actualización automática: manifiesto, descarga, instalación (D58)
   ├── core/     ← spooler de Windows, monitor, estados, JobTracker
   ├── config/   ← JSON, ajustes, historial, rutas, autoarranque
   ├── i18n/     ← textos es/en
@@ -79,6 +80,7 @@ Dependencias permitidas (de arriba hacia abajo, **nunca** al revés):
 - `i18n` → nada. `config` → `util`.
 - `core` → `config`, `util` (no conoce UI ni preview).
 - `preview` → `core` (solo tipos/spooler), `i18n`, `config`, `util`.
+- `update` → `config`, `util` (no conoce UI: avisa por callback).
 - `input` → `i18n`. `ui` → `core` (tipos), `preview` (tipos), `input`, `i18n`, `config`, `util`.
 - `app` → todo.
 
@@ -111,6 +113,17 @@ llamar a `OpenPrinter/EnumJobs/SetJob` desde el hilo de la UI.
 1. Detección en `DetectFormat` (`preview/SpoolFile.cpp`) + prueba en `DetectPrinterLanguages`.
 2. Generación en `BuildPreview` (`preview/PreviewBuilder.cpp`) produciendo `PreviewPage`s (`EmfPage` o `BitmapPage`).
 3. Si también se puede reenviar a otra impresora, tratarlo en `JobActionRunner::Redirect`.
+
+### Publicar una versión (actualización automática, D58)
+1. Hacer el paso 7 de §3 con `.\scripts\build.ps1 -Package -Notas "Novedades breves"`: además de
+   `dist\` arma `publicar\actualizacion.json` y `publicar\ColaDeImpresion-actualizacion.zip`.
+2. Commit y push; luego crear el release con el comando que imprime el script
+   (`gh release create v<versión> publicar\actualizacion.json publicar\ColaDeImpresion-actualizacion.zip "dist\ColaDeImpresion <versión>.zip" ...`).
+   Debe quedar como *latest* (no *prerelease*) y la etiqueta debe ser exactamente `v` + la versión del manifiesto.
+3. Las copias abiertas lo instalan en ≤ 6 h (o con *Buscar actualizaciones*). **No** editar los archivos del release
+   a mano: el manifiesto lleva el tamaño y el SHA-256 del paquete y cualquier diferencia hace fallar la instalación.
+4. La versión de `res/app.rc` (FILEVERSION) debe coincidir con la de `CMakeLists.txt`: la app la lee del .exe en disco
+   para saber si ya hay una actualización instalada esperando el reinicio.
 
 ### Agregar un control de UI
 Derivar de `ui::Window`, pintar con `gfx::BufferedPaint` en `WM_PAINT`, tomar
@@ -151,6 +164,8 @@ exponer `OnStyleChanged()` y comunicar eventos por callbacks (`std::function`).
 - **Resultado del historial**: un trabajo corto sale de la cola entre dos refrescos, así que lo último visto puede ser "en pausa". Toda acción que libere trabajos debe pasar por `MainWindow::RunJobAction` (marca `JobTracker::MarkReleasedByUser`); si no, el trabajo impreso queda "Retirado". Las copias locales de CSR no entran al historial.
 - **Compilar y probar en Linux** (p. ej. en un entorno en la nube): `g++-mingw-w64-x86-64-posix` + un archivo de toolchain de CMake (`CMAKE_SYSTEM_NAME Windows`, `x86_64-w64-mingw32-g++-posix`, `x86_64-w64-mingw32-windres`) compila todo sin warnings, y `wine64 cola_tests.exe` ejecuta las pruebas. Bajo Wine falla solo `PrivateTempDirIsProtectedAndRemoved` (no informa `SE_DACL_PROTECTED`). No reemplaza compilar con WinLibs/MSVC ni `build.ps1 -Package` en Windows.
 - **Carnet (D56)**: está en `employeeID` (no `employeeNumber`, que es la cédula). Las consultas al directorio van solo por `core::CarnetService` (hilo de fondo); fuera del dominio la columna dice "—" y `app.log` lo explica. Para probar la búsqueda sin abrir la app, enlazar un programa a `cola_core` y llamar a `core::DirectoryReader::FindCarnets`.
+- **Actualización automática (D58)**: no probar la instalación sobre la carpeta de la copia de producción ni sobre `dist\`; usar una carpeta temporal (como `tests/test_update.cpp`). Un archivo nuevo que sea propio de cada copia debe agregarse a `update::IsProtectedFile`, y uno pesado que no cambie entre versiones, excluirse del paquete en `build.ps1`.
+- **`-Notas` con tildes desde una herramienta automatizada**: PowerShell 5.1 puede recibir mal el texto (sale "ActualizaciÃ³n"). Revisar `publicar\actualizacion.json` antes de publicar; corregir solo `notes` no cambia el tamaño ni el SHA-256 del paquete.
 - **Probar con clics simulados**: `Mayús`/`Ctrl` se leen del teclado real (`GetKeyState`), así que un `PostMessage` con `MK_SHIFT` no hace selección múltiple; usar el arrastre (rectángulo) con `WM_LBUTTONDOWN` + `WM_MOUSEMOVE` + `WM_LBUTTONUP`.
 
 ## 7. Cómo verificar en la app real

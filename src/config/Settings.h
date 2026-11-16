@@ -100,6 +100,10 @@ struct Settings {
     // Copia de lo elegido en el menú; el estado real está en el registro
     // (config/Autostart).
     bool startWithWindows = false;
+    // Actualización automática (D58): buscar versiones nuevas publicadas en
+    // GitHub al iniciar y cada 6 horas, e instalarlas en la carpeta del .exe
+    // (se usan al reiniciar la app). Con false solo se busca desde el menú.
+    bool autoUpdate = true;
     NotifyMode notifications = NotifyMode::ErrorsOnly;
     bool keepHistory = true;     // registrar los trabajos que salen de la cola (D13)
     int historyLimit = 2000;     // registros máximos del historial (50..100000)

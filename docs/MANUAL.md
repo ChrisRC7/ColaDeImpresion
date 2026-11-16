@@ -342,6 +342,15 @@ le quita a ese y se avisa.
 - *Iniciar con Windows* arranca la app minimizada al iniciar sesión.
 - *Notificaciones*: ninguna / solo errores (predeterminado) / todas (incluye trabajos nuevos e impresos).
 
+## 9.1 Actualizaciones
+
+- Con *Actualizar automáticamente* (activada por defecto) la app busca una versión nueva un minuto después de abrirse y luego cada 6 horas. Si la hay, la descarga, comprueba que sea exactamente la publicada y la instala en su carpeta **sin cerrarse**; avisa en la bandeja (*Actualización lista*).
+- La versión nueva se usa al reiniciar: *Menú → Reiniciar para usar la versión X*. La app nunca se reinicia sola (podría estar reteniendo trabajos); se vuelve a conectar al mismo servidor.
+- *Menú → Buscar actualizaciones* lo hace en el momento y responde en la barra inferior.
+- No se tocan la configuración, el historial, `app.log`, `portable.txt`, `servidor-laimi.txt` ni los renderizadores.
+- Si la carpeta de la app no se puede escribir (por ejemplo, instalada en *Archivos de programa* sin ser administrador), solo avisa que hay una versión nueva.
+- Necesita salida a Internet hacia `github.com` (usa el proxy configurado en Windows). Los detalles quedan en `app.log` (líneas «Actualización: …»).
+
 ## 10. Configuración avanzada (`config.json`)
 
 Cada usuario de Windows tiene su propio `config.json` en

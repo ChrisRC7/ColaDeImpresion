@@ -13,6 +13,7 @@
     .\scripts\build.ps1 -Config Debug   # Debug
     .\scripts\build.ps1 -Package        # además arma dist\ limpia (sin logs ni historial) y "dist\ColaDeImpresion <versión>.zip"
     .\scripts\build.ps1 -Installer      # además compila el instalador (requiere Inno Setup 6)
+    .\scripts\build.ps1 -Package -Notas "Columna nueva..."   # novedades para el aviso de actualización
 
 .NOTES
     Pasos: 1) busca la toolchain; 2) configura y compila con CMake en
@@ -20,6 +21,10 @@
     3) ejecuta cola_tests.exe salvo -SkipTests; 4) con -Package o -Installer
     arma dist\ y el .zip (D45: se hace al terminar cada tarea); 5) con
     -Installer compila installer\ColaDeImpresion.iss.
+    Con -Package también arma publicar\ (actualización automática, D58): el
+    paquete ColaDeImpresion-actualizacion.zip y su manifiesto
+    actualizacion.json, que se suben a un release de GitHub con la etiqueta
+    v<versión> (el script muestra el comando de gh al terminar).
     Cualquier error detiene el script ($ErrorActionPreference = "Stop" y
     comprobación de $LASTEXITCODE tras cada programa externo).
 #>
@@ -31,7 +36,10 @@ param(
     # Además del paquete, compilar el instalador con Inno Setup 6.
     [switch]$Installer,
     # No ejecutar las pruebas unitarias (cola_tests.exe).
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    # Novedades (texto breve, máx. 500 caracteres) que se guardan en el
+    # manifiesto de la actualización automática (publicar\actualizacion.json).
+    [string]$Notas = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -202,6 +210,21 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
+   - ACTUALIZACIÓN AUTOMÁTICA (0.5.19): la app busca versiones nuevas en
+     GitHub un minuto después de abrirse y luego cada 6 horas. Si hay una, la
+     descarga, comprueba que sea exactamente la publicada y la deja instalada
+     en esta carpeta sin cerrarse; avisa en la bandeja "Actualización lista".
+     La versión nueva se usa al reiniciar: Menú (F10) > "Reiniciar para usar
+     la versión X" (conserva el servidor). Nunca se reinicia sola.
+     * Menú > "Buscar actualizaciones": abajo debe decir "Ya tiene la última
+       versión (0.5.19)" o, sin Internet, "No se pudo actualizar: ...".
+     * Menú > "Actualizar automáticamente" la apaga o la enciende.
+     * Si la carpeta de la app no se puede escribir (p. ej. instalada en
+       Archivos de programa), avisa que hay una versión nueva pero no la
+       instala.
+     * No toca portable.txt, servidor-laimi.txt, config.json, historial.json
+       ni app.log, ni la carpeta renderers. En app.log quedan las líneas
+       "Actualización: ...".
    - CORRECCIONES DE LA REVISIÓN DE CÓDIGO (0.5.18): no cambia nada a la
      vista; son fallos corregidos. Lo que conviene comprobar:
      * Clic derecho sobre un trabajo, deje el menú abierto más de 5 segundos
@@ -434,6 +457,44 @@ OPCIONAL
         }
     } finally { $zip.Dispose() }
     Write-Host "Distribución lista en $dist (y $zipName)"
+
+    # --- Publicación para la actualización automática (D58) ------------------
+    # publicar\ (no se versiona) tiene los dos archivos de nombre fijo que la
+    # app busca en el último release de GitHub (update/UpdateInfo.h):
+    #   - ColaDeImpresion-actualizacion.zip: los archivos de dist\ en rutas
+    #     relativas a la carpeta del .exe (sin carpeta de versión), SIN los
+    #     renderizadores (pesan ~60 MB y no cambian entre versiones) ni los
+    #     archivos propios de cada copia (portable.txt, servidor-laimi.txt),
+    #     que la app tampoco tocaría (UpdatePackage::IsProtectedFile);
+    #   - actualizacion.json: versión, nombre, tamaño y SHA-256 del paquete y
+    #     las novedades (-Notas). Se escribe en UTF-8 sin BOM.
+    $publish = Join-Path $root "publicar"
+    if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
+    New-Item -ItemType Directory $publish | Out-Null
+    $updateName = "ColaDeImpresion-actualizacion.zip"
+    $updatePath = Join-Path $publish $updateName
+    $excluded = @("portable.txt", "servidor-laimi.txt")
+    $zip = [IO.Compression.ZipFile]::Open($updatePath, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($file in $files) {
+            $relative = $file.FullName.Substring($dist.Length + 1).Replace("\", "/")
+            if ($relative -like "renderers/*" -or $excluded -contains $relative) { continue }
+            [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $relative,
+                [IO.Compression.CompressionLevel]::Optimal)
+        }
+    } finally { $zip.Dispose() }
+    if ($Notas.Length -gt 500) { $Notas = $Notas.Substring(0, 500) }
+    $manifest = [ordered]@{
+        version = $version
+        file    = $updateName
+        size    = (Get-Item $updatePath).Length
+        sha256  = (Get-FileHash $updatePath -Algorithm SHA256).Hash.ToLower()
+        notes   = $Notas
+    }
+    [IO.File]::WriteAllText((Join-Path $publish "actualizacion.json"), ($manifest | ConvertTo-Json),
+                            (New-Object Text.UTF8Encoding $false))
+    Write-Host "Actualización lista en $publish. Para publicarla (las PCs la instalan solas):"
+    Write-Host "  gh release create v$version `"publicar\actualizacion.json`" `"publicar\$updateName`" `"dist\$zipName`" --title `"$version`" --notes `"...`""
 }
 
 # --- Instalador --------------------------------------------------------------

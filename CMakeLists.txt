@@ -7,7 +7,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # RC: compila res/app.rc (ícono, manifiesto y datos de versión del .exe).
-project(ColaDeImpresion VERSION 0.5.18 LANGUAGES CXX RC)
+project(ColaDeImpresion VERSION 0.5.19 LANGUAGES CXX RC)
 
 # C++20 estricto, sin extensiones del compilador (gnu++20).
 set(CMAKE_CXX_STANDARD 20)
@@ -36,6 +36,7 @@ file(GLOB_RECURSE COLA_CORE_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/core/*.cpp
     ${CMAKE_SOURCE_DIR}/src/preview/*.cpp
     ${CMAKE_SOURCE_DIR}/src/input/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/update/*.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/*.cpp
     ${CMAKE_SOURCE_DIR}/src/app/*.cpp
 )
@@ -61,10 +62,13 @@ target_compile_definitions(cola_core PUBLIC
 # comctl32/comdlg32/shell32/shlwapi (controles, "Guardar como", shell),
 # ole32/oleaut32/uuid/windowscodecs (COM y WIC para imágenes), dwmapi/uxtheme
 # (modo oscuro), advapi32 (registro, inicio con Windows), ws2_32 (resolver
-# nombres de servidor) y wldap32 (Active Directory, solo lectura).
+# nombres de servidor), wldap32 (Active Directory, solo lectura) y, para la
+# actualización automática (D58), winhttp (descarga HTTPS), bcrypt (SHA-256)
+# y version (versión del .exe instalado).
 target_link_libraries(cola_core PUBLIC
     winspool user32 gdi32 gdiplus comctl32 comdlg32 shell32 shlwapi ole32 oleaut32
     uuid dwmapi uxtheme windowscodecs advapi32 msimg32 ws2_32 wldap32
+    winhttp bcrypt version
 )
 
 # Advertencias al máximo razonable: la regla es compilar sin warnings.

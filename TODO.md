@@ -221,6 +221,10 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [ ] Pruebas manuales de las correcciones de la 0.5.18 (las de `docs/FALLOS_DETECTADOS.md`, resumidas en el LEEME del paquete): solo se verificaron con pruebas unitarias y compilación; no se abrió la app
 - [ ] (LAIMI) Reenvío rasterizado tras F4: PDF/PostScript de 5, 6, 7 y 12 páginas a una impresora con otro controlador deben llegar completos (si Ghostscript devolviera error al pedir páginas más allá del final, un documento de exactamente 6 o 12 páginas se rechazaría: revisar `app.log`, "Reenvío de ... abortado")
 - [ ] (LAIMI) F6: cortar la red unos segundos con un trabajo liberado en cola y confirmar que no vuelve a "Retenido" ni aparece en el historial
+- [x] Actualización automática desde los releases de GitHub: módulo `update/`, menú, opción `autoUpdate`, pruebas y `publicar\` en `build.ps1 -Package` (0.5.19, D58)
+- [x] Compilar la 0.5.19 (Debug y Release, sin warnings), 116 pruebas y `build.ps1 -Package` (WinLibs GCC 16.2.0 r3)
+- [ ] Publicar el primer release con manifiesto (`gh release create v0.5.19 ...`, comando que imprime `build.ps1`) y comprobar desde una copia 0.5.19 con versión menor (o una 0.5.20 de prueba) que descarga, instala y reinicia (el repositorio es público: comprobado el 2026-11-16)
+- [ ] (LAIMI) Probar la actualización automática en una PC del laboratorio (proxy del TEC, carpeta de la copia portable con permiso de escritura)
 - [ ] Mejoras X1–X6 de `docs/FALLOS_DETECTADOS.md` (historial compartido entre copias, historial sin descartes silenciosos, confirmar el borrado, inicio con Windows tras actualizar, selección que no salta sola, no rearmar la tabla sin cambios); varias requieren decisión del usuario antes de implementarlas
 
 Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).

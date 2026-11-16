@@ -8,6 +8,7 @@
 //   --server NOMBRE      conecta a ese servidor de impresión ("" = este equipo)
 //   --laimi              conecta al servidor del LAIMI (config::LaimiServer)
 //   --elevated-restart   (interno) espera a que la instancia anterior termine
+//                        (reiniciar como administrador o tras actualizar, D58)
 //   --instancia-adicional (desarrollo) permite abrir una segunda copia aunque ya
 //                        haya otra abierta (ver GUIA_IA.md §6)
 //   --config RUTA        (desarrollo) usa ese config.json en lugar del del

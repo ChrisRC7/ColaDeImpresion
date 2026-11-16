@@ -4,6 +4,8 @@ build-*/
 out/
 # Paquete portable que genera scripts\build.ps1 -Package (se regenera siempre).
 dist/
+# Paquete y manifiesto de la actualización automática (build.ps1 -Package, D58).
+publicar/
 # Binarios y archivos intermedios del compilador/enlazador (MinGW y MSVC).
 *.exe
 *.obj

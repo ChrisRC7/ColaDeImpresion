@@ -32,7 +32,8 @@ constexpr wchar_t kMutexName[] = L"Local\\ColaDeImpresion.SingleInstance";
 struct Arguments {
     // Opciones que se le pasan a MainWindow::Create (bandeja, servidor, LAIMI).
     StartupOptions startup;
-    // true si es la instancia relanzada por "Reiniciar como administrador":
+    // true si es la instancia relanzada por "Reiniciar como administrador" o
+    // por "Reiniciar para usar la versión X" (actualización, D58):
     // en vez de delegar en la instancia abierta, espera a que esta cierre.
     bool elevatedRestart = false;
     // Solo para desarrollo: permite probar una compilación nueva mientras la

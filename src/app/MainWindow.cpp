@@ -62,6 +62,8 @@ constexpr UINT WM_APP_ACTION = WM_APP + 3;
 // volver a consultar el servicio.
 constexpr UINT WM_APP_FACTS = WM_APP + 4;  // hay datos nuevos de trabajos (páginas x copias)
 constexpr UINT WM_APP_CARNETS = WM_APP + 5;  // llegaron carnets del Active Directory
+// WM_APP_UPDATE: lParam = update::UpdateStatus* (actualización automática, D58).
+constexpr UINT WM_APP_UPDATE = WM_APP + 6;
 
 // Temporizadores (SetTimer sobre la ventana principal).
 // kTimerSaveHistory: guarda historial.json un rato después del último cambio
@@ -69,6 +71,12 @@ constexpr UINT WM_APP_CARNETS = WM_APP + 5;  // llegaron carnets del Active Dire
 constexpr UINT_PTR kTimerSaveHistory = 1;
 // kTimerTransient: borra el mensaje temporal de la barra de estado.
 constexpr UINT_PTR kTimerTransient = 2;
+// kTimerUpdateCheck: busca versiones nuevas (D58). El primer disparo llega
+// kFirstUpdateCheckMs después de abrir (no compite con la conexión inicial)
+// y luego cada kUpdateCheckIntervalMs. Es el único temporizador periódico.
+constexpr UINT_PTR kTimerUpdateCheck = 3;
+constexpr UINT kFirstUpdateCheckMs = 60 * 1000;
+constexpr UINT kUpdateCheckIntervalMs = 6 * 60 * 60 * 1000;
 
 // Identificadores de menú.
 // Rangos: los menús dinámicos (impresoras, servidores, destinos de reenvío,
@@ -119,6 +127,9 @@ enum MenuId : UINT {
     ID_ABOUT,
     ID_CONNECT_LAIMI,
     ID_SET_LAIMI,
+    ID_CHECK_UPDATES,
+    ID_AUTO_UPDATE,
+    ID_RESTART_UPDATE,
     // Menú contextual de la lista de trabajos.
     ID_CTX_PAUSE = 2101,
     ID_CTX_PAUSE_BOTH,
@@ -191,6 +202,8 @@ MainWindow::~MainWindow() {
     // (Cada reset espera a que su hilo termine; así ningún callback hace
     // PostMessage a una ventana a medio destruir. facts_ y carnets_ se
     // destruyen después, con el resto de los miembros.)
+    // updates_ primero: corta una descarga en curso (no una instalación).
+    updates_.reset();
     monitor_.reset();
     previews_.reset();
     actions_.reset();
@@ -358,6 +371,11 @@ bool MainWindow::Create(const StartupOptions& options) {
     RequestHistoryCarnets();
     actions_ = std::make_unique<JobActionRunner>(
         [self](ActionResult r) { PostOwned(self, WM_APP_ACTION, new ActionResult(std::move(r))); });
+    // Al crearse borra los restos de la actualización anterior; la primera
+    // comprobación la dispara kTimerUpdateCheck (D58).
+    updates_ = std::make_unique<update::UpdateService>(
+        [self](update::UpdateStatus st) { PostOwned(self, WM_APP_UPDATE, new update::UpdateStatus(std::move(st))); });
+    SetTimer(hwnd_, kTimerUpdateCheck, kFirstUpdateCheckMs, nullptr);
 
     tray_.Add(hwnd_, iconSmall_, Tr(S::AppTitle));
 
@@ -2001,6 +2019,7 @@ void MainWindow::ShowMainMenu(POINT screen) {
                 Tr(S::MenuNotifyAll));
     AppendMenuW(menu, MF_STRING | check(settings_.startWithWindows), ID_START_WITH_WINDOWS, Tr(S::MenuStartWithWindows));
     AppendMenuW(menu, MF_STRING | check(settings_.minimizeToTray), ID_MINIMIZE_TO_TRAY, Tr(S::MenuMinimizeToTray));
+    AppendMenuW(menu, MF_STRING | check(settings_.autoUpdate), ID_AUTO_UPDATE, Tr(S::MenuAutoUpdate));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     // Herramientas: atajos (F1), carpeta de datos, exportar (atenuado sin
     // historial), borrar historial, reiniciar como administrador y "Acerca de".
@@ -2011,6 +2030,13 @@ void MainWindow::ShowMainMenu(POINT screen) {
     AppendMenuW(menu, MF_STRING, ID_CLEAR_HISTORY, Tr(S::MenuClearHistory));
     // Solo si no se está ya como administrador (D15).
     if (!IsElevated()) AppendMenuW(menu, MF_STRING, ID_RUN_AS_ADMIN, Tr(S::MenuRunAsAdmin));
+    // Actualización (D58): con una versión nueva ya instalada, la opción de
+    // reiniciar reemplaza a la de buscar.
+    if (updatePending_)
+        AppendMenuW(menu, MF_STRING, ID_RESTART_UPDATE,
+                    util::Format(Tr(S::MenuRestartToUpdate), updateVersion_.ToString().c_str()).c_str());
+    else
+        AppendMenuW(menu, MF_STRING, ID_CHECK_UPDATES, Tr(S::MenuCheckUpdates));
     AppendMenuW(menu, MF_STRING, ID_ABOUT, Tr(S::MenuAbout));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_EXIT, Tr(S::MenuExit));
@@ -2237,6 +2263,17 @@ void MainWindow::HandleMenuCommand(UINT id) {
             UpdateStatus();
             break;
         case ID_RUN_AS_ADMIN: RestartAsAdmin(); break;
+        // Actualización (D58): la búsqueda manual siempre instala si hay algo
+        // nuevo y responde en la barra de estado.
+        case ID_CHECK_UPDATES:
+            if (updates_) updates_->Check(true, true);
+            break;
+        case ID_AUTO_UPDATE:
+            settings_.autoUpdate = !settings_.autoUpdate;
+            SaveSettings();
+            if (settings_.autoUpdate && updates_ && !updatePending_) updates_->Check(false, true);
+            break;
+        case ID_RESTART_UPDATE: RestartForUpdate(); break;
         case ID_ABOUT: ui::ShowAboutDialog(hwnd_); break;
         case ID_EXIT: Quit(); break;
         default: break;
@@ -2344,6 +2381,79 @@ void MainWindow::RestartAsAdmin() {
     sei.nShow = SW_SHOWNORMAL;
     sei.hwnd = hwnd_;
     if (ShellExecuteExW(&sei)) Quit();
+}
+
+// Resultado de la actualización automática (WM_APP_UPDATE, hilo de la UI).
+// Las comprobaciones manuales (menú) responden siempre en la barra de estado;
+// las automáticas solo avisan de lo que el operador debe saber (versión
+// instalada o imposible de instalar), una vez por versión, en la bandeja.
+void MainWindow::OnUpdateStatus(const update::UpdateStatus& status) {
+    using update::UpdateState;
+    const std::wstring version = status.version.ToString();
+    // Aviso en la bandeja una sola vez por versión (y si no se apagaron las notificaciones).
+    auto notifyOnce = [&](const std::wstring& title, const std::wstring& text, bool error) {
+        if (updateNotified_ == version) return;
+        updateNotified_ = version;
+        if (settings_.notifications != config::NotifyMode::None) Notify(title, text, error);
+    };
+    switch (status.state) {
+        case UpdateState::Checking:
+            if (status.manual) ShowTransient(Tr(S::UpdateChecking), ui::Tone::Info);
+            break;
+        case UpdateState::UpToDate:
+            if (status.manual)
+                ShowTransient(util::Format(Tr(S::UpdateUpToDate), update::CurrentVersion().ToString().c_str()),
+                              ui::Tone::Success);
+            break;
+        case UpdateState::Available:
+            if (status.manual) ShowTransient(util::Format(Tr(S::UpdateAvailable), version.c_str()), ui::Tone::Info);
+            break;
+        case UpdateState::Downloading:
+            if (status.manual) ShowTransient(util::Format(Tr(S::UpdateDownloading), version.c_str()), ui::Tone::Info);
+            break;
+        case UpdateState::Installed:
+            updatePending_ = true;
+            updateVersion_ = status.version;
+            ShowTransient(util::Format(Tr(S::UpdateInstalled), version.c_str(), version.c_str()), ui::Tone::Success);
+            notifyOnce(Tr(S::UpdateInstalledTitle), util::Format(Tr(S::UpdateInstalledNotify), version.c_str()), false);
+            break;
+        case UpdateState::NotWritable: {
+            std::wstring text = util::Format(Tr(S::UpdateNotWritable), version.c_str());
+            if (status.manual) ShowTransient(text, ui::Tone::Danger);
+            else notifyOnce(Tr(S::AppTitle), text, true);
+            break;
+        }
+        case UpdateState::Failed:
+            // Las automáticas fallan en silencio (sin Internet, GitHub caído...):
+            // ya quedó en app.log y se reintenta en la próxima comprobación.
+            if (status.manual)
+                ShowTransient(util::Format(Tr(S::UpdateFailed), status.error.c_str()), ui::Tone::Danger);
+            break;
+    }
+}
+
+// "Reiniciar para usar la versión X" (D58): la versión nueva ya está en la
+// carpeta del .exe. Se abre como un proceso normal (hereda la elevación si
+// esta instancia la tiene) con --elevated-restart, que espera a que esta
+// cierre y libere el mutex de instancia única (Application.cpp).
+void MainWindow::RestartForUpdate() {
+    std::wstring exe = config::ExecutablePath();
+    std::wstring args = L"--elevated-restart --server \"" + settings_.activeServer + L"\"";
+    if (!IsWindowVisible(hwnd_)) args += L" --tray";
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.lpVerb = L"open";
+    sei.lpFile = exe.c_str();
+    sei.lpParameters = args.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    sei.hwnd = hwnd_;
+    if (ShellExecuteExW(&sei)) {
+        util::LogInfo(L"Actualización: reinicio para usar la versión %ls", updateVersion_.ToString().c_str());
+        Quit();
+    } else {
+        ShowTransient(util::Format(Tr(S::UpdateFailed), util::Win32ErrorMessage(GetLastError()).c_str()),
+                      ui::Tone::Danger);
+    }
 }
 
 // Notificación de la bandeja (globo/toast); error = ícono de error.
@@ -2498,6 +2608,11 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
             OnActionResult(*result);
             return 0;
         }
+        case WM_APP_UPDATE: {
+            std::unique_ptr<update::UpdateStatus> status(reinterpret_cast<update::UpdateStatus*>(lParam));
+            OnUpdateStatus(*status);
+            return 0;
+        }
         // Eventos del ícono de bandeja (NOTIFYICON_VERSION_4: el evento va
         // en LOWORD(lParam)). Clic, selección con teclado o clic en la
         // notificación = mostrar; clic derecho = menú.
@@ -2511,7 +2626,8 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 case WM_RBUTTONUP: ShowTrayMenu(); break;
             }
             return 0;
-        // Temporizadores de un solo disparo (se matan al llegar).
+        // Temporizadores de un solo disparo (se matan al llegar), salvo el de
+        // la actualización, que se reprograma cada 6 horas.
         case WM_TIMER:
             if (wParam == kTimerSaveHistory) {
                 KillTimer(hwnd_, kTimerSaveHistory);
@@ -2521,6 +2637,10 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 KillTimer(hwnd_, kTimerTransient);
                 transientText_.clear();
                 UpdateStatus();
+            } else if (wParam == kTimerUpdateCheck) {
+                SetTimer(hwnd_, kTimerUpdateCheck, kUpdateCheckIntervalMs, nullptr);
+                // Ya instalada: el servicio solo volvería a decir "Installed".
+                if (settings_.autoUpdate && updates_ && !updatePending_) updates_->Check(false, true);
             }
             return 0;
         case WM_SIZE:

@@ -84,6 +84,7 @@ JsonValue Settings::ToJson() const {
     json[L"pauseAllOnStart"] = pauseAllOnStart;
     json[L"minimizeToTray"] = minimizeToTray;
     json[L"startWithWindows"] = startWithWindows;
+    json[L"autoUpdate"] = autoUpdate;
     json[L"notifications"] = NotifyModeToString(notifications);
     json[L"keepHistory"] = keepHistory;
     json[L"historyLimit"] = historyLimit;
@@ -154,6 +155,7 @@ Settings Settings::FromJson(const JsonValue& json) {
     s.pauseAllOnStart = json[L"pauseAllOnStart"].AsBool(s.pauseAllOnStart);
     s.minimizeToTray = json[L"minimizeToTray"].AsBool(s.minimizeToTray);
     s.startWithWindows = json[L"startWithWindows"].AsBool(s.startWithWindows);
+    s.autoUpdate = json[L"autoUpdate"].AsBool(s.autoUpdate);
     s.notifications = NotifyModeFromString(json[L"notifications"].AsString(L"errors"));
     s.keepHistory = json[L"keepHistory"].AsBool(s.keepHistory);
     s.historyLimit = std::clamp(json[L"historyLimit"].AsInt(s.historyLimit), 50, 100000);
