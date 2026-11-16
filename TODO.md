@@ -226,7 +226,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Publicar el primer release con manifiesto (`v0.5.19`) y comprobar con una copia compilada como 0.5.18 que descarga, instala y, al volver a abrirla, arranca la 0.5.19 y limpia el `.cola-old`
 - [ ] Probar en la app la opción *Reiniciar para usar la versión X* (necesita un release más nuevo que la versión abierta)
 - [ ] Reemplazar a mano una última vez las copias anteriores a la 0.5.19 (no tienen el actualizador; p. ej. `C:\ToolBox\ColaDeImpresion 0.5.17`)
-- [ ] (LAIMI) Probar la actualización automática en una PC del laboratorio (proxy del TEC, carpeta de la copia portable con permiso de escritura)
+- [x] (LAIMI) Actualización automática probada en una PC del TEC (2026-11-16): descarga por la red del TEC sin problemas de proxy; `C:\ToolBox` es modificable por los usuarios autenticados, así que la copia portable puede actualizarse sola
 - [ ] Mejoras X1–X6 de `docs/FALLOS_DETECTADOS.md` (historial compartido entre copias, historial sin descartes silenciosos, confirmar el borrado, inicio con Windows tras actualizar, selección que no salta sola, no rearmar la tabla sin cambios); varias requieren decisión del usuario antes de implementarlas
 
 Plan detallado: [docs/PRUEBAS.md](docs/PRUEBAS.md).
