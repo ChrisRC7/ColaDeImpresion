@@ -344,9 +344,9 @@ le quita a ese y se avisa.
 
 ## 9.1 Actualizaciones
 
-- Con *Actualizar automáticamente* (activada por defecto) la app busca una versión nueva un minuto después de abrirse y luego cada 6 horas. Si la hay, la descarga, comprueba que sea exactamente la publicada y la instala en su carpeta **sin cerrarse**; avisa en la bandeja (*Actualización lista*).
-- La versión nueva se usa al reiniciar: *Menú → Reiniciar para usar la versión X*. La app nunca se reinicia sola (podría estar reteniendo trabajos); se vuelve a conectar al mismo servidor.
-- *Menú → Buscar actualizaciones* lo hace en el momento y responde en la barra inferior.
+- La app **no se conecta sola a Internet**: solo busca una versión nueva cuando se pide, con el botón *Buscar actualizaciones* de la ventana *Acerca de* (botón *Acerca de* de la cabecera; tecla `B` dentro de la ventana) o con *Menú → Buscar actualizaciones*. El resultado aparece en la barra inferior.
+- Si hay una versión nueva, **pregunta si instalarla** (muestra las novedades). Con *Sí* la descarga, comprueba que sea exactamente la publicada y la instala en su carpeta **sin cerrarse**.
+- Después pregunta si reiniciar ya para usarla. Con *No*, queda *Menú → Reiniciar para usar la versión X* (o se usa la próxima vez que se abra). La app nunca se reinicia sola (podría estar reteniendo trabajos); se vuelve a conectar al mismo servidor.
 - No se tocan la configuración, el historial, `app.log`, `portable.txt`, `servidor-laimi.txt` ni los renderizadores.
 - Si la carpeta de la app no se puede escribir (por ejemplo, instalada en *Archivos de programa* sin ser administrador), solo avisa que hay una versión nueva.
 - Necesita salida a Internet hacia `github.com` (usa el proxy configurado en Windows). Los detalles quedan en `app.log` (líneas «Actualización: …»).

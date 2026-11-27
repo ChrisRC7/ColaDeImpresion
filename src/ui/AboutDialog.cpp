@@ -46,7 +46,8 @@ public:
     }
 
     // Muestra el diálogo centrado sobre owner y bloquea hasta que se cierre.
-    void Run(HWND owner) {
+    // Devuelve true si se cerró con Buscar actualizaciones.
+    bool Run(HWND owner) {
         const Style& style = Style::Get();
         // Ícono de la app (recurso 1 de res/app.rc) a 64 px lógicos, cargado
         // al tamaño exacto para que Windows elija la imagen más nítida del .ico.
@@ -66,7 +67,7 @@ public:
         GetWindowRect(owner, &ownerRect);
         const int x = ownerRect.left + (ownerRect.right - ownerRect.left - w) / 2;
         const int y = ownerRect.top + std::max(0L, (ownerRect.bottom - ownerRect.top - h) / 3);
-        if (!CreateWin(L"ColaAboutDialog", Tr(S::AboutTitle), ws, ex, x, y, w, h, owner)) return;
+        if (!CreateWin(L"ColaAboutDialog", Tr(S::AboutTitle), ws, ex, x, y, w, h, owner)) return false;
         // Barra de título oscura en modo oscuro.
         ApplyWindowDarkMode(hwnd_, style.dark());
 
@@ -92,6 +93,7 @@ public:
         SetActiveWindow(owner);
         DestroyWindow(hwnd_);
         if (quit) PostQuitMessage(static_cast<int>(msg.wParam));
+        return checkUpdates_ && !quit;
     }
 
 protected:
@@ -101,10 +103,13 @@ protected:
             // Paint() cubre todo el fondo con doble búfer: no borrar evita parpadeo.
             case WM_ERASEBKGND: return 1;
             case WM_MOUSEMOVE: {
-                // Único elemento interactivo: el botón Cerrar (resaltado al pasar).
-                const bool hit = gfx::Contains(close_, {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
-                if (hit != hoverClose_) {
-                    hoverClose_ = hit;
+                // Elementos interactivos: los botones Cerrar y Buscar
+                // actualizaciones (resaltados al pasar).
+                const POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                const bool hitClose = gfx::Contains(close_, pt), hitUpdates = gfx::Contains(updates_, pt);
+                if (hitClose != hoverClose_ || hitUpdates != hoverUpdates_) {
+                    hoverClose_ = hitClose;
+                    hoverUpdates_ = hitUpdates;
                     Invalidate();
                 }
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd_, 0};
@@ -112,17 +117,22 @@ protected:
                 return 0;
             }
             case WM_MOUSELEAVE:
-                hoverClose_ = false;
+                hoverClose_ = hoverUpdates_ = false;
                 Invalidate();
                 return 0;
-            // Se cierra al soltar el botón (como un botón normal: si se
-            // arrastra fuera antes de soltar, no se cierra).
-            case WM_LBUTTONUP:
-                if (gfx::Contains(close_, {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)})) done_ = true;
+            // Se actúa al soltar el botón (como un botón normal: si se
+            // arrastra fuera antes de soltar, no pasa nada).
+            case WM_LBUTTONUP: {
+                const POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                if (gfx::Contains(close_, pt)) done_ = true;
+                if (gfx::Contains(updates_, pt)) done_ = checkUpdates_ = true;
                 return 0;
-            // Cerrar es el botón por defecto y el de cancelar a la vez.
+            }
+            // Cerrar es el botón por defecto y el de cancelar a la vez; la
+            // tecla B (de "Buscar") pide buscar actualizaciones.
             case WM_KEYDOWN:
                 if (wParam == VK_ESCAPE || wParam == VK_RETURN || wParam == VK_SPACE) done_ = true;
+                if (wParam == 'B') done_ = checkUpdates_ = true;
                 return 0;
             case WM_CLOSE: done_ = true; return 0;
             default: break;
@@ -136,7 +146,7 @@ private:
     // Calcula los rectángulos y devuelve el alto del área cliente.
     // De arriba abajo: franja de encabezado (ícono a la izquierda; nombre,
     // versión y descripción a la derecha), título "Autores", una tarjeta por
-    // autor y el pie con los créditos y el botón Cerrar.
+    // autor y el pie con los créditos y los botones.
     int Layout() {
         const Style& style = Style::Get();
         const Fonts& fonts = style.fonts();
@@ -168,11 +178,17 @@ private:
             y = card.bottom + style.Px(10);
         }
 
-        // Pie: créditos y el botón Cerrar.
-        y += style.Px(10);
+        // Pie: créditos en una línea y debajo los botones Buscar
+        // actualizaciones (a la izquierda, ancho según el texto) y Cerrar.
+        y += style.Px(4);
+        footer_ = {pad, y, right, y + style.Px(20)};
+        y = footer_.bottom + style.Px(14);
         const int buttonH = style.Px(34);
         close_ = {right - style.Px(110), y, right, y + buttonH};
-        footer_ = {pad, y, close_.left - style.Px(12), y + buttonH};
+        dc = GetDC(nullptr);
+        const int updatesW = gfx::MeasureText(dc, Tr(S::AboutCheckUpdates), fonts.semibold).cx + style.Px(32);
+        ReleaseDC(nullptr, dc);
+        updates_ = {pad, y, std::min<int>(pad + updatesW, close_.left - style.Px(12)), y + buttonH};
         return y + buttonH + pad;
     }
 
@@ -225,6 +241,11 @@ private:
         // pasar el mouse) y siempre con anillo de foco: es el único control
         // y Enter/Espacio lo activan.
         gfx::Text(dc, Tr(S::AboutFooter), footer_, fonts.small, pal.textMuted);
+        // Buscar actualizaciones: botón secundario (fondo de tarjeta y borde).
+        gfx::FillRounded(dc, updates_, radius, hoverUpdates_ ? Blend(pal.surfaceAlt, pal.text, 0.08) : pal.surfaceAlt);
+        gfx::StrokeRounded(dc, updates_, radius, pal.border);
+        gfx::Text(dc, Tr(S::AboutCheckUpdates), updates_, fonts.semibold, pal.text,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         gfx::FillRounded(dc, close_, radius, hoverClose_ ? Blend(pal.accent, pal.text, 0.15) : pal.accent);
         const RECT ring = gfx::Inset(close_, -style.Px(2), -style.Px(2));
         gfx::StrokeRounded(dc, ring, radius + style.Px(2), pal.accent, 1.5f);
@@ -235,17 +256,19 @@ private:
     HICON icon_ = nullptr;  // ícono de la app a 64 px lógicos (se libera en el destructor)
     RECT cards_[kAuthorCount]{};  // una tarjeta por autor
     // Zonas del layout: franja, ícono, textos del encabezado, título de
-    // autores, créditos del pie y botón Cerrar.
-    RECT band_{}, iconRect_{}, name_{}, version_{}, description_{}, section_{}, footer_{}, close_{};
-    bool hoverClose_ = false;  // el mouse está sobre Cerrar
-    bool done_ = false;        // true termina el bucle modal de Run()
+    // autores, créditos del pie y botones Cerrar y Buscar actualizaciones.
+    RECT band_{}, iconRect_{}, name_{}, version_{}, description_{}, section_{}, footer_{}, close_{}, updates_{};
+    bool hoverClose_ = false;    // el mouse está sobre Cerrar
+    bool hoverUpdates_ = false;  // el mouse está sobre Buscar actualizaciones
+    bool done_ = false;          // true termina el bucle modal de Run()
+    bool checkUpdates_ = false;  // se cerró con Buscar actualizaciones
 };
 
 }  // namespace
 
-void ShowAboutDialog(HWND owner) {
+bool ShowAboutDialog(HWND owner) {
     AboutDialog dialog;
-    dialog.Run(owner);
+    return dialog.Run(owner);
 }
 
 }  // namespace cola::ui

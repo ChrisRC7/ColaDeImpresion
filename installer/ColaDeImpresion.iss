@@ -7,7 +7,7 @@
 ; Constantes del preprocesador de Inno Setup ({#Nombre} las expande).
 ; AppVersion se actualiza a mano en cada versión (igual que CMakeLists.txt y res\app.rc).
 #define AppName "Cola de Impresión"
-#define AppVersion "0.5.19"
+#define AppVersion "0.5.20"
 #define AppPublisher "ChrisCorp"
 #define AppExe "ColaDeImpresion.exe"
 

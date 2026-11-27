@@ -159,10 +159,7 @@ TEST(SettingsRoundTrip) {
     s.columnWidths[L"user"] = 150;
     s.columnWidths[L"document"] = 5;  // fuera de rango: se ajusta al mínimo
     s.columnOrder = {L"user", L"document", L"status"};
-    s.autoUpdate = false;  // predeterminado true (D58)
     config::Settings r = config::Settings::FromJson(s.ToJson());
-    CHECK(config::Settings{}.autoUpdate);
-    CHECK(!r.autoUpdate);
     // Ancho y orden de columnas. El ancho 5 vuelve como kMinColumnWidth (28):
     // FromJson acota los anchos a [kMinColumnWidth, kMaxColumnWidth] para que
     // un config.json editado a mano no deje una columna invisible.

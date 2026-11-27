@@ -120,7 +120,7 @@ llamar a `OpenPrinter/EnumJobs/SetJob` desde el hilo de la UI.
 2. Commit y push; luego crear el release con el comando que imprime el script
    (`gh release create v<versión> publicar\actualizacion.json publicar\ColaDeImpresion-actualizacion.zip "dist\ColaDeImpresion <versión>.zip" ...`).
    Debe quedar como *latest* (no *prerelease*) y la etiqueta debe ser exactamente `v` + la versión del manifiesto.
-3. Las copias abiertas lo instalan en ≤ 6 h (o con *Buscar actualizaciones*). **No** editar los archivos del release
+3. Cada copia lo instala cuando un operador pulsa *Buscar actualizaciones* y acepta (desde la 0.5.20 la app no busca sola). **No** editar los archivos del release
    a mano: el manifiesto lleva el tamaño y el SHA-256 del paquete y cualquier diferencia hace fallar la instalación.
 4. La versión de `res/app.rc` (FILEVERSION) debe coincidir con la de `CMakeLists.txt`: la app la lee del .exe en disco
    para saber si ya hay una actualización instalada esperando el reinicio.

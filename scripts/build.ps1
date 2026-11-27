@@ -210,15 +210,18 @@ COLA DE IMPRESIÓN — PRUEBA EN EL LAIMI
      app.log.
 
 5. Novedades de esta versión que conviene probar:
-   - ACTUALIZACIÓN AUTOMÁTICA (0.5.19): la app busca versiones nuevas en
-     GitHub un minuto después de abrirse y luego cada 6 horas. Si hay una, la
-     descarga, comprueba que sea exactamente la publicada y la deja instalada
-     en esta carpeta sin cerrarse; avisa en la bandeja "Actualización lista".
-     La versión nueva se usa al reiniciar: Menú (F10) > "Reiniciar para usar
-     la versión X" (conserva el servidor). Nunca se reinicia sola.
-     * Menú > "Buscar actualizaciones": abajo debe decir "Ya tiene la última
-       versión (0.5.19)" o, sin Internet, "No se pudo actualizar: ...".
-     * Menú > "Actualizar automáticamente" la apaga o la enciende.
+   - ACTUALIZACIONES SOLO A PEDIDO (0.5.20): la app ya no se conecta sola a
+     Internet (antes buscaba versiones nuevas al abrirse y cada 6 horas). Se
+     busca con el botón "Buscar actualizaciones" de la ventana "Acerca de"
+     (botón "Acerca de" de la cabecera) o con Menú (F10) > "Buscar actualizaciones".
+     * Si hay una versión nueva, pregunta si instalarla (con las novedades).
+       Con Sí la descarga, comprueba que sea exactamente la publicada y la
+       deja instalada en esta carpeta sin cerrarse; luego pregunta si
+       reiniciar ya. Con No, queda Menú > "Reiniciar para usar la versión X"
+       (conserva el servidor). Nunca se reinicia sola.
+     * Si no hay nada nuevo, abajo debe decir "Ya tiene la última versión
+       (0.5.20)"; sin Internet, "No se pudo actualizar: ...".
+     * La opción "Actualizar automáticamente" del menú ya no existe.
      * Si la carpeta de la app no se puede escribir (p. ej. instalada en
        Archivos de programa), avisa que hay una versión nueva pero no la
        instala.
@@ -493,7 +496,7 @@ OPCIONAL
     }
     [IO.File]::WriteAllText((Join-Path $publish "actualizacion.json"), ($manifest | ConvertTo-Json),
                             (New-Object Text.UTF8Encoding $false))
-    Write-Host "Actualización lista en $publish. Para publicarla (las PCs la instalan solas):"
+    Write-Host "Actualización lista en $publish. Para publicarla (cada PC la instala con 'Buscar actualizaciones'):"
     Write-Host "  gh release create v$version `"publicar\actualizacion.json`" `"publicar\$updateName`" `"dist\$zipName`" --title `"$version`" --notes `"...`""
 }
 

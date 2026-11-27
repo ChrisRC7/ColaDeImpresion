@@ -757,21 +757,26 @@ X(AboutDescription, L"Gestor de colas de impresión del LAIMI, Instituto Tecnol�
 X(AboutAuthors, L"AUTORES PRINCIPALES", L"MAIN AUTHORS")
 X(AboutFooter, L"© 2026 · Desarrollado para el LAIMI", L"© 2026 · Developed for LAIMI")
 X(AboutClose, L"Cerrar", L"Close")
-// --- Actualización automática (D58) ---
-// Menú principal, barra de estado y notificaciones (app/MainWindow). Las
+X(AboutCheckUpdates, L"Buscar actualizaciones", L"Check for updates")
+// --- Actualización (D58, solo a pedido del operador) ---
+// Menú principal, barra de estado y preguntas (app/MainWindow). Las
 // versiones llegan como texto ("0.5.19"); %ls al final es el motivo de error.
 X(MenuCheckUpdates, L"Buscar actualizaciones", L"Check for updates")
-X(MenuAutoUpdate, L"Actualizar automáticamente", L"Update automatically")
 X(MenuRestartToUpdate, L"Reiniciar para usar la versión %ls", L"Restart to use version %ls")
 X(UpdateChecking, L"Buscando actualizaciones…", L"Checking for updates…")
 X(UpdateUpToDate, L"Ya tiene la última versión (%ls)", L"You have the latest version (%ls)")
-X(UpdateAvailable, L"Hay una versión nueva: %ls (Menú > Buscar actualizaciones para instalarla)",
-  L"A new version is available: %ls (Menu > Check for updates to install it)")
+X(UpdateAvailable, L"Hay una versión nueva: %ls", L"A new version is available: %ls")
+X(UpdateAskInstall, L"Hay una versión nueva de Cola de Impresión: %ls (en uso: %ls).",
+  L"A new version of Print Queue is available: %ls (current: %ls).")
+X(UpdateNotes, L"Novedades:", L"What's new:")
+X(UpdateAskInstallQuestion, L"¿Quiere descargarla e instalarla ahora? La app sigue abierta; la versión nueva se usa al reiniciarla.",
+  L"Download and install it now? The app stays open; the new version is used when it restarts.")
+X(UpdateDeclined, L"No se instaló la versión %ls", L"Version %ls was not installed")
+X(UpdateAskRestart, L"La versión %ls está instalada. ¿Reiniciar la app ahora para usarla?\n\nSi elige No, se usará la próxima vez que la abra (o con Menú > Reiniciar para usar la versión).",
+  L"Version %ls is installed. Restart the app now to use it?\n\nIf you choose No, it will be used the next time you open it (or with Menu > Restart to use the version).")
 X(UpdateDownloading, L"Descargando la versión %ls…", L"Downloading version %ls…")
 X(UpdateInstalled, L"Versión %ls instalada: se usará al reiniciar la app (Menú > Reiniciar para usar la versión %ls)",
   L"Version %ls installed: it will be used when the app restarts (Menu > Restart to use version %ls)")
-X(UpdateInstalledTitle, L"Actualización lista", L"Update ready")
-X(UpdateInstalledNotify, L"La versión %ls se usará al reiniciar la app.", L"Version %ls will be used when the app restarts.")
 X(UpdateNotWritable, L"Hay una versión nueva (%ls), pero no se puede escribir en la carpeta de la app: actualícela a mano o con un administrador",
   L"A new version (%ls) is available, but the app folder is not writable: update it manually or as an administrator")
 X(UpdateFailed, L"No se pudo actualizar: %ls", L"Could not update: %ls")

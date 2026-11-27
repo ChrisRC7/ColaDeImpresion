@@ -241,9 +241,14 @@ private:
     void Quit();
     // Relanza la app como administrador ("runas", pide UAC) y cierra esta instancia.
     void RestartAsAdmin();
-    // Actualización automática (D58): resultado de una comprobación
-    // (WM_APP_UPDATE, hilo de la UI): barra de estado, notificación y la
-    // opción "Reiniciar para usar la versión X" del menú.
+    // Actualización (D58), siempre a pedido del operador: busca una versión
+    // nueva sin instalarla (o, si ya hay una instalada, ofrece reiniciar).
+    void CheckForUpdates();
+    // Pregunta si reiniciar ya para usar la versión instalada.
+    void AskRestartForUpdate();
+    // Resultado de una búsqueda (WM_APP_UPDATE, hilo de la UI): barra de
+    // estado, pregunta de instalar o reiniciar y la opción "Reiniciar para
+    // usar la versión X" del menú.
     void OnUpdateStatus(const update::UpdateStatus& status);
     // Abre el .exe instalado (la versión nueva) con --elevated-restart, que
     // espera a que esta instancia cierre, y cierra esta. Conserva el servidor
@@ -312,12 +317,9 @@ private:
     std::vector<std::wstring> menuPrinters_;  // impresoras listadas en el último menú
     std::wstring chipPrinter_;                // impresora del menú contextual de la barra
     std::vector<std::wstring> menuServers_;  // servidores listados en el último menú principal
-    // Actualización automática (D58).
+    // Actualización (D58).
     bool updatePending_ = false;     // hay una versión nueva instalada: falta reiniciar
     update::Version updateVersion_;  // esa versión (vale si updatePending_)
-    // Última versión de la que se avisó en la bandeja, para no repetir el
-    // aviso en cada comprobación periódica.
-    std::wstring updateNotified_;
     // Copia del trabajo que se está reenviando (el menú de destinos es modal
     // y la instantánea puede cambiar mientras está abierto).
     core::JobInfo redirectJob_;

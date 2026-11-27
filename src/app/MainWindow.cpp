@@ -71,12 +71,6 @@ constexpr UINT WM_APP_UPDATE = WM_APP + 6;
 constexpr UINT_PTR kTimerSaveHistory = 1;
 // kTimerTransient: borra el mensaje temporal de la barra de estado.
 constexpr UINT_PTR kTimerTransient = 2;
-// kTimerUpdateCheck: busca versiones nuevas (D58). El primer disparo llega
-// kFirstUpdateCheckMs después de abrir (no compite con la conexión inicial)
-// y luego cada kUpdateCheckIntervalMs. Es el único temporizador periódico.
-constexpr UINT_PTR kTimerUpdateCheck = 3;
-constexpr UINT kFirstUpdateCheckMs = 60 * 1000;
-constexpr UINT kUpdateCheckIntervalMs = 6 * 60 * 60 * 1000;
 
 // Identificadores de menú.
 // Rangos: los menús dinámicos (impresoras, servidores, destinos de reenvío,
@@ -128,7 +122,6 @@ enum MenuId : UINT {
     ID_CONNECT_LAIMI,
     ID_SET_LAIMI,
     ID_CHECK_UPDATES,
-    ID_AUTO_UPDATE,
     ID_RESTART_UPDATE,
     // Menú contextual de la lista de trabajos.
     ID_CTX_PAUSE = 2101,
@@ -291,7 +284,9 @@ bool MainWindow::Create(const StartupOptions& options) {
                                    case ui::HeaderButton::PauseJobs: Execute(Command::Pause); break;
                                    case ui::HeaderButton::PausePrinter: Execute(Command::PausePrinter); break;
                                    case ui::HeaderButton::Export: ExportHistory(); break;
-                                   case ui::HeaderButton::About: ui::ShowAboutDialog(hwnd_); break;
+                                   case ui::HeaderButton::About:
+                                       if (ui::ShowAboutDialog(hwnd_)) CheckForUpdates();
+                                       break;
                                    default: break;
                                }
                            },
@@ -371,11 +366,10 @@ bool MainWindow::Create(const StartupOptions& options) {
     RequestHistoryCarnets();
     actions_ = std::make_unique<JobActionRunner>(
         [self](ActionResult r) { PostOwned(self, WM_APP_ACTION, new ActionResult(std::move(r))); });
-    // Al crearse borra los restos de la actualización anterior; la primera
-    // comprobación la dispara kTimerUpdateCheck (D58).
+    // Al crearse borra los restos de la actualización anterior. No consulta
+    // nada por su cuenta: solo busca cuando el operador lo pide (D58).
     updates_ = std::make_unique<update::UpdateService>(
         [self](update::UpdateStatus st) { PostOwned(self, WM_APP_UPDATE, new update::UpdateStatus(std::move(st))); });
-    SetTimer(hwnd_, kTimerUpdateCheck, kFirstUpdateCheckMs, nullptr);
 
     tray_.Add(hwnd_, iconSmall_, Tr(S::AppTitle));
 
@@ -2019,7 +2013,6 @@ void MainWindow::ShowMainMenu(POINT screen) {
                 Tr(S::MenuNotifyAll));
     AppendMenuW(menu, MF_STRING | check(settings_.startWithWindows), ID_START_WITH_WINDOWS, Tr(S::MenuStartWithWindows));
     AppendMenuW(menu, MF_STRING | check(settings_.minimizeToTray), ID_MINIMIZE_TO_TRAY, Tr(S::MenuMinimizeToTray));
-    AppendMenuW(menu, MF_STRING | check(settings_.autoUpdate), ID_AUTO_UPDATE, Tr(S::MenuAutoUpdate));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     // Herramientas: atajos (F1), carpeta de datos, exportar (atenuado sin
     // historial), borrar historial, reiniciar como administrador y "Acerca de".
@@ -2263,18 +2256,13 @@ void MainWindow::HandleMenuCommand(UINT id) {
             UpdateStatus();
             break;
         case ID_RUN_AS_ADMIN: RestartAsAdmin(); break;
-        // Actualización (D58): la búsqueda manual siempre instala si hay algo
-        // nuevo y responde en la barra de estado.
-        case ID_CHECK_UPDATES:
-            if (updates_) updates_->Check(true, true);
-            break;
-        case ID_AUTO_UPDATE:
-            settings_.autoUpdate = !settings_.autoUpdate;
-            SaveSettings();
-            if (settings_.autoUpdate && updates_ && !updatePending_) updates_->Check(false, true);
-            break;
+        // Actualización (D58): solo se busca a pedido; si hay algo nuevo se
+        // pregunta antes de instalarlo (OnUpdateStatus).
+        case ID_CHECK_UPDATES: CheckForUpdates(); break;
         case ID_RESTART_UPDATE: RestartForUpdate(); break;
-        case ID_ABOUT: ui::ShowAboutDialog(hwnd_); break;
+        case ID_ABOUT:
+            if (ui::ShowAboutDialog(hwnd_)) CheckForUpdates();
+            break;
         case ID_EXIT: Quit(); break;
         default: break;
     }
@@ -2383,51 +2371,69 @@ void MainWindow::RestartAsAdmin() {
     if (ShellExecuteExW(&sei)) Quit();
 }
 
-// Resultado de la actualización automática (WM_APP_UPDATE, hilo de la UI).
-// Las comprobaciones manuales (menú) responden siempre en la barra de estado;
-// las automáticas solo avisan de lo que el operador debe saber (versión
-// instalada o imposible de instalar), una vez por versión, en la bandeja.
+// "Buscar actualizaciones" (menú o ventana "Acerca de", D58). Es la única
+// forma de consultar GitHub: la app no se conecta sola al exterior. Primero
+// solo se comprueba (install = false); si hay una versión nueva,
+// OnUpdateStatus pregunta y, con un sí, se pide de nuevo con install = true.
+void MainWindow::CheckForUpdates() {
+    if (!updates_) return;
+    // Ya hay una versión instalada esperando: solo falta reiniciar.
+    if (updatePending_) {
+        AskRestartForUpdate();
+        return;
+    }
+    updates_->Check(true, false);
+}
+
+// Pregunta si reiniciar ya para usar la versión instalada (updateVersion_).
+// Con un no, queda la opción "Reiniciar para usar la versión X" del menú.
+void MainWindow::AskRestartForUpdate() {
+    const std::wstring version = updateVersion_.ToString();
+    const std::wstring question = util::Format(Tr(S::UpdateAskRestart), version.c_str());
+    if (MessageBoxW(hwnd_, question.c_str(), Tr(S::AppTitle), MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES)
+        RestartForUpdate();
+}
+
+// Resultado de una búsqueda de actualizaciones (WM_APP_UPDATE, hilo de la
+// UI). Todas las pide el operador: el progreso va a la barra de estado y las
+// decisiones (instalar, reiniciar) se preguntan con un cuadro de diálogo.
 void MainWindow::OnUpdateStatus(const update::UpdateStatus& status) {
     using update::UpdateState;
     const std::wstring version = status.version.ToString();
-    // Aviso en la bandeja una sola vez por versión (y si no se apagaron las notificaciones).
-    auto notifyOnce = [&](const std::wstring& title, const std::wstring& text, bool error) {
-        if (updateNotified_ == version) return;
-        updateNotified_ = version;
-        if (settings_.notifications != config::NotifyMode::None) Notify(title, text, error);
-    };
     switch (status.state) {
-        case UpdateState::Checking:
-            if (status.manual) ShowTransient(Tr(S::UpdateChecking), ui::Tone::Info);
-            break;
+        case UpdateState::Checking: ShowTransient(Tr(S::UpdateChecking), ui::Tone::Info); break;
         case UpdateState::UpToDate:
-            if (status.manual)
-                ShowTransient(util::Format(Tr(S::UpdateUpToDate), update::CurrentVersion().ToString().c_str()),
-                              ui::Tone::Success);
+            ShowTransient(util::Format(Tr(S::UpdateUpToDate), update::CurrentVersion().ToString().c_str()),
+                          ui::Tone::Success);
             break;
-        case UpdateState::Available:
-            if (status.manual) ShowTransient(util::Format(Tr(S::UpdateAvailable), version.c_str()), ui::Tone::Info);
+        case UpdateState::Available: {
+            // Se pregunta con las novedades del manifiesto, si las trae.
+            ShowTransient(util::Format(Tr(S::UpdateAvailable), version.c_str()), ui::Tone::Info);
+            std::wstring question = util::Format(Tr(S::UpdateAskInstall), version.c_str(),
+                                                 update::CurrentVersion().ToString().c_str());
+            if (!status.notes.empty()) question += L"\n\n" + std::wstring(Tr(S::UpdateNotes)) + L"\n" + status.notes;
+            question += L"\n\n" + std::wstring(Tr(S::UpdateAskInstallQuestion));
+            if (MessageBoxW(hwnd_, question.c_str(), Tr(S::AppTitle), MB_YESNO | MB_ICONQUESTION) == IDYES) {
+                if (updates_) updates_->Check(true, true);
+            } else {
+                ShowTransient(util::Format(Tr(S::UpdateDeclined), version.c_str()), ui::Tone::Neutral);
+            }
             break;
+        }
         case UpdateState::Downloading:
-            if (status.manual) ShowTransient(util::Format(Tr(S::UpdateDownloading), version.c_str()), ui::Tone::Info);
+            ShowTransient(util::Format(Tr(S::UpdateDownloading), version.c_str()), ui::Tone::Info);
             break;
         case UpdateState::Installed:
             updatePending_ = true;
             updateVersion_ = status.version;
             ShowTransient(util::Format(Tr(S::UpdateInstalled), version.c_str(), version.c_str()), ui::Tone::Success);
-            notifyOnce(Tr(S::UpdateInstalledTitle), util::Format(Tr(S::UpdateInstalledNotify), version.c_str()), false);
+            AskRestartForUpdate();
             break;
-        case UpdateState::NotWritable: {
-            std::wstring text = util::Format(Tr(S::UpdateNotWritable), version.c_str());
-            if (status.manual) ShowTransient(text, ui::Tone::Danger);
-            else notifyOnce(Tr(S::AppTitle), text, true);
+        case UpdateState::NotWritable:
+            ShowTransient(util::Format(Tr(S::UpdateNotWritable), version.c_str()), ui::Tone::Danger);
             break;
-        }
         case UpdateState::Failed:
-            // Las automáticas fallan en silencio (sin Internet, GitHub caído...):
-            // ya quedó en app.log y se reintenta en la próxima comprobación.
-            if (status.manual)
-                ShowTransient(util::Format(Tr(S::UpdateFailed), status.error.c_str()), ui::Tone::Danger);
+            ShowTransient(util::Format(Tr(S::UpdateFailed), status.error.c_str()), ui::Tone::Danger);
             break;
     }
 }
@@ -2626,8 +2632,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 case WM_RBUTTONUP: ShowTrayMenu(); break;
             }
             return 0;
-        // Temporizadores de un solo disparo (se matan al llegar), salvo el de
-        // la actualización, que se reprograma cada 6 horas.
+        // Temporizadores de un solo disparo (se matan al llegar).
         case WM_TIMER:
             if (wParam == kTimerSaveHistory) {
                 KillTimer(hwnd_, kTimerSaveHistory);
@@ -2637,10 +2642,6 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
                 KillTimer(hwnd_, kTimerTransient);
                 transientText_.clear();
                 UpdateStatus();
-            } else if (wParam == kTimerUpdateCheck) {
-                SetTimer(hwnd_, kTimerUpdateCheck, kUpdateCheckIntervalMs, nullptr);
-                // Ya instalada: el servicio solo volvería a decir "Installed".
-                if (settings_.autoUpdate && updates_ && !updatePending_) updates_->Check(false, true);
             }
             return 0;
         case WM_SIZE:
