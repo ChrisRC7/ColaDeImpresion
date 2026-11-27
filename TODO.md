@@ -226,6 +226,7 @@ App de escritorio para gestionar la cola de impresión con vista previa de docum
 - [x] Publicar el primer release con manifiesto (`v0.5.19`) y comprobar con una copia compilada como 0.5.18 que descarga, instala y, al volver a abrirla, arranca la 0.5.19 y limpia el `.cola-old`
 - [ ] Probar en la app la opción *Reiniciar para usar la versión X* (necesita un release más nuevo que la versión abierta)
 - [x] Actualizaciones solo a pedido (0.5.20): sin búsqueda automática (se quitaron el temporizador y la opción `autoUpdate`), botón *Buscar actualizaciones* en la ventana *Acerca de* y pregunta antes de instalar y antes de reiniciar
+- [x] Publicar el release `v0.5.20` (latest) y comprobar el manifiesto y el paquete descargados
 - [ ] Probar en la app la 0.5.20: botón *Buscar actualizaciones* de *Acerca de* (aspecto en claro/oscuro y en inglés), pregunta de instalar con las novedades y pregunta de reiniciar (necesita un release más nuevo que la versión abierta)
 - [ ] Reemplazar a mano una última vez las copias anteriores a la 0.5.19 (no tienen el actualizador; p. ej. `C:\ToolBox\ColaDeImpresion 0.5.17`)
 - [x] (LAIMI) Actualización automática probada en una PC del TEC (2026-11-16): descarga por la red del TEC sin problemas de proxy; `C:\ToolBox` es modificable por los usuarios autenticados, así que la copia portable puede actualizarse sola
